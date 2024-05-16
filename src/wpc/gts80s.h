@@ -35,7 +35,7 @@
     ROM_RELOAD(  0xf800,  0x0800)
 
 extern MACHINE_DRIVER_EXTERN(gts80s_s);
-
+extern MACHINE_DRIVER_EXTERN(gts80s_sp);
 
 /* Gottlieb System 80/80A Sound & Speech Board */
 
@@ -45,6 +45,7 @@ extern MACHINE_DRIVER_EXTERN(gts80s_s);
 	ROM_LOAD(n1, 0x7000,  0x0800, chk1) \
 	ROM_LOAD(n2, 0x7800,  0x0800, chk2)
 
+extern MACHINE_DRIVER_EXTERN(gts80s_ss_old);
 extern MACHINE_DRIVER_EXTERN(gts80s_ss);
 
 
@@ -74,9 +75,21 @@ extern MACHINE_DRIVER_EXTERN(gts80s_ss);
 /*-- Gen 2 : 2 x 8K Sound CPU Roms --*/
 #define GTS80BSSOUND88(n1,chk1,n2,chk2) \
   SOUNDREGION(0x10000, GTS80_MEMREG_SCPU2) \
-	ROM_LOAD(n1,0xe000,0x2000, chk1)\
+    ROM_LOAD(n1,0xe000,0x2000, chk1)\
   SOUNDREGION(0x10000, GTS80_MEMREG_SCPU1) \
     ROM_LOAD(n2,0xe000,0x2000, chk2)
+
+/*-- Amazon Hunt II : only 1x8K Sound CPU Rom, no music --*/
+#define GTS80BSSOUND8(n1,chk1) \
+  SOUNDREGION(0x10000, GTS80_MEMREG_SCPU1) \
+  SOUNDREGION(0x10000, GTS80_MEMREG_SCPU2) \
+	ROM_LOAD(n1,0xe000,0x2000, chk1)
+
+/*-- Gen 2 & 3: 1 x 32K Sound CPU Roms --*/
+#define GTS80BSSOUND32(n1,chk1) \
+  SOUNDREGION(0x10000, GTS80_MEMREG_SCPU2) \
+    GTS80BS_ROMLOAD32(0x8000, n1, chk1) \
+  SOUNDREGION(0x10000, GTS80_MEMREG_SCPU1)
 
 /*-- Gen 2 & 3: 2 x 32K Sound CPU Roms --*/
 #define GTS80BSSOUND3232(n1,chk1,n2,chk2) \

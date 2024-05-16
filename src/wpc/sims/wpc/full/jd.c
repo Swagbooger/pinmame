@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /*******************************************************************************
  Judge Dredd
 
@@ -115,8 +117,8 @@ WPC_INPUT_PORTS_END
 /--------------------*/
 #define swLFire			11
 #define swRFire			12
-#define swStart      	13
-#define swTilt       	14
+#define swStart			13
+#define swTilt			14
 #define swLShooter		15
 #define swLOut			16
 #define swLIn			17
@@ -124,7 +126,7 @@ WPC_INPUT_PORTS_END
 
 #define swSlamTilt		21
 #define swCoinDoor		22
-#define swTicket     	23
+#define swTicket		23
 #define swAlwaysClosed	24
 #define swTRPost		25		//Right EB Target
 #define swCapBall1		26
@@ -194,7 +196,7 @@ WPC_INPUT_PORTS_END
 #define sKnocker		7
 #define sRShooter		8
 #define sLShooter		9
-#define sTripDropTarget		10		//Pull "D" Drop Target Down
+#define sTripDropTarget	10		//Pull "D" Drop Target Down
 #define sDiverter		11		//Left Ramp Diverter to Planet
 /*12 - Not Used*/
 #define sTrough			13
@@ -224,34 +226,34 @@ enum {stTrough1=SIM_FIRSTSTATE, stTrough2, stTrough3, stTrough4, stTrough5, stTr
       };
 
 static sim_tState jd_stateDef[] =  {
-  {"Not Installed",    0,0,           0,        stDrain,     0,0,0,SIM_STNOTEXCL},
+  {"Not Installed",		0,0,           0,        stDrain,     0,0,0,SIM_STNOTEXCL},
   {"Moving"},
-  {"Playfield",               0,0,           0,        0,           0,0,0,SIM_STNOTEXCL},
+  {"Playfield",			0,0,           0,        0,           0,0,0,SIM_STNOTEXCL},
 
   /*Line 1*/
-  {"Trough 1",          1,swTrough1,    sTrough,	stRShooter,  1},
-  {"Trough 2",			1,swTrough2,	0,			stTrough1,   1},
-  {"Trough 3",			1,swTrough3,	0,			stTrough2,   1},
-  {"Trough 4",			1,swTrough4,	0,			stTrough3,   1},
-  {"Trough 5",			1,swTrough5,	0,			stTrough4,   1},
-  {"Trough 6",			1,swTrough6,	0,			stTrough5,   1},
-  {"Trough Up",			1,swTroughTop,  0,          stRShooter,  1},
+  {"Trough 1",			1,swTrough1,	sTrough,	stRShooter,	1},
+  {"Trough 2",			1,swTrough2,	0,			stTrough1,	1},
+  {"Trough 3",			1,swTrough3,	0,			stTrough2,	1},
+  {"Trough 4",			1,swTrough4,	0,			stTrough3,	1},
+  {"Trough 5",			1,swTrough5,	0,			stTrough4,	1},
+  {"Trough 6",			1,swTrough6,	0,			stTrough5,	1},
+  {"Trough Up",			1,swTroughTop,	0,			stRShooter,	1},
 
   /*Line 2*/
-  {"R.Shooter",	    	1,swRShooter,   sRShooter,  stBallLane,  1},
+  {"R.Shooter",			1,swRShooter,	sRShooter,	stBallLane,	1},
   {"Ball Lane",			1,0,			0,			stLLoopDn,	10},
-  {"L. Shooter",		1,swLShooter,	sLShooter,  stJu_dge,    10}, //Assume it hits the Middle of the Judge targets everytime!
-  {"Drain",				1,0,            0,          stTrough6,   0,0,0,SIM_STNOTEXCL},
-  {"Left Ramp",         1,swLRampEnt,   0,          stLRampExit, 5, sDiverter, stLRamp2},
+  {"L. Shooter",		1,swLShooter,	sLShooter,	stJu_dge,	10}, //Assume it hits the Middle of the Judge targets everytime!
+  {"Drain",				1,0,			0,			stTrough6,	0,0,0,SIM_STNOTEXCL},
+  {"Left Ramp",			1,swLRampEnt,	0,			stLRampExit,5, sDiverter, stLRamp2},
   {"Right Ramp",		1,swRRampExit,	0,			stIRIn,		10},
-  {"Center Ramp",		1,swCRampExit,		0,			stFree,		10},
-  {"Left Ramp Exit",	1,swLRampExit,  0,			stRIn,	    10},
+  {"Center Ramp",		1,swCRampExit,	0,			stFree,		10},
+  {"Left Ramp Exit",	1,swLRampExit,	0,			stRIn,		10},
 
   /*Line 3*/
-  {"Left Outlane",      1,swLOut,       0,			stDrain,   10},
-  {"Right Outlane",     1,swROut,       0,			stDrain,   10},
-  {"Left  Inlane",		1,swLIn,        0,			stFree,     5},
-  {"Right Inlane",		1,swRIn,        0,			stFree,     5},
+  {"Left Outlane",		1,swLOut,		0,			stDrain,	10},
+  {"Right Outlane",		1,swROut,		0,			stDrain,	10},
+  {"Left  Inlane",		1,swLIn,		0,			stFree,		5},
+  {"Right Inlane",		1,swRIn,		0,			stFree,		5},
   {"Left Orbit Loop",	1,swTCRollOver,	0,			stRLoopDn,	5}, /*Loop Going Up*/
   {"Left Orbit Loop",	1,swTCRollOver,	0,			stFree,		5}, /*Loop Coming Down*/
   {"Right Orbit Loop",	1,swTROpto,		0,			stLLoopDn,	5}, /*Loop Going Up*/
@@ -261,19 +263,19 @@ static sim_tState jd_stateDef[] =  {
   {"I. Right Inlane",	1,swIRIn,		0,			stFree,		5},
   {"Small Loop",		1,swSLoopC,		0,			stRLoopDn,	5},
   {"Sniper",			1,swRPopper,	sRPopper,	stSniper2,	1},
-  {"Sniper Habitrail",  1,0,			0,			stLIn,		10},
+  {"Sniper Habitrail",	1,0,			0,			stLIn,		10},
   {"Subway",			1,swSubway,		0,			stSubway2,	5},
-  {"Subway",			1,swSubway2,		0,			stSubway3,	5},
+  {"Subway",			1,swSubway2,	0,			stSubway3,	5},
   {"Subway Popper",		1,swLPopper,	sLPopper,	stSubway4,	1},
   {"Subway Habitrail",	1,0,			0,			stFree,		10},
 
   /*Line 5*/
   {"Air Raid Ramp",		1,swTRRampExit,	0,			stAHabit,	3},
-  {"Air Raid Habitrail",1,0,			0,			stLShooter, 15},
-  {"Towards Planet",	1,swLRampToLock,	0,			stPlanet,	5},
-  {"Planet",		1,swGlobe1,		sArmMagnet,		stPlanet2,	5},	//Keep ball here, till Arm Magnet picks it up!
-  {"In Claw",		1,0,			sFakeSol1,		stPlanet3,	1},
-  {"Dropped",		1,swGlobeExit,  0,			stFree,		5},	//Dropped by Claw!
+  {"Air Raid Habitrail",1,0,			0,			stLShooter,	15},
+  {"Towards Planet",	1,swLRampToLock,0,			stPlanet,	5},
+  {"Planet",			1,swGlobe1,		sArmMagnet,	stPlanet2,	5},	//Keep ball here, till Arm Magnet picks it up!
+  {"In Claw",			1,0,			sFakeSol1,	stPlanet3,	1},
+  {"Dropped",			1,swGlobeExit,	0,			stFree,		5},	//Dropped by Claw!
 
   /*Line 6*/
   {"EB Left Target",	1,swLPost,		0,			stFree,		5},
@@ -284,16 +286,16 @@ static sim_tState jd_stateDef[] =  {
   {"'?' Target",		1,swLLTarget,	0,			stFree,		5},
 
   /*Line 7*/
-  {"'J'udge Target",	1,0,			0,			0,		5},
-  {"J'u'dge Target",	1,0,			0,			0,		5},
-  {"Ju'd'ge Target",    1,0,                    0,                      0,		5},
-  {"Jud'g'e Target",	1,0,			0,			0,		5},
-  {"Judg'e' Target",	1,0,			0,			0,		5},
+  {"'J'udge Target",	1,0,			0,			0,			5},
+  {"J'u'dge Target",	1,0,			0,			0,			5},
+  {"Ju'd'ge Target",	1,0,			0,			0,			5},
+  {"Jud'g'e Target",	1,0,			0,			0,			5},
+  {"Judg'e' Target",	1,0,			0,			0,			5},
 
   /*Line 8*/
   {"'J'udge Target",	1,sw_Judge,		0,			stFree,		5, 0, 0, SIM_STSWKEEP},
   {"J'u'dge Target",	1,swJ_udge,		0,			stFree,		5, 0, 0, SIM_STSWKEEP},
-  {"Ju'd'ge Target",    1,swJu_dge,             0,                      stFree,		5, 0, 0, SIM_STSWKEEP},
+  {"Ju'd'ge Target",	1,swJu_dge,		0,			stFree,		5, 0, 0, SIM_STSWKEEP},
   {"Jud'g'e Target",	1,swJud_ge,		0,			stFree,		5, 0, 0, SIM_STSWKEEP},
   {"Judg'e' Target",	1,swJudg_e,		0,			stFree,		5, 0, 0, SIM_STSWKEEP},
 
@@ -339,7 +341,7 @@ static int  jd_handleBallState(sim_tBallStatus *ball, int *inports) {
 		else
 			return setState(stFree,5);
 		break;
-  	}
+	}
   return 0;
 }
 
@@ -434,7 +436,7 @@ static sim_tInportData jd_inportData[] = {
 /*-----------------
 /  ROM definitions
 /------------------*/
-#define JD_SOUND \
+#define JD_SOUND_L1 \
 DCS_SOUNDROM8x( "jdsnd_u2.bin",CRC(d8f453c6) SHA1(5dd677fde46436dbf2d2e9058f06dd3048600234), \
                 "jdsnd_u3.bin",CRC(0a11f673) SHA1(ab556477a25e3493555b8a281ca86677caec8947), \
                 "jdsnd_u4.bin",CRC(93f6ebc1) SHA1(5cb306afa693e60887069745588dfd5b930c5951), \
@@ -444,43 +446,63 @@ DCS_SOUNDROM8x( "jdsnd_u2.bin",CRC(d8f453c6) SHA1(5dd677fde46436dbf2d2e9058f06dd
                 "jdsnd_u8.bin",CRC(77604893) SHA1(a9a4a66412096edd88ee7adfd960eef6f5d16476), \
                 "jdsnd_u9.bin",CRC(885b7c70) SHA1(be3bb42aeda3020a72c527f52c5330d0bafa9966))
 
-WPC_ROMSTART(jd,l7,"jdrd_l7.rom",0x80000,CRC(87b2a5c3) SHA1(e487e9ff78353ee96d5fb5f036b1a6cef586f5b4)) JD_SOUND WPC_ROMEND
-WPC_ROMSTART(jd,d7,"jdrd_d7.rom",0x80000,CRC(75d71d08) SHA1(10e63b8eb57a800fe0eeb89b175d01576d79ee1a)) JD_SOUND WPC_ROMEND
-WPC_ROMSTART(jd,l1,"jd_l1.u6",   0x80000,CRC(09a4b1d8) SHA1(9f941bbeb6e58d918d374694c7ff2a67f1084cc0)) JD_SOUND WPC_ROMEND
-WPC_ROMSTART(jd,d1,"jd_d1.u6",   0x80000,CRC(307fdfa0) SHA1(0ad083cf1e35334caa0854375406e06672bf587d)) JD_SOUND WPC_ROMEND
-WPC_ROMSTART(jd,l4,"jd_l4.u6",   0x80000,CRC(cc6f1068) SHA1(aef2a2eeb9110074eebff91318179ce97aba14ba)) JD_SOUND WPC_ROMEND
-WPC_ROMSTART(jd,d4,"jd_d4.u6",   0x80000,CRC(4b7b350f) SHA1(5c827532ffa1e3b102cc6e2ec9446f2d1fc2ef84)) JD_SOUND WPC_ROMEND
-WPC_ROMSTART(jd,l5,"jd_l5.u6",   0x80000,CRC(879b091e) SHA1(eaf1c86c0e72e8cdfa9ac942fc54ef4f70a65175)) JD_SOUND WPC_ROMEND
-WPC_ROMSTART(jd,d5,"jd_d5.u6",   0x80000,CRC(4a04b45a) SHA1(84d20fa3beff412862e07a7092407159cc0567b5)) JD_SOUND WPC_ROMEND
-WPC_ROMSTART(jd,l6,"jd_l6.u6",   0x80000,CRC(0a74cba4) SHA1(1872fd86bbfa772eac9cc2ef2634a90b72b3d5e2)) JD_SOUND WPC_ROMEND
-WPC_ROMSTART(jd,d6,"jd_d6.u6",   0x80000,CRC(fa17dd22) SHA1(e71c9c0f504a793d4e9c76aaad85f71c4e41a15e)) JD_SOUND WPC_ROMEND
+/*
+These are the L3 sound ROMs for Judge Dredd that are installed at U2 and U3. If you are running L2 game code or greater and do not have a locking ring in Deadworld, this is the matching sound ROM set.
+In the 8 chip sound ROM set for JD, the only ROMs that are different between L1 and L3 sound versions are U2 and U3. If you have EPROMS/masked ROMs in U4-U8 that are labeled L3, they are identical to the L1 version. The L1, L6 & L7 PinMAME ROM sets all contain identical L1 sound ROM images. In addition, U5 and U9 on the Planetary Pinball site are the same as what is found in the other L1 sets.
+The difference between the L1 and L3 sound ROMs is the callout used with Deadworld. L1 is used with Deadworld as originally designed. When Deadworld is active, the callout will be "Dimensional lock # is lit." L3 is used with the production Deadworld that virtually locks the balls and only diverts ball 3 to Deadworld. When Deadworld is active in this version the callout will be "Dimensional phase # is lit."
+*/
+#define JD_SOUND_L3 \
+DCS_SOUNDROM8x( "jdsu2_l3.bin",CRC(7a59ec18) SHA1(ee073d4bea198fd66de3508f67061b7d19f12edc), \
+                "jdsu3_l3.bin",CRC(42f52faa) SHA1(3fac9d3ddfe21877929eaa4cb7101a690745b163), \
+                "jdsnd_u4.bin",CRC(93f6ebc1) SHA1(5cb306afa693e60887069745588dfd5b930c5951), \
+                "jdsnd_u5.bin",CRC(c9f28ba6) SHA1(8447372428e3b9fc86a98286c05f95a13abe26b0), \
+                "jdsnd_u6.bin",CRC(ef0bf094) SHA1(c0860cecd436d352fe2c2208533ff6dc71bfced1), \
+                "jdsnd_u7.bin",CRC(aebab88b) SHA1(d3f1be60a6840d9d085e22b43aafea1354771980), \
+                "jdsnd_u8.bin",CRC(77604893) SHA1(a9a4a66412096edd88ee7adfd960eef6f5d16476), \
+                "jdsnd_u9.bin",CRC(885b7c70) SHA1(be3bb42aeda3020a72c527f52c5330d0bafa9966))
+
+WPC_ROMSTART(jd,l7,"jdrd_l7.rom",0x80000,CRC(87b2a5c3) SHA1(e487e9ff78353ee96d5fb5f036b1a6cef586f5b4)) JD_SOUND_L3 WPC_ROMEND
+WPC_ROMSTART(jd,d7,"jdrd_d7.rom",0x80000,CRC(75d71d08) SHA1(10e63b8eb57a800fe0eeb89b175d01576d79ee1a)) JD_SOUND_L3 WPC_ROMEND
+WPC_ROMSTART(jd,l1,"jd_l1.u6",   0x80000,CRC(09a4b1d8) SHA1(9f941bbeb6e58d918d374694c7ff2a67f1084cc0)) JD_SOUND_L1 WPC_ROMEND
+WPC_ROMSTART(jd,d1,"jd_d1.u6",   0x80000,CRC(307fdfa0) SHA1(0ad083cf1e35334caa0854375406e06672bf587d)) JD_SOUND_L1 WPC_ROMEND
+WPC_ROMSTART(jd,l1at,"jd_l1at.u6",0x80000,CRC(7af2ca76) SHA1(67c5241d6080e4c2bd81aefc61a1220e4c49d25b)) JD_SOUND_L1 WPC_ROMEND
+//older: WPC_ROMSTART(jd,l1d,"jd_l1d.u6", 0x80000,CRC(ad0352de) SHA1(b099437d0c91094e0d259af02f470cce3e866b9d)) JD_SOUND_L1 WPC_ROMEND
+WPC_ROMSTART(jd,l1d,"jd_l1d.u6", 0x80000,CRC(c37d8fed) SHA1(05d85c9c6a59866de4a7a5bb2258b69a1964efa3)) JD_SOUND_L1 WPC_ROMEND
+WPC_ROMSTART(jd,l4,"jd_l4.u6",   0x80000,CRC(cc6f1068) SHA1(aef2a2eeb9110074eebff91318179ce97aba14ba)) JD_SOUND_L3 WPC_ROMEND
+WPC_ROMSTART(jd,d4,"jd_d4.u6",   0x80000,CRC(4b7b350f) SHA1(5c827532ffa1e3b102cc6e2ec9446f2d1fc2ef84)) JD_SOUND_L3 WPC_ROMEND
+WPC_ROMSTART(jd,l5,"jd_l5.u6",   0x80000,CRC(879b091e) SHA1(eaf1c86c0e72e8cdfa9ac942fc54ef4f70a65175)) JD_SOUND_L3 WPC_ROMEND
+WPC_ROMSTART(jd,d5,"jd_d5.u6",   0x80000,CRC(4a04b45a) SHA1(84d20fa3beff412862e07a7092407159cc0567b5)) JD_SOUND_L3 WPC_ROMEND
+WPC_ROMSTART(jd,l6,"jd_l6.u6",   0x80000,CRC(0a74cba4) SHA1(1872fd86bbfa772eac9cc2ef2634a90b72b3d5e2)) JD_SOUND_L3 WPC_ROMEND
+WPC_ROMSTART(jd,d6,"jd_d6.u6",   0x80000,CRC(fa17dd22) SHA1(e71c9c0f504a793d4e9c76aaad85f71c4e41a15e)) JD_SOUND_L3 WPC_ROMEND
 
 /*--------------
 /  Game drivers
 /---------------*/
 CORE_GAMEDEF(jd,l7,"Judge Dredd (L-7)",1993,"Bally",wpc_mDCSS,0)
-CORE_CLONEDEF(jd,d7,l7,"Judge Dredd (D-7) LED Ghost Fix",1993,"Bally",wpc_mDCSS,0)
+CORE_CLONEDEF(jd,d7,l7,"Judge Dredd (D-7 LED Ghost Fix)",1993,"Bally",wpc_mDCSS,0)
 CORE_CLONEDEF(jd,l1,l7,"Judge Dredd (L-1)",1993,"Bally",wpc_mDCSS,0)
-CORE_CLONEDEF(jd,d1,l7,"Judge Dredd (D-1) LED Ghost Fix",1993,"Bally",wpc_mDCSS,0)
+CORE_CLONEDEF(jd,d1,l7,"Judge Dredd (D-1 LED Ghost Fix)",1993,"Bally",wpc_mDCSS,0)
+CORE_CLONEDEF(jd,l1at,l7,"Judge Dredd (L-1AT MOD)",1993,"Bally",wpc_mDCSS,0) // additional MOD for the aftermarket Deadworld HW-MOD
+CORE_CLONEDEF(jd,l1d,l7,"Judge Dredd (L-1D MOD)",1993,"Bally",wpc_mDCSS,0) // MOD of L-1AT by KoP
 CORE_CLONEDEF(jd,l4,l7,"Judge Dredd (L-4)",1993,"Bally",wpc_mDCSS,0)
-CORE_CLONEDEF(jd,d4,l7,"Judge Dredd (D-4) LED Ghost Fix",1993,"Bally",wpc_mDCSS,0)
+CORE_CLONEDEF(jd,d4,l7,"Judge Dredd (D-4 LED Ghost Fix)",1993,"Bally",wpc_mDCSS,0)
 CORE_CLONEDEF(jd,l5,l7,"Judge Dredd (L-5)",1993,"Bally",wpc_mDCSS,0)
-CORE_CLONEDEF(jd,d5,l7,"Judge Dredd (D-5) LED Ghost Fix",1993,"Bally",wpc_mDCSS,0)
+CORE_CLONEDEF(jd,d5,l7,"Judge Dredd (D-5 LED Ghost Fix)",1993,"Bally",wpc_mDCSS,0)
 CORE_CLONEDEF(jd,l6,l7,"Judge Dredd (L-6)",1993,"Bally",wpc_mDCSS,0)
-CORE_CLONEDEF(jd,d6,l7,"Judge Dredd (D-6) LED Ghost Fix",1993,"Bally",wpc_mDCSS,0)
+CORE_CLONEDEF(jd,d6,l7,"Judge Dredd (D-6 LED Ghost Fix)",1993,"Bally",wpc_mDCSS,0)
 
 /*-----------------------
 / Simulation Definitions
 /-----------------------*/
 static sim_tSimData jdSimData = {
-  2,	    				/* 2 game specific input ports */
+  2,						/* 2 game specific input ports */
   jd_stateDef,				/* Definition of all states */
   jd_inportData,			/* Keyboard Entries */
   { stTrough1, stTrough2, stTrough3, stTrough4, stTrough5, stTrough6, stDrain },
-  NULL,					/* no init */
-  jd_handleBallState,			/*Function to handle ball state changes*/
+  NULL,						/* no init */
+  jd_handleBallState,		/*Function to handle ball state changes*/
   jd_drawStatic,			/*Function to handle mechanical state changes*/
-  FALSE,				/* Do not simulate manual shooter */
+  FALSE,					/* Do not simulate manual shooter */
   jd_keyCond				/* advanced key conditions */
 };
 
@@ -493,7 +515,10 @@ static core_tGameData jdGameData = {
     FLIP_SW(FLIP_L | FLIP_U) | FLIP_SOL(FLIP_L | FLIP_U),
     0,0,1,0,0,0,0,
     jd_getSol, jd_handleMech, jd_getMech, jd_drawMech,
-    NULL, NULL
+    NULL
+#ifdef ENABLE_MECHANICAL_SAMPLES
+    , NULL
+#endif
   },
   &jdSimData,
   {

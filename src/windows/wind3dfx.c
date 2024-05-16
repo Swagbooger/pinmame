@@ -4,6 +4,8 @@
 //
 //============================================================
 
+#ifndef DISABLE_DX7
+
 // standard windows headers
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -91,7 +93,7 @@ static char *d3d_rc_effect;
 static char *d3d_rc_custom;
 static char *d3d_rc_expert;
 static int d3d_rc_scan;
-static int d3d_rc_prescale;
+static char *d3d_rc_prescale;
 static int d3d_rc_feedback;
 static int d3d_rc_rotate;
 
@@ -188,7 +190,6 @@ struct rc_option win_d3d_opts[] =
 	{ "d3deffect", NULL, rc_string, &d3d_rc_effect, "none", 0, 0, win_d3d_decode_effect, "specify the blitting effects" },
 	{ "d3dcustom", NULL, rc_string, &d3d_rc_custom, NULL, 0, 0, win_d3d_decode_custom, "customised blitting effects preset" },
 	{ "d3dexpert", NULL, rc_string, &d3d_rc_expert, NULL, 0, 0, win_d3d_decode_expert, "additional customised settings (undocumented)" },
-
 
 	{ NULL,	NULL, rc_end, NULL, NULL, 0, 0,	NULL, NULL }
 };
@@ -516,8 +517,8 @@ int win_d3d_effects_in_use(void)
 	if (win_d3d_use_auto_effect ||
 		use_effect_preset ||
 		use_scanlines != -1 ||
-		use_feedback ||
-		(use_prescale < -1 && use_prescale > 0x11))
+		use_feedback /*||
+		(use_prescale < -1 && use_prescale > 0x11)*/)
 	{
 		return 1;
 	}
@@ -690,12 +691,13 @@ static int effects_scanline_init(void)
 	int scanline_data[2][4] = { { 0xFFFFFF, 0x000000, -1, -1 }, { 0x9F9F9F, 0xFFFFFF, 0x9F9F9F, 0x000000 } };
 
 	DDSURFACEDESC2 surface_desc = { sizeof(DDSURFACEDESC2) };
-	HRESULT result;
-	unsigned int x, y;
-	int i;
 
+	int i;
 	for (i = 0; i < 2; i++)
 	{
+		HRESULT result;
+		int x, y;
+
 		// lock the surface
 		result = IDirectDrawSurface7_Lock(win_d3d_scanline_surface[i], NULL, &surface_desc, DDLOCK_SURFACEMEMORYPTR | DDLOCK_WAIT, NULL);
 		if (result != DD_OK)
@@ -734,7 +736,8 @@ static int effects_rgb_init(void)
 	UINT8 *pattern_rgb_data;
 	int x, y, pattern_xsize, pattern_ysize;
 	int patternsize;
-	int internal_pattern, i;
+	int internal_pattern;
+	size_t i;
 	const char *pattern_name;
 
 	// fail if we have no RGB effects pattern
@@ -957,3 +960,5 @@ static void win_ddrawsurf_plot_pixel(const LPDDSURFACEDESC2 surface_desc, int x,
 		}
 	}
 }
+
+#endif

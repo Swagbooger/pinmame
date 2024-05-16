@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /******************************************************************************************
   Jeutel Games
   ------------
@@ -7,6 +9,7 @@
   with lots of bus signals. I doubt it can be fully handled by MAME
   but it's close enough to make the games work as it is now;
   only thing I can say for sure is they're running way too fast!
+  For sound this is using a TMS5110A speak n spell
 *******************************************************************************************/
 
 #include "driver.h"
@@ -24,6 +27,8 @@ static struct {
   int dispStrobe;
   int dispBlank;
   int dipStrobe;
+
+  UINT8 irq;
 } locals;
 
 static INTERRUPT_GEN(jeutel_vblank) {
@@ -31,9 +36,8 @@ static INTERRUPT_GEN(jeutel_vblank) {
 }
 
 static INTERRUPT_GEN(jeutel_irq) {
-  static int irq = 0;
-  irq = !irq;
-  cpu_set_irq_line(0, 0, irq ? ASSERT_LINE : CLEAR_LINE);
+  locals.irq = !locals.irq;
+  cpu_set_irq_line(0, 0, locals.irq ? ASSERT_LINE : CLEAR_LINE);
 }
 
 static void jeutel_nmi(int data) {
@@ -167,13 +171,14 @@ static ppi8255_interface ppi8255_intf =
   {ppi0_portc_w, ppi1_portc_w, ppi2_portc_w},	/* Port C write */
 };
 
-static MACHINE_INIT(JEUTEL) {
-  sndbrd_0_init(core_gameData->hw.soundBoard, 2, memory_region(REGION_CPU3), NULL, NULL);
-}
-
 static MACHINE_RESET(JEUTEL) {
   memset(&locals, 0x00, sizeof(locals));
-	ppi8255_init(&ppi8255_intf);
+  sndbrd_0_init(core_gameData->hw.soundBoard, 2, memory_region(REGION_CPU3), NULL, NULL);
+  ppi8255_init(&ppi8255_intf);
+}
+
+static MACHINE_STOP(JEUTEL) {
+  sndbrd_0_exit();
 }
 
 static SWITCH_UPDATE(JEUTEL) {
@@ -286,8 +291,7 @@ static void tms5110_irq(int data) {
 }
 
 static int tms5110_callback(void) {
-  int value;
-  value = (memory_region(REGION_SOUND1)[sndlocals.tmsAddr] >> sndlocals.tmsBit) & 1;
+  int value = (memory_region(REGION_SOUND1)[sndlocals.tmsAddr] >> sndlocals.tmsBit) & 1;
   sndlocals.tmsBit++;
   if (sndlocals.tmsBit > 7) {
     sndlocals.tmsAddr++;
@@ -297,10 +301,10 @@ static int tms5110_callback(void) {
 }
 
 static struct TMS5110interface jeutel_5110Int = {
-  639450,				/* clock rate = 80 * output sample rate,     */
-								/* usually 640000 for 8000 Hz sample rate or */
-								/* usually 800000 for 10000 Hz sample rate.  */
-  50,					/* volume */
+  640000,			/* clock rate = 80 * output sample rate,     */
+					/* usually 640000 for 8000 Hz sample rate or */
+					/* usually 800000 for 10000 Hz sample rate.  */
+  50,				/* volume */
   tms5110_irq,		/* IRQ callback function (not implemented!) */
   tms5110_callback	/* function to be called when chip requests another bit*/
 };
@@ -321,7 +325,7 @@ MACHINE_DRIVER_START(jeutel)
   MDRV_CPU_VBLANK_INT(jeutel_vblank, 1)
   MDRV_CPU_PERIODIC_INT(jeutel_irq, 500)
   MDRV_TIMER_ADD(jeutel_nmi, 200) // this is not correct; the 2nd CPU should trigger this on BUSAK actually
-  MDRV_CORE_INIT_RESET_STOP(JEUTEL,JEUTEL,NULL)
+  MDRV_CORE_INIT_RESET_STOP(NULL,JEUTEL,JEUTEL)
   MDRV_NVRAM_HANDLER(generic_0fill)
   MDRV_SWITCH_UPDATE(JEUTEL)
   MDRV_DIAGNOSTIC_LEDH(3)
@@ -478,7 +482,7 @@ ROM_START(leking)
   NORMALREGION(0x10000, REGION_CPU3)
     ROM_LOAD("sound-v.bin", 0x0000, 0x1000, CRC(36130e7b) SHA1(d9b66d43b55272579b3972005355b8a18ce6b4a9))
   NORMALREGION(0x10000, REGION_SOUND1)
-    ROM_LOAD("sound-p.bin", 0x0000, 0x2000, BAD_DUMP CRC(97eedd6c) SHA1(3bb8e5d32417c49ef97cbe407f2c5eeb214bf72d))
+    ROM_LOAD("sound-p.bin", 0x0000, 0x2000, CRC(97eedd6c) SHA1(3bb8e5d32417c49ef97cbe407f2c5eeb214bf72d) BAD_DUMP)
     ROM_RELOAD(0x2000, 0x2000)
     ROM_RELOAD(0x4000, 0x2000)
     ROM_RELOAD(0x6000, 0x2000)
@@ -490,21 +494,21 @@ ROM_END
 
 INITGAME(leking,dispAlpha,FLIP_SW(FLIP_L))
 JEUTEL_COMPORTS(leking, 3)
-CORE_GAMEDEFNV(leking, "Le King", 1983, "Jeutel", jeutel, GAME_NOT_WORKING)
+CORE_GAMEDEFNV(leking, "Le King", 1983, "Jeutel", jeutel, 0)
 
 /*--------------------------------
 / Olympic Games
 /-------------------------------*/
 ROM_START(olympic)
   NORMALREGION(0x10000, REGION_CPU1)
-    ROM_LOAD("game-v.bin", 0x0000, 0x1000, CRC(cd284a20) SHA1(94568e1247994c802266f9fbe4a6f6ed2b55a978))
+    ROM_LOAD("game-v.bin",   0x0000, 0x1000, CRC(cd284a20) SHA1(94568e1247994c802266f9fbe4a6f6ed2b55a978))
   NORMALREGION(0x10000, REGION_CPU2)
     ROM_LOAD("game-jo1.bin", 0x0000, 0x2000, CRC(c9f040cf) SHA1(c689f3a82d904d3f9fc8688d4c06082c51645b2f))
 
   NORMALREGION(0x10000, REGION_CPU3)
     ROM_LOAD("sound-j0.bin", 0x0000, 0x1000, CRC(5c70ce72) SHA1(b0b6cc7b6ec3ed9944d738b61a0d144b77b07000))
   NORMALREGION(0x10000, REGION_SOUND1)
-    ROM_LOAD("sound-p.bin", 0x0000, 0x2000, CRC(97eedd6c) SHA1(3bb8e5d32417c49ef97cbe407f2c5eeb214bf72d))
+    ROM_LOAD("sound-p.bin",  0x0000, 0x2000, CRC(97eedd6c) SHA1(3bb8e5d32417c49ef97cbe407f2c5eeb214bf72d))
     ROM_RELOAD(0x2000, 0x2000)
     ROM_RELOAD(0x4000, 0x2000)
     ROM_RELOAD(0x6000, 0x2000)
@@ -516,4 +520,30 @@ ROM_END
 
 INITGAME(olympic,dispAlpha,FLIP_SW(FLIP_L))
 JEUTEL_COMPORTS(olympic, 1)
-CORE_GAMEDEFNV(olympic, "Olympic Games", 1984, "Jeutel", jeutel, GAME_NOT_WORKING)
+CORE_GAMEDEFNV(olympic, "Olympic Games", 1984, "Jeutel", jeutel, 0)
+
+/*--------------------------------
+/ Papillon
+/-------------------------------*/
+ROM_START(jpapillon)
+  NORMALREGION(0x10000, REGION_CPU1)
+    ROM_LOAD("game-v.bin",  0x0000, 0x1000, CRC(cd284a20) SHA1(94568e1247994c802266f9fbe4a6f6ed2b55a978))  // dump was the same as ones above
+  NORMALREGION(0x10000, REGION_CPU2)
+    ROM_LOAD("CPU_IC6.bin", 0x0000, 0x2000, CRC(9502fd05) SHA1(3369f51c56b32c8bde8b09f80c5f02bd579c5fbe))
+
+  NORMALREGION(0x10000, REGION_CPU3)
+    ROM_LOAD("sound-j0.bin", 0x0000, 0x1000, CRC(5c70ce72) SHA1(b0b6cc7b6ec3ed9944d738b61a0d144b77b07000)) // dump was the same as Olympic Games
+  NORMALREGION(0x10000, REGION_SOUND1)
+    ROM_LOAD("sound-p.bin",  0x0000, 0x2000, CRC(97eedd6c) SHA1(3bb8e5d32417c49ef97cbe407f2c5eeb214bf72d)) // dump was the same as Olympic Games
+    ROM_RELOAD(0x2000, 0x2000)
+    ROM_RELOAD(0x4000, 0x2000)
+    ROM_RELOAD(0x6000, 0x2000)
+    ROM_RELOAD(0x8000, 0x2000)
+    ROM_RELOAD(0xa000, 0x2000)
+    ROM_RELOAD(0xc000, 0x2000)
+    ROM_RELOAD(0xe000, 0x2000)
+ROM_END
+
+INITGAME(jpapillon,dispAlpha,FLIP_SW(FLIP_L))
+JEUTEL_COMPORTS(jpapillon, 1)
+CORE_GAMEDEFNV(jpapillon, "Papillon (Jeutel)", 1984, "Jeutel", jeutel, 0)

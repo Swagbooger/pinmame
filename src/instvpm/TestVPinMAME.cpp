@@ -1,5 +1,5 @@
 #include "Windows.h"
-#include "Resource.h"
+#include "resource.h"
 #include "Globals.h"
 
 #include "Utils.h"
@@ -14,8 +14,8 @@ class CControllerEvents : public _IControllerEvents
 {
 public:
 	// IUnknown
-	STDMETHODIMP_(ULONG) AddRef() { 
-		return ++m_uRef; 
+	STDMETHODIMP_(ULONG) AddRef() {
+		return ++m_uRef;
 	}
 
 	STDMETHODIMP_(ULONG) Release() {
@@ -53,7 +53,7 @@ public:
 	STDMETHODIMP_(long) GetIDsOfNames(REFIID riid, BSTR *rgszNames, UINT cNames, LCID lcid, DISPID *rgDispId) { 
 		return E_NOTIMPL; 
 	}
-	
+
 	STDMETHODIMP_(long) Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr) { 
 		switch ( dispIdMember ) {
 		case 1: // OnSolenoid(int nSolenoid, int IsActive)
@@ -61,13 +61,13 @@ public:
 				return S_FALSE;
 
 			return OnSolenoid(pDispParams->rgvarg[0].intVal, pDispParams->rgvarg[1].intVal);
-		
+
 		case 2:
 			if ( pDispParams->cArgs!=1 )
 				return S_FALSE;
 
 			return OnStateChange(pDispParams->rgvarg[0].intVal);
-		
+
 		}
 		return S_FALSE; 
 	};
@@ -137,67 +137,13 @@ void DeleteListContent(HWND hWnd)
 {
 	HWND hGamesList = GetDlgItem(hWnd, IDC_GAMESLIST);
 
-	int nCount = SendMessage(hGamesList, LB_GETCOUNT, 0, 0);
-	for(int i=0; i<nCount; i++) {
+	LRESULT nCount = SendMessage(hGamesList, LB_GETCOUNT, 0, 0);
+	for(LRESULT i=0; i<nCount; i++) {
 		PGAMEINFO pGameInfo = (PGAMEINFO) SendMessage(hGamesList, LB_GETITEMDATA, i, 0);
 		delete pGameInfo;
 	}
 
 	SendMessage(hGamesList, LB_RESETCONTENT, 0, 0);
-}
-
-/***********************************************************/
-/* Pulls all Machine Names and populates to Control Passed */
-/* uses the .Machines safearray                            */
-/***********************************************************/
-BOOL PopulateListV1_10andLower(HWND hWnd, IController *pController)
-{
-	HWND hGamesList = GetDlgItem(hWnd, IDC_GAMESLIST);
-
-	VARIANT varArrayNames;
-	BSTR sCompatibleMachines = SysAllocString(L"");
-	if ( FAILED(pController->get_Machines(sCompatibleMachines,&varArrayNames)) )
-		return FALSE;
-	SysFreeString(sCompatibleMachines);
-
-	/* PROCESS THE MACHINE NAMES ARRAY AND POPULATE LISTBOX */
-	LONG lstart, lend;
-    VARIANT HUGEP *pbstr;
-
-	SAFEARRAY *psa = varArrayNames.parray;
-	if ( SUCCEEDED(SafeArrayAccessData(psa, (void HUGEP**) &pbstr)) ) {
-		// Get the lower and upper bound
-		if (FAILED(SafeArrayGetLBound(psa, 1, &lstart))) 
-			lstart=0;
-		if (FAILED(SafeArrayGetUBound(psa, 1, &lend))) 
-			lend=0;
-		
-		// Grab each machine name and populate the control
-		for(long idx=lstart; idx <= lend; idx++)
-		{		
-			BSTR sGameName;
-			char szGameName[256];
-			char szListEntry[256];
-			sGameName = pbstr[idx].bstrVal;
-			if ( sGameName ) {
-				WideCharToMultiByte(CP_ACP, 0, sGameName, -1, szGameName, sizeof szGameName, NULL, NULL);
-				
-				lstrcpy(szListEntry, szGameName); // for future versions here we can add the full game name 
-				int nIndex = SendMessage(hGamesList, LB_ADDSTRING, 0, (LPARAM) szListEntry);
-				
-				PGAMEINFO pGameInfo = new GAMEINFO;
-				lstrcpy(pGameInfo->szGameName, szGameName);
-				lstrcpy(pGameInfo->szGameDescription, szGameName);
-				pGameInfo->fROMAvailable = true;
-				SendMessage(hGamesList, LB_SETITEMDATA, nIndex, (WPARAM) pGameInfo);
-			}
-		}
-	}
-	SafeArrayUnaccessData(psa);
-	SafeArrayDestroy(psa);
-
-	SendMessage(hGamesList, LB_SETCURSEL, 0, 0);
-	return TRUE;
 }
 
 /***********************************************************/
@@ -209,22 +155,21 @@ BOOL PopulateListGreaterV1_10(HWND hWnd, IController *pController)
 	const int sTabStops[] = {190, 230};
 
 	HWND hGamesList = GetDlgItem(hWnd, IDC_GAMESLIST);
-	SendMessage(hGamesList, LB_SETTABSTOPS, 2, (WPARAM) &sTabStops);
+	SendMessage(hGamesList, LB_SETTABSTOPS, 2, (LPARAM) &sTabStops);
 
 	IGames* pGames = NULL;
 
 	/* first, get a pointer to the games interface */
 	HRESULT hr = pController->get_Games(&pGames);
-	if ( FAILED(hr) ) /* upps, fallback to the old style */
-		PopulateListV1_10andLower(hWnd, pController);
+
+	if (!pGames)
+		return FALSE;
 
 	/* now we need a pointer to an enumeration object */
 	IUnknown *pUnk;
 	hr = pGames->get__NewEnum((IUnknown**) &pUnk);
-	if ( FAILED(hr) ) { /* upps, fallback to the old style */
+	if ( FAILED(hr) )
 		pGames->Release();
-		PopulateListV1_10andLower(hWnd, pController);
-	}
 	
 	/* we got an IUnknow interface, but we need IEnumGames */
 	IEnumGames* pEnumGames;
@@ -233,20 +178,18 @@ BOOL PopulateListGreaterV1_10(HWND hWnd, IController *pController)
 	pUnk->Release();
 
 	/* in case we can't get the IEnumGame interface for some reason */
-	if ( FAILED(hr) ) { /* upps, fallback to the old style */
+	if ( FAILED(hr) )
 		pGames->Release();
-		PopulateListV1_10andLower(hWnd, pController);
-	}
 
 	VARIANT vGame;
 	unsigned long uFetched;
-	
+
 	IGame* pGame = NULL;
 
 	/* enumerate to all the games, uFetched will be 0 if the end is reached */
 	/* I will increase the number of fetches game in a while, don't have the time now */
 	while ( SUCCEEDED(pEnumGames->Next(1, &vGame, &uFetched)) && uFetched ) {
-		/* same as the IEnumInterface, we will get a interface to IDisptach */
+		/* same as the IEnumInterface, we will get a interface to IDispatch */
 		/* not to IGame, don't wan't to use IDispatch */
 		hr = vGame.pdispVal->QueryInterface(__uuidof(IGame), (void**) &pGame);
 
@@ -293,8 +236,8 @@ BOOL PopulateListGreaterV1_10(HWND hWnd, IController *pController)
 			lstrcat(szListEntry, "\tX");
 
 		/* put it to the list */
-		int nIndex = SendMessage(hGamesList, LB_ADDSTRING, 0, (LPARAM) szListEntry);
-		SendMessage(hGamesList, LB_SETITEMDATA, nIndex, (WPARAM) pGameInfo);
+		size_t nIndex = SendMessage(hGamesList, LB_ADDSTRING, 0, (LPARAM) szListEntry);
+		SendMessage(hGamesList, LB_SETITEMDATA, nIndex, (LPARAM) pGameInfo);
 	}
 
 	/* don't forget this */
@@ -314,25 +257,15 @@ BOOL PopulateList(HWND hWnd, IController *pController)
 	if ( !pController )
 		return false;
 
-	/* grab the description of the pin if version > V1.10 */
-	BSTR sVersion;
-	pController->get_Version(&sVersion);
-
-	char szVersion[256];
-	WideCharToMultiByte(CP_ACP, 0, (LPOLESTR) sVersion, -1, szVersion, sizeof szVersion, NULL, NULL);
-
-	if ( lstrcmp(szVersion, "01010000")<=0 )
-		return PopulateListV1_10andLower(hWnd, pController);
-	else
-		return PopulateListGreaterV1_10(hWnd, pController);
+	return PopulateListGreaterV1_10(hWnd, pController);
 }
 
 /***************************************************************************************/
 /* Starts a game /*
 /***************************************************************************************/
 void RunGame(HWND hWnd, IController *pController)
-{   
-	int iIndex = SendDlgItemMessage(hWnd,IDC_GAMESLIST, LB_GETCURSEL, 0, 0);
+{
+	LRESULT iIndex = SendDlgItemMessage(hWnd,IDC_GAMESLIST, LB_GETCURSEL, 0, 0);
 
 	if ( iIndex<0 )
 		return;
@@ -342,13 +275,13 @@ void RunGame(HWND hWnd, IController *pController)
 	PGAMEINFO pGameInfo = (PGAMEINFO) SendDlgItemMessage(hWnd, IDC_GAMESLIST, LB_GETITEMDATA, iIndex, 0);
 
 	BSTR sGameName;
-	sGameName = SysAllocStringLen(NULL, strlen(pGameInfo->szGameName));
+	sGameName = SysAllocStringLen(NULL, (UINT)strlen(pGameInfo->szGameName));
 
-	MultiByteToWideChar(CP_ACP, 0,pGameInfo->szGameName, -1, sGameName, strlen(pGameInfo->szGameName)); 
+	MultiByteToWideChar(CP_ACP, 0,pGameInfo->szGameName, -1, sGameName, (int)strlen(pGameInfo->szGameName)); 
 	pController->put_GameName(sGameName);
 	SysFreeString(sGameName);
 
-	pController->put_HandleKeyboard(true);
+	pController->put_HandleKeyboard(VARIANT_TRUE);
 
 	if ( FAILED(pController->Run(0,0)) ) 
 		DisplayCOMError(pController, __uuidof(IController));
@@ -361,7 +294,7 @@ void RunGame(HWND hWnd, IController *pController)
 /***************************************************************************************/
 void CheckRoms(HWND hWnd, IController *pController)
 {   
-	int iIndex = SendDlgItemMessage(hWnd,IDC_GAMESLIST, LB_GETCURSEL, 0, 0);
+	LRESULT iIndex = SendDlgItemMessage(hWnd,IDC_GAMESLIST, LB_GETCURSEL, 0, 0);
 
 	if ( iIndex<0 )
 		return;
@@ -369,9 +302,9 @@ void CheckRoms(HWND hWnd, IController *pController)
 	PGAMEINFO pGameInfo = (PGAMEINFO) SendDlgItemMessage(hWnd, IDC_GAMESLIST, LB_GETITEMDATA, iIndex, 0);
 
 	BSTR sGameName;
-	sGameName = SysAllocStringLen(NULL, strlen(pGameInfo->szGameName));
+	sGameName = SysAllocStringLen(NULL, (UINT)strlen(pGameInfo->szGameName));
 
-	MultiByteToWideChar(CP_ACP, 0,pGameInfo->szGameName, -1, sGameName, strlen(pGameInfo->szGameName)); 
+	MultiByteToWideChar(CP_ACP, 0,pGameInfo->szGameName, -1, sGameName, (int)strlen(pGameInfo->szGameName)); 
 	pController->put_GameName(sGameName);
 	SysFreeString(sGameName);
 
@@ -388,7 +321,7 @@ void CheckRoms(HWND hWnd, IController *pController)
 /***************************************************************************************/
 void GameOptions(HWND hWnd, IController *pController)
 {   
-	int iIndex = SendDlgItemMessage(hWnd,IDC_GAMESLIST, LB_GETCURSEL, 0, 0);
+	LRESULT iIndex = SendDlgItemMessage(hWnd,IDC_GAMESLIST, LB_GETCURSEL, 0, 0);
 
 	if ( iIndex<0 )
 		return;
@@ -396,9 +329,9 @@ void GameOptions(HWND hWnd, IController *pController)
 	PGAMEINFO pGameInfo = (PGAMEINFO) SendDlgItemMessage(hWnd, IDC_GAMESLIST, LB_GETITEMDATA, iIndex, 0);
 
 	BSTR sGameName;
-	sGameName = SysAllocStringLen(NULL, strlen(pGameInfo->szGameName));
+	sGameName = SysAllocStringLen(NULL, (UINT)strlen(pGameInfo->szGameName));
 
-	MultiByteToWideChar(CP_ACP, 0,pGameInfo->szGameName, -1, sGameName, strlen(pGameInfo->szGameName)); 
+	MultiByteToWideChar(CP_ACP, 0,pGameInfo->szGameName, -1, sGameName, (int)strlen(pGameInfo->szGameName)); 
 	pController->put_GameName(sGameName);
 	SysFreeString(sGameName);
 
@@ -408,20 +341,21 @@ void GameOptions(HWND hWnd, IController *pController)
 	SysFreeString(sGameName);
 }
 
-void EnableButtons(HWND hWnd, IController *pController) {
+void EnableButtons(HWND hWnd, IController *pController)
+{
 	VARIANT_BOOL fRunning;
 	pController->get_Running(&fRunning);
 
-	char szState[256];
+	TCHAR szState[256];
 	if ( fRunning==VARIANT_TRUE ) {
 		char szGameName[256];
 		BSTR sGameName;
 		pController->get_GameName(&sGameName);
 		WideCharToMultiByte(CP_ACP, 0, (LPOLESTR) sGameName, -1, szGameName, sizeof szGameName, NULL, NULL);
-		wsprintf(szState, "'%s' is running", szGameName);
+		wsprintf(szState, TEXT("'%s' is running"), szGameName);
 	}
 	else
-		lstrcpy(szState, "No game is running.");
+		lstrcpy(szState, TEXT("No game is running."));
 
 	SendDlgItemMessage(hWnd, IDC_STATE, WM_SETTEXT, 0, (WPARAM) &szState);
 
@@ -431,7 +365,7 @@ void EnableButtons(HWND hWnd, IController *pController) {
 	EnableWindow(GetDlgItem(hWnd, IDC_CHECKROMS), SendDlgItemMessage(hWnd, IDC_GAMESLIST, LB_GETCURSEL, 0,0)>=0);
 }
 
-int PASCAL RunDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+INT_PTR PASCAL RunDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	static HICON m_hIcon = 0;
 	static IController *pController = NULL;
@@ -480,7 +414,7 @@ int PASCAL RunDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		}
 
 		if ( !PopulateList(hWnd, pController) ) {
-			DisplayError(hWnd, hr, "Retrieve the list of games. Please check your installation.");
+			DisplayError(hWnd, STG_E_UNKNOWN, "Retrieving the list of games failed. Please check your installation.");
 			EndDialog(hWnd, IDCANCEL);
 			return FALSE;
 		}
@@ -492,7 +426,7 @@ int PASCAL RunDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		POINT ScreenPos;
 		ScreenPos.x = (GetSystemMetrics(SM_CXSCREEN)-(WindowRect.right-WindowRect.left)) / 2;
 		ScreenPos.y = (GetSystemMetrics(SM_CYSCREEN)-(WindowRect.bottom-WindowRect.top)) / 2;
-		
+
 		MoveWindow(hWnd, ScreenPos.x, ScreenPos.y, WindowRect.right-WindowRect.left, WindowRect.bottom-WindowRect.top, false);
 
 		/* set the icon */

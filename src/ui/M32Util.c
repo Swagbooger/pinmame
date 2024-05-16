@@ -24,7 +24,7 @@
 #include <stdio.h>
 
 #include "unzip.h"
-#include "screenshot.h"
+#include "Screenshot.h"
 #include "MAME32.h"
 #include "M32Util.h"
 
@@ -102,7 +102,8 @@ void __cdecl dprintf(const char* fmt, ...)
 
 	va_start(va, fmt);
 
-	vsnprintf(buf,sizeof(buf),fmt,va);
+	vsnprintf(buf,sizeof(buf)-1,fmt,va);
+	strcat(buf, "\n");
 
 	OutputDebugString(buf);
 
@@ -135,19 +136,17 @@ LONG GetCommonControlVersion()
 	{
 		FARPROC lpfnICCE = GetProcAddress(hModule, "InitCommonControlsEx");
 
-		if (NULL != lpfnICCE)
+		if (lpfnICCE)
 		{
 			FARPROC lpfnDLLI = GetProcAddress(hModule, "DllInstall");
+			DLLGETVERSIONPROC pDllGetVersion = (DLLGETVERSIONPROC)GetProcAddress(hModule, "DllGetVersion");
 
-			if (NULL != lpfnDLLI) 
+			if (lpfnDLLI || pDllGetVersion) 
 			{
 				/* comctl 4.71 or greater */
 
 				// see if we can find out exactly
 				
-				DLLGETVERSIONPROC pDllGetVersion;
-				pDllGetVersion = (DLLGETVERSIONPROC)GetProcAddress(hModule, "DllGetVersion");
-
 				/* Because some DLLs might not implement this function, you
 				   must test for it explicitly. Depending on the particular 
 				   DLL, the lack of a DllGetVersion function can be a useful

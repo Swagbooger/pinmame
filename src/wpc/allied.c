@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /************************************************************************************************
  Allied Leisure
  --------------
@@ -166,7 +168,7 @@ static WRITE_HANDLER(ic2_cb2_w) {
     HC4094_clock_w(14, !data);
     HC4094_clock_w(15, !data);
   }
-  coreGlobals.diagnosticLed = (coreGlobals.diagnosticLed & 0x0e) | !locals.dispSel;
+  coreGlobals.diagnosticLed = (coreGlobals.diagnosticLed & 0x0e) | (int)(!locals.dispSel);
 }
 
 /* PA0: from J1-J (left thumper bumper)
@@ -627,7 +629,7 @@ static MACHINE_STOP(allied) {
 static MACHINE_DRIVER_START(allied)
   MDRV_IMPORT_FROM(PinMAME)
   MDRV_CORE_INIT_RESET_STOP(allied,NULL,allied)
-  MDRV_CPU_ADD_TAG("mcpu", M6502, 3572549/4)
+  MDRV_CPU_ADD_TAG("mcpu", M6502, 3572549./4.)
   MDRV_CPU_MEMORY(readmem, writemem)
   MDRV_CPU_VBLANK_INT(vblank, 1)
   MDRV_DIPS(68)

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /*******************************************************************************
  The Machine: Bride of Pinbot (Williams, 1991) Pinball Simulator
 
@@ -53,7 +55,11 @@
 #include "wpc.h"
 #include "sim.h"
 #include "wmssnd.h"
-#include "machine/4094.h"
+
+#if !defined(_WIN32) || defined(__CYGWIN__)
+ #include <strings.h>
+ #define _stricmp strcasecmp
+#endif
 
 /*------------------
 /  Local functions
@@ -83,25 +89,25 @@ WPC_INPUT_PORTS_START(bop,3)
     COREPORT_BIT(0x0001,"Left Qualifier",	KEYCODE_LCONTROL)
     COREPORT_BIT(0x0002,"Right Qualifier",	KEYCODE_RCONTROL)
     COREPORT_BIT(0x0004,"L/R Outlane",		KEYCODE_O)
-    COREPORT_BIT(0x0008,"L/R Slingshot",		KEYCODE_MINUS)
+    COREPORT_BIT(0x0008,"L/R Slingshot",	KEYCODE_MINUS)
     COREPORT_BIT(0x0010,"L/R Inlane",		KEYCODE_I)
-    COREPORT_BIT(0x0020,"Ramp Fail/OK",	        KEYCODE_R)
+    COREPORT_BIT(0x0020,"Ramp Fail/OK",		KEYCODE_R)
     COREPORT_BIT(0x0040,"RightLoop",		KEYCODE_R)
-    COREPORT_BIT(0x0100,"Left Jet",		KEYCODE_T)
+    COREPORT_BIT(0x0100,"Left Jet",			KEYCODE_T)
     COREPORT_BIT(0x0200,"Right Jet",		KEYCODE_Y)
     COREPORT_BIT(0x0400,"Bottom Jet",		KEYCODE_U)
     COREPORT_BIT(0x0800,"Small Wheel",		KEYCODE_S)
     COREPORT_BIT(0x1000,"Left Loop",		KEYCODE_L)
     COREPORT_BIT(0x2000,"Center Ramp",		KEYCODE_C)
-    COREPORT_BIT(0x4000,"BonusX",		KEYCODE_X)
+    COREPORT_BIT(0x4000,"BonusX",			KEYCODE_X)
     COREPORT_BIT(0x8000,"Drain",			KEYCODE_Q)
 
 
   PORT_START /* 1 */
     COREPORT_BIT(0x0001,"Right Top 5K",		KEYCODE_B)
     COREPORT_BIT(0x0002,"Right Bot 5K",		KEYCODE_N)
-    COREPORT_BIT(0x0004,"Left 5K",		KEYCODE_V)
-    COREPORT_BIT(0x0008,"Spinner",		KEYCODE_J)
+    COREPORT_BIT(0x0004,"Left 5K",			KEYCODE_V)
+    COREPORT_BIT(0x0008,"Spinner",			KEYCODE_J)
 
 WPC_INPUT_PORTS_END
 
@@ -117,7 +123,7 @@ WPC_INPUT_PORTS_END
 
 #define swSlamTilt	21
 #define swCoinDoor	22
-#define swTicket     	23
+#define swTicket	23
 #define swRTrough	25
 #define swCTrough	26
 #define swLTrough	27
@@ -135,8 +141,8 @@ WPC_INPUT_PORTS_END
 #define swRRampMade	41
 #define swLeftLoop	43
 #define swRTopLoop	44
-#define swRBotLoop     	45
-#define swUPKicker    	46
+#define swRBotLoop	45
+#define swUPKicker	46
 #define swEnterHead	47
 
 #define swSpinner	51
@@ -171,7 +177,7 @@ WPC_INPUT_PORTS_END
 #define sControlledGate	4
 #define sSkillShot	5
 #define sWireBallHolder	6
-#define sKnocker       	7
+#define sKnocker	7
 #define sHeadMouth	8
 #define sLeftJet	9
 #define sLeftSling	10
@@ -288,7 +294,7 @@ static int bop_handleBallState(sim_tBallStatus *ball, int *inports) {
 	{
 
 	/* Ball in Shooter Lane */
-    	case stBallLane:
+		case stBallLane:
 		if (ball->speed < 10)
 			return setState(stNotEnough,10);	/*Ball not plunged hard enough*/
 		if (ball->speed < 15)
@@ -332,7 +338,7 @@ static int bop_handleBallState(sim_tBallStatus *ball, int *inports) {
 		/*-----------------
 		    MiniPF Exit
 		-------------------*/
-    	case stMiniPFExit:
+		case stMiniPFExit:
 		if (ball->speed < 25)
 			return setState(stMiniPFRight,150);	/* Out MiniPF From Right */
 		if (ball->speed < 35)
@@ -431,6 +437,7 @@ static void bop_drawStatic(BMTYPE **line) {
   }
 
 /* Solenoid-to-sample handling */
+#ifdef ENABLE_MECHANICAL_SAMPLES
 static wpc_tSamSolMap bop_samsolmap[] = {
  /*Channel #0*/
  {sKnocker,0,SAM_KNOCKER}, {sTrough,0,SAM_BALLREL},
@@ -450,6 +457,7 @@ static wpc_tSamSolMap bop_samsolmap[] = {
  {sControlledGate,3,SAM_SOLENOID_ON}, {sControlledGate,3,SAM_SOLENOID_OFF,WPCSAM_F_ONOFF},
  {-1}
 };
+#endif
 
 /*-----------------
 /  ROM definitions
@@ -477,32 +485,32 @@ WPC_ROMSTART(bop,d2,"bop_d2.u6",   0x20000,CRC(c362eb30) SHA1(93704d1634f170e10c
 /*--------------
 /  Game drivers
 /---------------*/
-CORE_GAMEDEF(bop,l7,"The Machine: Bride of Pinbot (L-7)",1992,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(bop,d7,l7,"The Machine: Bride of Pinbot (D-7) LED Ghost Fix",1991,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(bop,l8,l7,"The Machine: Bride of Pinbot (L-8) fixes billionaire multiplayer",1991,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(bop,d8,l7,"The Machine: Bride of Pinbot (D-8) LED Ghost Fix",1991,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(bop,l6,l7,"The Machine: Bride of Pinbot (L-6)",1991,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(bop,d6,l7,"The Machine: Bride of Pinbot (D-6) LED Ghost Fix",1991,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(bop,l5,l7,"The Machine: Bride of Pinbot (L-5)",1991,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(bop,d5,l7,"The Machine: Bride of Pinbot (D-5) LED Ghost Fix",1991,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(bop,l4,l7,"The Machine: Bride of Pinbot (L-4)",1991,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(bop,d4,l7,"The Machine: Bride of Pinbot (D-4) LED Ghost Fix",1991,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(bop,l3,l7,"The Machine: Bride of Pinbot (L-3)",1991,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(bop,d3,l7,"The Machine: Bride of Pinbot (D-3) LED Ghost Fix",1991,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(bop,l2,l7,"The Machine: Bride of Pinbot (L-2)",1991,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(bop,d2,l7,"The Machine: Bride of Pinbot (D-2) LED Ghost Fix",1991,"Williams",wpc_mAlpha2S,0)
+CORE_GAMEDEF(bop,l7,"Machine: Bride of Pinbot, The (L-7)",1992,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(bop,d7,l7,"Machine: Bride of Pinbot, The (D-7 LED Ghost Fix)",1991,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(bop,l8,l7,"Machine: Bride of Pinbot, The (L-8 billionaire multiplayer patch)",1991,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(bop,d8,l7,"Machine: Bride of Pinbot, The (D-8 LED Ghost Fix)",1991,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(bop,l6,l7,"Machine: Bride of Pinbot, The (L-6)",1991,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(bop,d6,l7,"Machine: Bride of Pinbot, The (D-6 LED Ghost Fix)",1991,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(bop,l5,l7,"Machine: Bride of Pinbot, The (L-5)",1991,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(bop,d5,l7,"Machine: Bride of Pinbot, The (D-5 LED Ghost Fix)",1991,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(bop,l4,l7,"Machine: Bride of Pinbot, The (L-4)",1991,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(bop,d4,l7,"Machine: Bride of Pinbot, The (D-4 LED Ghost Fix)",1991,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(bop,l3,l7,"Machine: Bride of Pinbot, The (L-3)",1991,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(bop,d3,l7,"Machine: Bride of Pinbot, The (D-3 LED Ghost Fix)",1991,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(bop,l2,l7,"Machine: Bride of Pinbot, The (L-2)",1991,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(bop,d2,l7,"Machine: Bride of Pinbot, The (D-2 LED Ghost Fix)",1991,"Williams",wpc_mAlpha2S,0)
 
 /*-----------------------
 / Simulation Definitions
 /-----------------------*/
 static sim_tSimData bopSimData = {
-  2,    				/* 2 game specific input ports */
-  bop_stateDef,				/* Definition of all states */
-  bop_inportData,			/* Keyboard Entries */
+  2,					/* 2 game specific input ports */
+  bop_stateDef,			/* Definition of all states */
+  bop_inportData,		/* Keyboard Entries */
   { stRTrough, stCTrough, stLTrough, stDrain, stDrain, stDrain, stDrain },	/*Position where balls start.. Max 7 Balls Allowed*/
-  bop_initSim, 				/* Simulator Init */
-  bop_handleBallState,			/*Function to handle ball state changes*/
-  bop_drawStatic,			/*Function to handle mechanical state changes*/
+  bop_initSim,			/* Simulator Init */
+  bop_handleBallState,	/*Function to handle ball state changes*/
+  bop_drawStatic,		/*Function to handle mechanical state changes*/
   TRUE, 				/* Simulate manual shooter? */
   NULL  				/* Custom key conditions? */
 };
@@ -514,9 +522,13 @@ static core_tGameData bopGameData = {
   GEN_WPCALPHA_2, wpc_dispAlpha,
   {
     FLIP_SWNO(12,11),
-    0,2,0,0,0,0,0, // 2 extra lamp columns for the helmet lights
+    0, 2, // 2 extra lamp columns for the helmet lights
+    0, 0, 0, 0, 0,
     NULL, bop_handleMech, bop_getMech, bop_drawMech,
-    &bop_lampPos, bop_samsolmap
+    &bop_lampPos
+#ifdef ENABLE_MECHANICAL_SAMPLES
+    , bop_samsolmap
+#endif
   },
   &bopSimData,
   {
@@ -540,7 +552,36 @@ static void bop_initSim(sim_tBallStatus *balls, int *inports, int noOfBalls)
 /*------------------
 /  Handle Mechanics
 /-------------------*/
+
+extern int g_fHandleMechanics;
+
 static void bop_handleMech(int mech) {
+	// This is a bit of a hack, but seems to be the best way to keep this localized
+	// to bop.c and keep things fully backwards compatible..   We need a way for a table 
+	// to let VPinmame know that we want to reset the internal NVRAM head position value to 0, 
+	// at table startup.
+	//
+	// We cannot do this in init_bop, NVRAM hasn't loaded yet. 
+	// However we may NOT want to use the built in mech handling (the below code would have 
+	// been simpler as an actual mech and doesn't relay the motion).   
+	//
+	// So if g_fHandleMechanics is -1, reset the head position to 0,
+	// and then disable the internal mech handling.   If it is -2, then continue using the mech handling
+	// after reset. 
+	if (g_fHandleMechanics < 0)
+	{
+		if (_stricmp(Machine->gamedrv->name, "bop_l7") == 0)
+		{
+			// Reset Bride of Pinbot face to 0. 
+			wpc_ram[0x1fc9] = 0x01;
+		}
+		if (g_fHandleMechanics == -1)
+		{
+			g_fHandleMechanics = 0;
+			return;
+		}
+		g_fHandleMechanics = 1;
+	}
 
   /* ----------------------------------------------
      --	Head Position - SH*T, this was a PAIN!!! --
@@ -566,12 +607,12 @@ static void bop_handleMech(int mech) {
     if (locals.headPos == 2 && core_getSol(sHeadMotor) && !core_getSol(sHeadDirection)) {
       locals.facePos++;
       if (locals.facePos < 100)
-	core_setSw(swFacePosition,1);
+        core_setSw(swFacePosition,1);
       if (locals.facePos > 101 && locals.facePos < 149)
-	core_setSw(swFacePosition,0);
+        core_setSw(swFacePosition,0);
       if (locals.facePos == 150) {
-	locals.headPos = 3;
-	locals.facePos = 0;
+        locals.headPos = 3;
+        locals.facePos = 0;
       }
     }
 
@@ -581,12 +622,12 @@ static void bop_handleMech(int mech) {
     if (locals.headPos == 3 && core_getSol(sHeadMotor) && !core_getSol(sHeadDirection)) {
       locals.facePos++;
       if (locals.facePos < 125)
-	core_setSw(swFacePosition,1);
+        core_setSw(swFacePosition,1);
       if (locals.facePos > 126 && locals.facePos < 149)
-	core_setSw(swFacePosition,0);
+        core_setSw(swFacePosition,0);
       if (locals.facePos == 150) {
-	locals.headPos = 4;
-	locals.facePos = 0;
+        locals.headPos = 4;
+        locals.facePos = 0;
       }
     }
 
@@ -595,12 +636,12 @@ static void bop_handleMech(int mech) {
     if (locals.headPos == 4 && core_getSol(sHeadMotor) && !core_getSol(sHeadDirection)) {
       locals.facePos++;
       if (locals.facePos < 100)
-	core_setSw(swFacePosition,0);
+        core_setSw(swFacePosition,0);
       if (locals.facePos > 101 && locals.facePos < 169)
-	core_setSw(swFacePosition,1);
+        core_setSw(swFacePosition,1);
       if (locals.facePos == 170) {
-	locals.headPos = 1;
-	locals.facePos = 0;
+        locals.headPos = 1;
+        locals.facePos = 0;
       }
     }
 
@@ -609,12 +650,12 @@ static void bop_handleMech(int mech) {
     if (locals.headPos == 4 && core_getSol(sHeadMotor) && core_getSol(sHeadDirection)) {
       locals.facePos--;
       if (locals.facePos > -100)
- 	core_setSw(swFacePosition,1);
+        core_setSw(swFacePosition,1);
       if (locals.facePos < -101 && locals.facePos > -149)
-	core_setSw(swFacePosition,0);
+        core_setSw(swFacePosition,0);
       if (locals.facePos == -150) {
-	locals.headPos = 3;
-	locals.facePos = 0;
+        locals.headPos = 3;
+        locals.facePos = 0;
       }
     }
 
@@ -623,12 +664,12 @@ static void bop_handleMech(int mech) {
     if (locals.headPos == 3 && core_getSol(sHeadMotor) && core_getSol(sHeadDirection)) {
       locals.facePos--;
       if (locals.facePos > -100)
-  	core_setSw(swFacePosition,1);
+        core_setSw(swFacePosition,1);
       if (locals.facePos < -101 && locals.facePos > -149)
-	core_setSw(swFacePosition,0);
+        core_setSw(swFacePosition,0);
       if (locals.facePos == -150) {
-	locals.headPos = 2;
-	locals.facePos = 0;
+        locals.headPos = 2;
+        locals.facePos = 0;
       }
     }
 
@@ -637,12 +678,12 @@ static void bop_handleMech(int mech) {
     if (locals.headPos == 2 && core_getSol(sHeadMotor) && core_getSol(sHeadDirection)) {
       locals.facePos--;
       if (locals.facePos > -100)
-	core_setSw(swFacePosition,1);
+        core_setSw(swFacePosition,1);
       if (locals.facePos < -101 && locals.facePos > -149)
-	core_setSw(swFacePosition,0);
+        core_setSw(swFacePosition,0);
       if (locals.facePos == -150) {
-	locals.headPos = 1;
-	locals.facePos = 0;
+        locals.headPos = 1;
+        locals.facePos = 0;
       }
     }
 
@@ -652,17 +693,16 @@ static void bop_handleMech(int mech) {
     if (locals.headPos == 1 && core_getSol(sHeadMotor) && core_getSol(sHeadDirection)) {
       locals.facePos--;
       if (locals.facePos > -100)
-	core_setSw(swFacePosition,1);
+        core_setSw(swFacePosition,1);
       if (locals.facePos < -101 && locals.facePos > -169)
-	core_setSw(swFacePosition,0);
+        core_setSw(swFacePosition,0);
       if (locals.facePos == -170) {
-	locals.headPos = 4;
-	locals.facePos = 0;
+        locals.headPos = 4;
+        locals.facePos = 0;
       }
     }
     /* Those were all the possible movements that the head can make */
   }
-
 }
 
 static int bop_getMech(int mechNo) {
@@ -670,33 +710,84 @@ static int bop_getMech(int mechNo) {
 }
 
 static WRITE_HANDLER(parallel_0_out) {
-  coreGlobals.lampMatrix[8] = coreGlobals.tmpLampMatrix[8] = data ^ 0xff;
+  coreGlobals.tmpLampMatrix[8] = data ^ 0xff;
 }
 static WRITE_HANDLER(parallel_1_out) {
-  coreGlobals.lampMatrix[9] = coreGlobals.tmpLampMatrix[9] = data ^ 0xff;
+  coreGlobals.tmpLampMatrix[9] = data ^ 0xff;
 }
-static WRITE_HANDLER(qspin_0_out) {
-  HC4094_data_w(1, data);
-}
-
-static HC4094interface hc4094bop = {
-  2, // 2 chips
-  { parallel_0_out, parallel_1_out },
-  { qspin_0_out }
-};
 
 static WRITE_HANDLER(bop_wpc_w) {
-  static UINT8 lastVal;
+  static UINT16 prev[64], lamps;
+  int i;
   wpc_w(offset, data);
   if (offset == WPC_SOLENOID1) {
-    HC4094_strobe_w(0, lastVal == (data & 3));
-    HC4094_strobe_w(1, lastVal == (data & 3));
-    HC4094_data_w  (0, GET_BIT0);
-    HC4094_clock_w (0, GET_BIT1);
-    HC4094_clock_w (1, GET_BIT1);
-    lastVal = data & 3;
+    if (GET_BIT1) {
+      lamps <<= 1;
+      if (GET_BIT0) {
+        lamps |= 1;
+      }
+      core_write_pwm_output_8b(CORE_MODOUT_LAMP0 + 8 * 8, ~lamps);
+      core_write_pwm_output_8b(CORE_MODOUT_LAMP0 + 9 * 8, ~lamps >> 8);
+    }
   }
+  for (i = 0; i < 64; i++) {
+    // if the lamp state is not stable for some minimal time, deny the update
+    if (prev[i] != lamps) break;
+    if (i >= 63) {
+      parallel_0_out(0, lamps & 0xff);
+      parallel_1_out(0, lamps >> 8);
+    }
+  }
+  for (i = 63; i > 0; i--) prev[i] = prev[i-1];
+  prev[0] = lamps;
 }
+
+#ifdef PROC_SUPPORT
+  #include "p-roc/p-roc.h"
+  #include "p-roc/proc_shift_reg.h"
+
+  /*
+    LEDs of helmet controlled by a serial shift register.  Game sets DATA and
+    then pulses clock HIGH for less than 1ms, about every 100ms.  Except for
+    when it's clearing the LEDs or pulsing a specific pattern and shifts with
+    sub-millisecond timing.  We use a 64-bit queue to track shift requests,
+    and a 12ms timer to shift them out at a rate the P-ROC can handle.
+  */
+  void bop_wpc_proc_solenoid_handler(int solNum, int enabled, int smoothed) {
+    static int helmet_data = 0;
+
+    // coils to process immediately, and not smoothed
+    switch (solNum) {
+      case 16:  // C17 to C24 flashers
+      case 17:
+      case 18:
+      case 19:
+      case 20:
+      case 21:
+      case 22:
+      case 23:
+      
+      case 26:  // C27, head direction
+      case 27:  // C28, head motor
+        if (!smoothed)
+          default_wpc_proc_solenoid_handler(solNum, enabled, TRUE);
+        return;
+
+      case 24:  // C25 data for helmet LEDs
+        if (!smoothed)
+          helmet_data = enabled;
+        return;
+
+      case 25:  // C26 clock for helmet LEDs
+        if (!smoothed && enabled) {
+          proc_shiftRegEnqueue(helmet_data);
+        }
+        return;
+    }
+
+    default_wpc_proc_solenoid_handler(solNum, enabled, smoothed);
+  }
+#endif
 
 /*---------------
 /  Game handling
@@ -704,7 +795,11 @@ static WRITE_HANDLER(bop_wpc_w) {
 static void init_bop(void) {
   core_gameData = &bopGameData;
   install_mem_write_handler(0, 0x3fb0, 0x3fff, bop_wpc_w);
-  HC4094_init(&hc4094bop);
-  HC4094_oe_w(0, 1);
-  HC4094_oe_w(1, 1);
+#ifdef PROC_SUPPORT
+  wpc_proc_solenoid_handler = bop_wpc_proc_solenoid_handler;
+  if (coreGlobals.p_rocEn) {
+    // clock on C26, data on C25
+    proc_shiftRegInit(25 + 40, 24 + 40);
+  }
+#endif
 }

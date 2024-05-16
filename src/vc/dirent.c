@@ -8,7 +8,7 @@
 
 #include "dirent.h"
 
-#ifdef WIN32
+#ifdef _WIN32
 
 /** open the current directory and return a structure
  *  to be used in subsequent readdir() and closedir()
@@ -79,7 +79,7 @@ struct dirent *	readdir(DIR *dirp) {
     memset(&d,'\0', sizeof(struct dirent));
 
     strcpy(d.d_name,dirp->findFileData.cFileName);
-    d.d_namlen = strlen(d.d_name);
+    d.d_namlen = (unsigned int)strlen(d.d_name);
 
     return &d;
 }

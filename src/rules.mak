@@ -6,7 +6,7 @@ OBJDIRS += $(OBJ)/cpu/z80
 CPUDEFS += -DHAS_Z80=1
 CPUOBJS += $(OBJ)/cpu/z80/z80.o
 DBGOBJS += $(OBJ)/cpu/z80/z80dasm.o
-$(OBJ)/cpu/z80/z80.o: src/cpu/z80/z80.c src/cpu/z80/z80.h src/cpu/z80/z80daa.h
+$(OBJ)/cpu/z80/z80.o: src/cpu/z80/z80.c src/cpu/z80/z80.h
 else
 CPUDEFS += -DHAS_Z80=0
 endif
@@ -28,7 +28,7 @@ OBJDIRS += $(OBJ)/cpu/i8085
 CPUDEFS += -DHAS_8080=1
 CPUOBJS += $(OBJ)/cpu/i8085/i8085.o
 DBGOBJS += $(OBJ)/cpu/i8085/8085dasm.o
-$(OBJ)/cpu/i8085/i8085.o: src/cpu/i8085/i8085.c src/cpu/i8085/i8085.h src/cpu/i8085/i8085cpu.h src/cpu/i8085/i8085daa.h
+$(OBJ)/cpu/i8085/i8085.o: src/cpu/i8085/i8085.c src/cpu/i8085/i8085.h src/cpu/i8085/i8085cpu.h
 else
 CPUDEFS += -DHAS_8080=0
 endif
@@ -39,7 +39,7 @@ OBJDIRS += $(OBJ)/cpu/i8085
 CPUDEFS += -DHAS_8085A=1
 CPUOBJS += $(OBJ)/cpu/i8085/i8085.o
 DBGOBJS += $(OBJ)/cpu/i8085/8085dasm.o
-$(OBJ)/cpu/i8085/i8085.o: src/cpu/i8085/i8085.c src/cpu/i8085/i8085.h src/cpu/i8085/i8085cpu.h src/cpu/i8085/i8085daa.h
+$(OBJ)/cpu/i8085/i8085.o: src/cpu/i8085/i8085.c src/cpu/i8085/i8085.h src/cpu/i8085/i8085cpu.h
 else
 CPUDEFS += -DHAS_8085A=0
 endif
@@ -655,7 +655,7 @@ OBJDIRS += $(OBJ)/cpu/tms9900
 CPUDEFS += -DHAS_TMS9900=1
 CPUOBJS += $(OBJ)/cpu/tms9900/tms9900.o
 DBGOBJS += $(OBJ)/cpu/tms9900/9900dasm.o
-$(OBJ)/cpu/tms9900/tms9900.o: tms9900.c tms9900.h 99xxcore.h 9900stat.h
+$(OBJ)/cpu/tms9900/tms9900.o: tms9900.c tms9900.h 99xxcore.h
 else
 CPUDEFS += -DHAS_TMS9900=0
 endif
@@ -666,7 +666,7 @@ OBJDIRS += $(OBJ)/cpu/tms9900
 CPUDEFS += -DHAS_TMS9940=1
 CPUOBJS += $(OBJ)/cpu/tms9900/tms9900.o
 DBGOBJS += $(OBJ)/cpu/tms9900/9900dasm.o
-$(OBJ)/cpu/tms9900/tms9900.o: tms9900.c tms9900.h 99xxcore.h 9900stat.h
+$(OBJ)/cpu/tms9900/tms9900.o: tms9900.c tms9900.h 99xxcore.h
 else
 CPUDEFS += -DHAS_TMS9940=0
 endif
@@ -1155,6 +1155,22 @@ else
 SOUNDDEFS += -DHAS_YM2151_ALT=0
 endif
 
+SOUND=$(strip $(findstring YM2151_NUKED@,$(SOUNDS)))
+ifneq ($(SOUND),)
+SOUNDDEFS += -DHAS_YM2151_NUKED=1
+SOUNDOBJS += $(OBJ)/sound/2151intf.o $(OBJ)/sound/ym2151.o
+else
+SOUNDDEFS += -DHAS_YM2151_NUKED=0
+endif
+
+SOUND=$(strip $(findstring YM2151_YMFM@,$(SOUNDS)))
+ifneq ($(SOUND),)
+SOUNDDEFS += -DHAS_YM2151_YMFM=1
+SOUNDOBJS += $(OBJ)/sound/2151intf.o $(OBJ)/sound/ym2151.o
+else
+SOUNDDEFS += -DHAS_YM2151_YMFM=0
+endif
+
 SOUND=$(strip $(findstring YM2608@,$(SOUNDS)))
 ifneq ($(SOUND),)
 SOUNDDEFS += -DHAS_YM2608=1
@@ -1381,6 +1397,14 @@ SOUNDDEFS += -DHAS_HC55516=1
 SOUNDOBJS += $(OBJ)/sound/hc55516.o
 else
 SOUNDDEFS += -DHAS_HC55516=0
+endif
+
+SOUND=$(strip $(findstring MC3417@,$(SOUNDS)))
+ifneq ($(SOUND),)
+SOUNDDEFS += -DHAS_MC3417=1
+SOUNDOBJS += $(OBJ)/sound/mc3417.o
+else
+SOUNDDEFS += -DHAS_MC3417=0
 endif
 
 SOUND=$(strip $(findstring K005289@,$(SOUNDS)))
@@ -1610,7 +1634,7 @@ OBJDIRS += $(OBJ)/cpu/arm7
 CPUDEFS += -DHAS_ARM7=1
 CPUOBJS += $(OBJ)/cpu/arm7/arm7.o
 DBGOBJS += $(OBJ)/cpu/arm7/arm7dasm.o
-$(OBJ)/cpu/arm7/arm7.o: src/cpu/arm7/arm7.c src/cpu/arm7/arm7.h src/cpu/arm7/arm7core.c src/cpu/arm7/arm7core.h
+$(OBJ)/cpu/arm7/arm7.o: src/cpu/arm7/arm7.c src/cpu/arm7/arm7.h src/cpu/arm7/arm7core.c src/cpu/arm7/arm7core.h src/cpu/arm7/arm7jit.c src/cpu/arm7/arm7jit.h
 else
 CPUDEFS += -DHAS_ARM7=0
 endif
@@ -1704,3 +1728,10 @@ else
 SOUNDDEFS += -DHAS_M114S=0
 endif
 
+SOUND=$(strip $(findstring MEA8000@,$(SOUNDS)))
+ifneq ($(SOUND),)
+SOUNDDEFS += -DHAS_MEA8000=1
+SOUNDOBJS += $(OBJ)/sound/mea8000.o
+else
+SOUNDDEFS += -DHAS_MEA8000=0
+endif

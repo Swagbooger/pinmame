@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /*******************************************************************************
  Preliminary Monopoly (Stern, 2001) Pinball Simulator
 
@@ -41,7 +43,6 @@ static int  monopoly_getMech(int mech);
 static void monopoly_handleMech(int mech);
 #endif
 
-// The last used selocals variable is "flipsolPulse", so we can forget about the rest.
 extern struct {
   int    vblankCount;
   int    initDone;
@@ -49,7 +50,23 @@ extern struct {
   int    lampRow, lampColumn;
   int    diagnosticLed;
   int    swCol;
-  int	 flipsol, flipsolPulse;
+  int    flipsol, flipsolPulse;
+  int    sst0;			//SST0 bit from sound section
+  int    plin;			//Plasma In (not connected prior to LOTR Hardware)
+  UINT8 *ram8000;
+  int    auxdata;
+  /* Mini DMD stuff */
+  int    lastgiaux, miniidx, miniframe;
+  int    minidata[7], minidmd[4][3][8];
+  /* trace ram related */
+#if SUPPORT_TRACERAM
+  UINT8 *traceRam;
+#endif
+  UINT8  curBank;                   /* current bank select */
+  #define TRACERAM_SELECTED 0x10    /* this bit set maps trace ram to 0x0000-0x1FFF */
+  int fastflipaddr;
+
+  UINT8 lampstate[80];
 } selocals;
 
 /*-----------------------
@@ -59,6 +76,10 @@ static struct {
   int flipperPos;
   int flipperDir;
   int flipperSpeed;
+
+  int speedCnt;
+  int oldSpeed[8];
+  int oldFlipperPos;
 } locals;
 
 /*--------------------------
@@ -280,23 +301,39 @@ static void monopoly_drawStatic(BMTYPE **line) {
 /  ROM definitions
 /------------------*/
 
+/* Notes on 3.20 (which was pulled by Stern later-on), as it has a problem with its randomness, e.g. dice always is 3:
+	While it is interesting to have the dice roll on 3 always, since you
+	can now plan what you will score off of a dice roll (hitting bumpers
+	and targets still advances your token around the board, but only a
+	dice roll scores a property), it WILL crash the game when the dice
+	roll causes it to land on community chest, free parking, or go to
+	jail. When the dice - roll lands onto a space with no code to jump to,
+	it goes into the Whitestar crash light flash(where all the
+	controlled lights flash extremely bright back and forth with all the
+	GI lights, the displays go dead, and nothing but a power cycle will
+	stop it.) It's not good for the machine, and you can't stop it from
+	happening to people who are playing.
+
+	If you put the settings to tournament - then the dice rolls always advance you to the nearest unlit set of properties.
+	I like this alot better since you can actually plan out which ones you want to start.
+*/
 /*-------------------------------------------------------------------
 / Monopoly (3.20)
 /-------------------------------------------------------------------*/
 SE128_ROMSTART(monopoly,"moncpu.320",CRC(6c107c8b) SHA1(236d85b971c70a30e663787d643e6d589591d582))
 DE_DMD32ROM8x(        "mondsp-a.301",CRC(c4e2e032) SHA1(691f7b6ed0616338683f7e3f316d64a70db58dd4))
-DE2S_SOUNDROM1888(     "mnsndu7.100",CRC(400442e7) SHA1(d6c075dc439d5366b7ae71b5a523b86543b1ecd6),
+DE2S_SOUNDROM1888(    "mnsndu7.100",CRC(400442e7) SHA1(d6c075dc439d5366b7ae71b5a523b86543b1ecd6),
                       "mnsndu17.100",CRC(f9bc55e8) SHA1(7dc41521305021961927ebde4dcf22611e3d622d),
                       "mnsndu21.100",CRC(e0727e1f) SHA1(2093dba6e2f59cd1d1fc49c8d995b603ea0913ba),
                       "mnsndu36.100",CRC(c845aa97) SHA1(2632aa8c5576b7afcb96693fa524c7d0350ac9a8))
 SE_ROMEND
 
 /*-------------------------------------------------------------------
-/ Monopoly (3.20 France)
+/ Monopoly (3.20 French)
 /-------------------------------------------------------------------*/
 SE128_ROMSTART(monopolf,"moncpu.320",CRC(6c107c8b) SHA1(236d85b971c70a30e663787d643e6d589591d582))
 DE_DMD32ROM8x(        "mondsp-f.301",CRC(e78b1998) SHA1(bd022dc90b55374baed17360fad7bf0f89e2ee33))
-DE2S_SOUNDROM1888(     "mnsndu7.100",CRC(400442e7) SHA1(d6c075dc439d5366b7ae71b5a523b86543b1ecd6),
+DE2S_SOUNDROM1888(    "mnsndu7.100",CRC(400442e7) SHA1(d6c075dc439d5366b7ae71b5a523b86543b1ecd6),
                       "mnsndu17.100",CRC(f9bc55e8) SHA1(7dc41521305021961927ebde4dcf22611e3d622d),
                       "mnsndu21.100",CRC(e0727e1f) SHA1(2093dba6e2f59cd1d1fc49c8d995b603ea0913ba),
                       "mnsndu36.100",CRC(c845aa97) SHA1(2632aa8c5576b7afcb96693fa524c7d0350ac9a8))
@@ -305,11 +342,11 @@ SE_ROMEND
 #define init_monopolf init_monopoly
 
 /*-------------------------------------------------------------------
-/ Monopoly (3.20 Germany)
+/ Monopoly (3.20 German)
 /-------------------------------------------------------------------*/
 SE128_ROMSTART(monopolg,"moncpu.320",CRC(6c107c8b) SHA1(236d85b971c70a30e663787d643e6d589591d582))
 DE_DMD32ROM8x(        "mondsp-g.301",CRC(aab48728) SHA1(b9ed8574ac463a5fc21dc5f41d090cf0ad3f8362))
-DE2S_SOUNDROM1888(     "mnsndu7.100",CRC(400442e7) SHA1(d6c075dc439d5366b7ae71b5a523b86543b1ecd6),
+DE2S_SOUNDROM1888(    "mnsndu7.100",CRC(400442e7) SHA1(d6c075dc439d5366b7ae71b5a523b86543b1ecd6),
                       "mnsndu17.100",CRC(f9bc55e8) SHA1(7dc41521305021961927ebde4dcf22611e3d622d),
                       "mnsndu21.100",CRC(e0727e1f) SHA1(2093dba6e2f59cd1d1fc49c8d995b603ea0913ba),
                       "mnsndu36.100",CRC(c845aa97) SHA1(2632aa8c5576b7afcb96693fa524c7d0350ac9a8))
@@ -318,11 +355,11 @@ SE_ROMEND
 #define init_monopolg init_monopoly
 
 /*-------------------------------------------------------------------
-/ Monopoly (3.20 Italy)
+/ Monopoly (3.20 Italian)
 /-------------------------------------------------------------------*/
 SE128_ROMSTART(monopoli,"moncpu.320",CRC(6c107c8b) SHA1(236d85b971c70a30e663787d643e6d589591d582))
 DE_DMD32ROM8x(        "mondsp-i.301",CRC(32431b3c) SHA1(6266e17e705bd50d2358d9f7c0168de51aa13750))
-DE2S_SOUNDROM1888(     "mnsndu7.100",CRC(400442e7) SHA1(d6c075dc439d5366b7ae71b5a523b86543b1ecd6),
+DE2S_SOUNDROM1888(    "mnsndu7.100",CRC(400442e7) SHA1(d6c075dc439d5366b7ae71b5a523b86543b1ecd6),
                       "mnsndu17.100",CRC(f9bc55e8) SHA1(7dc41521305021961927ebde4dcf22611e3d622d),
                       "mnsndu21.100",CRC(e0727e1f) SHA1(2093dba6e2f59cd1d1fc49c8d995b603ea0913ba),
                       "mnsndu36.100",CRC(c845aa97) SHA1(2632aa8c5576b7afcb96693fa524c7d0350ac9a8))
@@ -331,11 +368,11 @@ SE_ROMEND
 #define init_monopoli init_monopoly
 
 /*-------------------------------------------------------------------
-/ Monopoly (3.20 Spain)
+/ Monopoly (3.20 Spanish)
 /-------------------------------------------------------------------*/
 SE128_ROMSTART(monopoll,"moncpu.320",CRC(6c107c8b) SHA1(236d85b971c70a30e663787d643e6d589591d582))
 DE_DMD32ROM8x(        "mondsp-s.301",CRC(9f70dad6) SHA1(bf4b1c579b4bdead51e6b34de81fe65c45b6596a))
-DE2S_SOUNDROM1888(     "mnsndu7.100",CRC(400442e7) SHA1(d6c075dc439d5366b7ae71b5a523b86543b1ecd6),
+DE2S_SOUNDROM1888(    "mnsndu7.100",CRC(400442e7) SHA1(d6c075dc439d5366b7ae71b5a523b86543b1ecd6),
                       "mnsndu17.100",CRC(f9bc55e8) SHA1(7dc41521305021961927ebde4dcf22611e3d622d),
                       "mnsndu21.100",CRC(e0727e1f) SHA1(2093dba6e2f59cd1d1fc49c8d995b603ea0913ba),
                       "mnsndu36.100",CRC(c845aa97) SHA1(2632aa8c5576b7afcb96693fa524c7d0350ac9a8))
@@ -348,7 +385,7 @@ SE_ROMEND
 /-------------------------------------------------------------------*/
 SE128_ROMSTART(monopole,"moncpu.303",CRC(4a66c9e4) SHA1(a368b0ced32f1017e781a59108670b979b50c9d7))
 DE_DMD32ROM8x(        "mondsp-a.301",CRC(c4e2e032) SHA1(691f7b6ed0616338683f7e3f316d64a70db58dd4))
-DE2S_SOUNDROM1888(     "mnsndu7.100",CRC(400442e7) SHA1(d6c075dc439d5366b7ae71b5a523b86543b1ecd6),
+DE2S_SOUNDROM1888(    "mnsndu7.100",CRC(400442e7) SHA1(d6c075dc439d5366b7ae71b5a523b86543b1ecd6),
                       "mnsndu17.100",CRC(f9bc55e8) SHA1(7dc41521305021961927ebde4dcf22611e3d622d),
                       "mnsndu21.100",CRC(e0727e1f) SHA1(2093dba6e2f59cd1d1fc49c8d995b603ea0913ba),
                       "mnsndu36.100",CRC(c845aa97) SHA1(2632aa8c5576b7afcb96693fa524c7d0350ac9a8))
@@ -361,7 +398,7 @@ SE_ROMEND
 /-------------------------------------------------------------------*/
 SE128_ROMSTART(monop301,"moncpu.301",CRC(24978872) SHA1(48ef94fd720cdafc61f8de5efd5c6b6731237b18))
 DE_DMD32ROM8x(        "mondsp-a.301",CRC(c4e2e032) SHA1(691f7b6ed0616338683f7e3f316d64a70db58dd4))
-DE2S_SOUNDROM1888(     "mnsndu7.100",CRC(400442e7) SHA1(d6c075dc439d5366b7ae71b5a523b86543b1ecd6),
+DE2S_SOUNDROM1888(    "mnsndu7.100",CRC(400442e7) SHA1(d6c075dc439d5366b7ae71b5a523b86543b1ecd6),
                       "mnsndu17.100",CRC(f9bc55e8) SHA1(7dc41521305021961927ebde4dcf22611e3d622d),
                       "mnsndu21.100",CRC(e0727e1f) SHA1(2093dba6e2f59cd1d1fc49c8d995b603ea0913ba),
                       "mnsndu36.100",CRC(c845aa97) SHA1(2632aa8c5576b7afcb96693fa524c7d0350ac9a8))
@@ -374,7 +411,7 @@ SE_ROMEND
 /-------------------------------------------------------------------*/
 SE128_ROMSTART(monop251,"moncpu.251",CRC(0645cfae) SHA1(d979234150b7fb62718debbeeeca1466a6c0344f))
 DE_DMD32ROM8x(        "mondsp-a.206",CRC(6df6e158) SHA1(d3a9be2dc189b44b9e4b9f77f5011ed931df5634))
-DE2S_SOUNDROM1888(     "mnsndu7.100",CRC(400442e7) SHA1(d6c075dc439d5366b7ae71b5a523b86543b1ecd6),
+DE2S_SOUNDROM1888(    "mnsndu7.100",CRC(400442e7) SHA1(d6c075dc439d5366b7ae71b5a523b86543b1ecd6),
                       "mnsndu17.100",CRC(f9bc55e8) SHA1(7dc41521305021961927ebde4dcf22611e3d622d),
                       "mnsndu21.100",CRC(e0727e1f) SHA1(2093dba6e2f59cd1d1fc49c8d995b603ea0913ba),
                       "mnsndu36.100",CRC(c845aa97) SHA1(2632aa8c5576b7afcb96693fa524c7d0350ac9a8))
@@ -383,11 +420,11 @@ SE_ROMEND
 #define init_monop251 init_monopoly
 
 /*-------------------------------------------------------------------
-/ Monopoly (2.51 Italian display)
+/ Monopoly (2.51 Italian)
 /-------------------------------------------------------------------*/
 SE128_ROMSTART(monoi251,"moncpu.251",CRC(0645cfae) SHA1(d979234150b7fb62718debbeeeca1466a6c0344f))
 DE_DMD32ROM8x(        "mondsp-i.206",CRC(12f21301) SHA1(8eef3858c2083330e731015b088425aac7201064))
-DE2S_SOUNDROM1888(     "mnsndu7.100",CRC(400442e7) SHA1(d6c075dc439d5366b7ae71b5a523b86543b1ecd6),
+DE2S_SOUNDROM1888(    "mnsndu7.100",CRC(400442e7) SHA1(d6c075dc439d5366b7ae71b5a523b86543b1ecd6),
                       "mnsndu17.100",CRC(f9bc55e8) SHA1(7dc41521305021961927ebde4dcf22611e3d622d),
                       "mnsndu21.100",CRC(e0727e1f) SHA1(2093dba6e2f59cd1d1fc49c8d995b603ea0913ba),
                       "mnsndu36.100",CRC(c845aa97) SHA1(2632aa8c5576b7afcb96693fa524c7d0350ac9a8))
@@ -400,7 +437,7 @@ SE_ROMEND
 /-------------------------------------------------------------------*/
 SE128_ROMSTART(monop233,"moncpu.233",CRC(f20a5ca6) SHA1(12ae56bd149aa6635c19f4dd73580db550b26963))
 DE_DMD32ROM8x(        "mondsp-a.203",CRC(6e4678fb) SHA1(c0f41f01e9e20e741f1b13d3bd6e824486ba9a0a))
-DE2S_SOUNDROM1888(     "mnsndu7.100",CRC(400442e7) SHA1(d6c075dc439d5366b7ae71b5a523b86543b1ecd6),
+DE2S_SOUNDROM1888(    "mnsndu7.100",CRC(400442e7) SHA1(d6c075dc439d5366b7ae71b5a523b86543b1ecd6),
                       "mnsndu17.100",CRC(f9bc55e8) SHA1(7dc41521305021961927ebde4dcf22611e3d622d),
                       "mnsndu21.100",CRC(e0727e1f) SHA1(2093dba6e2f59cd1d1fc49c8d995b603ea0913ba),
                       "mnsndu36.100",CRC(c845aa97) SHA1(2632aa8c5576b7afcb96693fa524c7d0350ac9a8))
@@ -428,14 +465,14 @@ CORE_CLONEDEFNV(mononew,monopoly,"Monopoly (ARM7 Sound Board)",2002,"Stern",de_m
 /  Game drivers
 /---------------*/
 CORE_GAMEDEFNV(monopoly,"Monopoly (3.20)",2001,"Stern",de_mSES1,GAME_NOCRC)
-CORE_CLONEDEFNV(monopolf,monopoly,"Monopoly (3.20 France)",2002,"Stern",de_mSES1,GAME_NOCRC)
-CORE_CLONEDEFNV(monopolg,monopoly,"Monopoly (3.20 Germany)",2002,"Stern",de_mSES1,GAME_NOCRC)
-CORE_CLONEDEFNV(monopoli,monopoly,"Monopoly (3.20 Italy)",2002,"Stern",de_mSES1,GAME_NOCRC)
-CORE_CLONEDEFNV(monopoll,monopoly,"Monopoly (3.20 Spain)",2002,"Stern",de_mSES1,GAME_NOCRC)
+CORE_CLONEDEFNV(monopolf,monopoly,"Monopoly (3.20 French)",2002,"Stern",de_mSES1,GAME_NOCRC)
+CORE_CLONEDEFNV(monopolg,monopoly,"Monopoly (3.20 German)",2002,"Stern",de_mSES1,GAME_NOCRC)
+CORE_CLONEDEFNV(monopoli,monopoly,"Monopoly (3.20 Italian)",2002,"Stern",de_mSES1,GAME_NOCRC)
+CORE_CLONEDEFNV(monopoll,monopoly,"Monopoly (3.20 Spanish)",2002,"Stern",de_mSES1,GAME_NOCRC)
 CORE_CLONEDEFNV(monopole,monopoly,"Monopoly (3.03)",2002,"Stern",de_mSES1,GAME_NOCRC)
 CORE_CLONEDEFNV(monop301,monopoly,"Monopoly (3.01)",2002,"Stern",de_mSES1,GAME_NOCRC)
 CORE_CLONEDEFNV(monop251,monopoly,"Monopoly (2.51)",2002,"Stern",de_mSES1,GAME_NOCRC)
-CORE_CLONEDEFNV(monoi251,monopoly,"Monopoly (2.51 Italian display)",2002,"Stern",de_mSES1,GAME_NOCRC)
+CORE_CLONEDEFNV(monoi251,monopoly,"Monopoly (2.51 Italian)",2002,"Stern",de_mSES1,GAME_NOCRC)
 CORE_CLONEDEFNV(monop233,monopoly,"Monopoly (2.33)",2002,"Stern",de_mSES1,GAME_NOCRC)
 
 /*-----------------------
@@ -458,7 +495,7 @@ static sim_tSimData monopolySimData = {
 /----------------------*/
 static struct core_dispLayout dispMonopoly[] = {
   { 0, 0,32,128,CORE_DMD, (genf *)dedmd32_update, NULL},
-  {34,10, 7, 15,CORE_DMD|CORE_DMDNOAA, (genf *)seminidmd2_update, NULL},
+  {34,10, 7, 15,CORE_DMD|CORE_DMDNOAA| CORE_NODISP, (genf *)seminidmd2_update, NULL},
   {0}
 };
 static core_tGameData monopolyGameData = {
@@ -482,6 +519,7 @@ static core_tGameData monopolyGameData = {
 /*-- Solenoids --*/
 static WRITE_HANDLER(monopoly_w) {
   static const int solmaskno[] = { 8, 0, 16, 24 };
+  core_write_pwm_output_8b(CORE_MODOUT_SOL0 + solmaskno[offset], data);
   UINT32 mask = ~(0xff<<solmaskno[offset]);
   UINT32 sols = data<<solmaskno[offset];
   if (offset == 0) { /* move flipper power solenoids (L=15,R=16) to (R=45,L=47) */
@@ -511,6 +549,7 @@ static WRITE_HANDLER(monopoly_w) {
 /----------------*/
 static void init_monopoly(void) {
   core_gameData = &monopolyGameData;
+  memset(&locals, 0, sizeof(locals));
   install_mem_write_handler(0, 0x2000, 0x2003, monopoly_w);
 }
 
@@ -525,20 +564,17 @@ static void monopoly_handleMech(int mech) {
 #endif
 
 static int monopoly_getMech(int mechNo){
-  static int speedCnt;
-  static int oldSpeed[8];
-  static int oldFlipperPos;
   int speed, dist;
   switch (mechNo) {
     case 0: return locals.flipperPos /5;
     case 1:
-      dist = locals.flipperPos - oldFlipperPos;
+      dist = locals.flipperPos - locals.oldFlipperPos;
       if (dist < 0) dist = - dist;
       if (dist > 2500) dist -= 5000;
       if (dist < 0) dist = - dist;
-      oldFlipperPos = locals.flipperPos;
-      oldSpeed[speedCnt = (speedCnt + 1) % 8] = locals.flipperDir * dist;
-      speed = (oldSpeed[0] + oldSpeed[1] + oldSpeed[2] + oldSpeed[3] + oldSpeed[4] + oldSpeed[5] + oldSpeed[6] + oldSpeed[7]) / 8;
+      locals.oldFlipperPos = locals.flipperPos;
+      locals.oldSpeed[locals.speedCnt = (locals.speedCnt + 1) % 8] = locals.flipperDir * dist;
+      speed = (locals.oldSpeed[0] + locals.oldSpeed[1] + locals.oldSpeed[2] + locals.oldSpeed[3] + locals.oldSpeed[4] + locals.oldSpeed[5] + locals.oldSpeed[6] + locals.oldSpeed[7]) / 8;
       return speed / 3;
   }
   return 0;

@@ -1,16 +1,18 @@
+// license:BSD-3-Clause
+// copyright-holders:Peter Trauner, Mathis Rosenhauer
 /**********************************************************************
 
-	Rockwell 6522 VIA interface and emulation
+    Rockwell 6522 VIA interface and emulation
 
 	This function emulates the functionality of up to 8 6522
 	versatile interface adapters.
 
-	This is based on the M6821 emulation in MAME.
+    This is based on the M6821 emulation in MAME.
 
-	To do:
+    To do:
 
 	T2 pulse counting mode
-	Pulse mode handshake output
+    Pulse mode handshake output
 	Shift register
 
 **********************************************************************/
@@ -85,7 +87,7 @@ struct via6522
 /******************* convenince macros and defines *******************/
 
 #define V_CYCLES_TO_TIME(c) ((double)(c) * v->cycles_to_sec)
-#define V_TIME_TO_CYCLES(t) ((int)((t) * v->sec_to_cycles))
+#define V_TIME_TO_CYCLES(t) ((int)((t) * v->sec_to_cycles + 0.5)) // round
 
 /* Macros for PCR */
 #define CA1_LOW_TO_HIGH(c)		(c & 0x01)
@@ -159,7 +161,7 @@ static struct via6522 via[MAX_VIA];
 
 /******************* configuration *******************/
 
-void via_set_clock(int which,int clock)
+void via_set_clock(int which,double clock)
 {
 	via[which].sec_to_cycles = clock;
 	via[which].cycles_to_sec = 1.0 / via[which].sec_to_cycles;
@@ -570,7 +572,9 @@ void via_write(int which, int offset, int data)
 				v->intf->out_ca2_func(0, 1);
 			}
 			else
-				logerror("6522VIA chip %d: Port CA2 is being pulsed but has no handler.  PC: %08X\n", which, activecpu_get_pc());
+			{
+				LOG(("6522VIA chip %d: Port CA2 is being pulsed but has no handler.  PC: %08X\n", which, activecpu_get_pc()));
+			}
 
 			/* set CA2 (shouldn't be needed) */
 			v->out_ca2 = 1;

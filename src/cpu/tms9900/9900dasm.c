@@ -141,13 +141,14 @@ static char *print_arg (int mode, int arg)
 int Dasm9900 (char *buffer, int pc)
 {
 	int	OP, opc;
-	int sarg, darg, smode, dmode;
+	int sarg, darg, smode;
 
 	PC = pc;
 	OP = RDOP(PC); PC+=2;
 
 	if ((opc = ops0to3[BITS_0to3]) != _ill)
 	{
+		int dmode;
 		smode = OPBITS(10,11);
 		sarg = OPBITS(12,15);
 		dmode = OPBITS(4,5);
@@ -231,6 +232,17 @@ int Dasm9900 (char *buffer, int pc)
 			case _idle: case _rset: case _rtwp: case _ckon: case _ckof: case _lrex:
 				sprintf (buffer, "%-4s", token[opc]);
 				break;
+		}
+	}
+	else if ((OP & 0xff80) == 0x0080)
+	{
+		if (OP & 0x10)
+		{
+			sprintf (buffer, "lwp  %s", print_arg(0, OP & 0x0f));
+		}
+		else
+		{
+			sprintf (buffer, "lst  %s", print_arg(0, OP & 0x0f));
 		}
 	}
 	else

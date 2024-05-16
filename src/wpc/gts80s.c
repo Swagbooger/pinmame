@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 #include "driver.h"
 #include "memory.h"
 #include "cpu/m6502/m6502.h"
@@ -10,6 +12,7 @@
 #include "core.h"
 #include "sndbrd.h"
 #include "snd_cmd.h"
+#include "sound/filter.h"
 
 #include "gts80.h"
 #include "gts80s.h"
@@ -21,20 +24,35 @@
     Gottlieb System 80 Sound Boards
 
     - System 80/80A Sound Board
+      Black Hole, Volcano, and Devils Dare
 
     - System 80/80A Sound & Speech Board
-		- subtype 0: without SC-01 (Votrax) chip installed
-		- subtype 1: SC-01 (Votrax) chip installed
+		- subtype 0: without SC-01(-A) (Votrax) chip installed
+		- subtype 1: new SC-01-A (Votrax) chip installed
+		- subtype 2: old SC-01 (Votrax) chip installed
+
+		Schematics corresponding to the -1 revision of the board can be found in the Mars - God of War and Volcano manuals.
+		Schematics corresponding to the -3 revision of the board can be found in the Black Hole and Haunted House manuals.
 
     - System 80A Sound Board with a PiggyPack installed
-	  (thanks goes to Peter Hall for providing some very useful information)
+      (thanks goes to Peter Hall for providing some very useful information)
+
+       was first used during the production of Amazon Hunt, and continued until Tag Team Pinball
 
     - System 80B Sound Board (3 generations, plus an additional DAC board for Bone Busters only)
 
-	- System 3 sound boards
+      hit the scene with Rock
+      2x6502, AY-3-8912 or YM2151
 
+    - System 3 sound boards
+      2x6502, YM2151
 */
 
+#ifndef max
+#define max(x,y) ((x)>(y)?(x):(y))
+#endif
+
+#define DAC_SAMPLE_RATE (4*48000)
 
 /*----------------------------------------
 / Gottlieb Sys 80/80A Sound Board
@@ -53,6 +71,9 @@ static struct {
 	double clock[GTS80S_BUFFER_SIZE+1];
 	int    buf_pos;
 
+	filter *filter_f;
+	filter_state *filter_state;
+
 	int    dips;
 	UINT8* pRIOT6530_0_ram;
 	int	   IRQEnabled;
@@ -65,7 +86,7 @@ static WRITE_HANDLER(gts80s_riot6530_0a_w) {
 		return;
 
 	GTS80S_locals.clock[GTS80S_locals.buf_pos] = timer_get_time();
-	GTS80S_locals.buffer[GTS80S_locals.buf_pos++] = ((data<<7)-0x4000)*2;
+	GTS80S_locals.buffer[GTS80S_locals.buf_pos++] = (((INT16)data<<7)-0x4000)*2;
 }
 
 static WRITE_HANDLER(gts80s_riot6530_0b_w) {
@@ -94,16 +115,12 @@ static WRITE_HANDLER(gts80s_riot6530_0_ram_w)
 	data;
 }
 
-static WRITE_HANDLER(riot_w) {
-  riot6530_0_w(offset & 0x0f, data);
-}
-
 /*--------------
 /  Memory map
 /---------------*/
 MEMORY_READ_START(GTS80S_readmem)
 { 0x0000, 0x01ff, MRA_RAM},
-{ 0x0200, 0x020f, riot6530_0_r},
+{ 0x0200, 0x03ff, riot6530_0_r},
 { 0x0400, 0x0fff, MRA_ROM},
 { 0x1000, 0x10ff, MRA_RAM},
 { 0xf800, 0xffff, MRA_ROM},
@@ -111,26 +128,26 @@ MEMORY_END
 
 MEMORY_WRITE_START(GTS80S_writemem)
 { 0x0000, 0x01ff, gts80s_riot6530_0_ram_w},
-{ 0x0200, 0x020f, riot_w},
+{ 0x0200, 0x03ff, riot6530_0_w},
 { 0x0400, 0x0fff, MWA_ROM},
 { 0x1000, 0x10ff, gts80s_riot6530_0_ram_w},
 { 0xf800, 0xffff, MWA_ROM},
 MEMORY_END
 
-static void GTS80S_Update(int num, INT16 *buffer, int length)
+static void GTS80S_Update(int num, INT16 * const buffer, int length) // El Dorado City of Gold, Black Hole (Sound Only), Volcano (Sound Only), Panthera, etc
 {
-	double dActClock, dInterval, dCurrentClock;
-	int i;
+	float * __restrict buffer_f = (float*)buffer;
 
-	dCurrentClock = GTS80S_locals.clock[0];
+	double dCurrentClock = GTS80S_locals.clock[0];
 
-	dActClock = timer_get_time();
-	dInterval = (dActClock-GTS80S_locals.clock[0]) / length;
+	const double dActClock = timer_get_time();
+	const double dInterval = (dActClock-GTS80S_locals.clock[0]) / length;
 
-	i = 0;
+	int i = 0;
 	GTS80S_locals.clock[GTS80S_locals.buf_pos] = 9e99;
 	while ( length ) {
-		*buffer++ = GTS80S_locals.buffer[i];
+		filter_insert(GTS80S_locals.filter_f, GTS80S_locals.filter_state, GTS80S_locals.buffer[i]*(float)(1.0/32768.0));
+		*buffer_f++ = filter_compute(GTS80S_locals.filter_f, GTS80S_locals.filter_state);
 		length--;
 		dCurrentClock += dInterval;
 
@@ -149,7 +166,7 @@ static void GTS80S_Update(int num, INT16 *buffer, int length)
 extern void stream_free(int channel);
 
 void gts80s_init(struct sndbrdData *brdData) {
-	int i = 0;
+	int i;
 	UINT8 *pMem;
 
 	memset(&GTS80S_locals, 0x00, sizeof GTS80S_locals);
@@ -166,17 +183,20 @@ void gts80s_init(struct sndbrdData *brdData) {
 	GTS80S_locals.clock[0]  = 0;
 	GTS80S_locals.buffer[0] = 0;
 	GTS80S_locals.buf_pos   = 1;
+	GTS80S_locals.filter_f = filter_lp_fir_alloc(0.15, FILTER_ORDER_MAX); // 0.15 = magic
+	GTS80S_locals.filter_state = filter_state_alloc(); //!! leaks!
+	filter_state_reset(GTS80S_locals.filter_f, GTS80S_locals.filter_state);
 
 	if ( GTS80S_locals.boardData.subType==0 ) {
 		/* clear the upper 4 bits, some ROM images aren't 0 */
 		/* the 6530 RIOT ROM is not used by the boards which have a PiggyPack installed */
-		pMem = memory_region(GTS80S_locals.boardData.cpuNo)+0x0400;
+		UINT8* mr = memory_region(GTS80S_locals.boardData.cpuNo);
+		pMem = mr+0x0400;
 		for(i=0x0400; i<0x0bff; i++)
 			*pMem++ &= 0x0f;
 
-		memcpy(memory_region(GTS80S_locals.boardData.cpuNo)+0x1000, memory_region(GTS80S_locals.boardData.cpuNo)+0x0700, 0x100);
+		memcpy(mr+0x1000, mr+0x0700, 0x100);
 	}
-
 
 	/*
 		Init RAM, i.e. set base of all bank to the base of bank 1,
@@ -188,15 +208,9 @@ void gts80s_init(struct sndbrdData *brdData) {
 		cpu_setbank(i, memory_region(STATIC_BANK1));
 
 	/* init the RIOT */
-    riot6530_config(0, &GTS80S_riot6530_intf);
+	riot6530_config(0, &GTS80S_riot6530_intf);
 	riot6530_set_clock(0, Machine->drv->cpu[GTS80S_locals.boardData.cpuNo].cpu_clock);
 	riot6530_reset();
-
-	if (stream_locals.stream) {
-	  stream_free(stream_locals.stream);
-	}
-	stream_locals.stream = stream_init("SND DAC", 100, 11025, 0, GTS80S_Update);
-	set_RC_filter(stream_locals.stream, 270000, 15000, 0, 33000);
 }
 
 /*--------------
@@ -235,30 +249,72 @@ static WRITE_HANDLER(gts80s_data_w)
   }
 }
 
-/* only in at the moment for the pinmame startup information */
-struct CustomSound_interface GTS80S_customsoundinterface = {
-	NULL, NULL, NULL
-};
+static int s80s_sh_start(const struct MachineSound *msound) {
+  if (Machine->gamedrv->flags & GAME_NO_SOUND) {
+    return -1;
+  }
+
+  stream_locals.stream = stream_init_float("SND DAC", 50, 22050, 0, GTS80S_Update, 1);
+
+  return 0;
+}
+
+static void s80s_sh_stop(void) {
+  if (stream_locals.stream) {
+    stream_free(stream_locals.stream);
+  }
+}
+
+struct CustomSound_interface GTS80S_customsoundinterface = { s80s_sh_start, s80s_sh_stop };
 
 const struct sndbrdIntf gts80sIntf = {
   "GTS80", gts80s_init, gts80s_exit, gts80s_diag, gts80s_data_w, gts80s_data_w, NULL, NULL, NULL, SNDBRD_NODATASYNC|SNDBRD_NOCTRLSYNC
 };
 
+// Both CPUs do not feature a "clean" clock, but get it from a (crappy) R/C,
+// at roughly R * C * ~5 in milliseconds.
+
+// Old board (some GTS1, and GTS80):
+// C = 10 pF
+// R = 22.1 kOhm
+// = these components should produce 870 kHz to 920 kHz in a clean environment/modern components (flipprojets: tested via 50 ceramic capacitors, majority at 890-900kHz)
+// additional single datapoint from a real board: measured as ~800kHz by Bontango
+
+// New board/Piggyback:
+// C = 10 pF
+// R = 28 kOhm (Bontango: 28.8 via a 24.1 + 4.7 in row)
+// = these components should produce 660 kHz to 710 kHz in a clean environment/modern components (flipprojets: tested via 50 ceramic capacitors, majority at 675-685kHz)
+// additional single datapoint from a real board: measured as ~675kHz by Bontango
+
+// BUT:
+// according to the flipprojets guys:
+// several tested earlier old boards even ran at ~1MHz in practice! (maybe due to crappy capacitors?) Also PinMAME previously used this 1MHz!
+// thus, apparently the R was replaced with the 28 one in the piggybacks to slow down the ~1MHz to be closer to ~895kHz!
+// and reverse engineering the 6530 code (Sys1 & Sys80) also determines an expected frequency of ~893kHz
+// so their recommendation is to rather use the intended ~895kHz (like later sound boards did, and what also the main Sys80 CPU uses) everywhere
+
+// note that due to all of that madness with the R/C clock, comparing to videos from real life is always fuzzy as it is unknown which components are used in the board of the videos!
+
 MACHINE_DRIVER_START(gts80s_s)
-  MDRV_CPU_ADD_TAG("scpu", M6502, 1000000)
+  MDRV_CPU_ADD_TAG("scpu", M6502, 904977.376) //!! somewhere between 893000 - 1000000, maybe even make this dependent on release date of game?? (earlier = higher)
   MDRV_CPU_FLAGS(CPU_AUDIO_CPU)
   MDRV_CPU_MEMORY(GTS80S_readmem, GTS80S_writemem)
   MDRV_INTERLEAVE(50)
   MDRV_SOUND_ADD(CUSTOM, GTS80S_customsoundinterface)
+#ifdef ENABLE_MECHANICAL_SAMPLES
   MDRV_SOUND_ADD(SAMPLES, samples_interface)
+#endif
+MACHINE_DRIVER_END
+
+MACHINE_DRIVER_START(gts80s_sp) // with Piggyback
+  MDRV_IMPORT_FROM(gts80s_s)
+  MDRV_CPU_REPLACE("scpu", M6502, 961538.462) //!! somewhere between 680000 - 895000, but weirdly 960kHz also sounds good for some games?!?
 MACHINE_DRIVER_END
 
 
 /*----------------------------------------
 / Gottlieb Sys 80/80A Sound & Speech Board
 /-----------------------------------------*/
-
-#define GTS80SS_BUFFER_SIZE 4096
 
 static struct {
 	struct sndbrdData boardData;
@@ -269,9 +325,12 @@ static struct {
 	int    dips;
 	UINT8* pRIOT6532_3_ram;
 
-	INT16  buffer[GTS80SS_BUFFER_SIZE+1];
-	double clock[GTS80SS_BUFFER_SIZE+1];
-	int	   buf_pos;
+	float  curr_value;
+	float  next_value;
+	int    last_sound;
+
+	double last_clock;
+	double last_soundupdate;
 
 	void   *timer;
 } GTS80SS_locals;
@@ -308,21 +367,47 @@ static WRITE_HANDLER(GTS80SS_riot3b_w) { logerror("riot3b_w: 0x%02x\n", data);}
 /* D/A converter for volume */
 static WRITE_HANDLER(GTS80SS_da1_latch_w) {
 //	logerror("da1_w: 0x%02x\n", data);
-	if ( GTS80SS_locals.buf_pos>=GTS80SS_BUFFER_SIZE )
-		return;
 
-	GTS80SS_locals.clock[GTS80SS_locals.buf_pos] = timer_get_time();
-	GTS80SS_locals.buffer[GTS80SS_locals.buf_pos++] = ((data<<7)-0x4000)*2;
+	float tmp = (((INT32)data << 8) - (INT32)0x7F80)*(float)(1.0/32768.0);
 
-	//mixer_set_volume(stream_locals.stream, 100 * data / 255);
+//	logerror("%s %.8f %d\n", (GTS80SS_locals.last_sound == 0) ? "c2" : "c ", timer_get_time(), tmp);
+
+	if (GTS80SS_locals.last_sound == 0) // missed a soundupdate: lerp data in here directly
+		tmp = (tmp + GTS80SS_locals.next_value) * 0.5f;
+
+	GTS80SS_locals.next_value = tmp;
+	GTS80SS_locals.last_sound = 0;
+
 	GTS80SS_locals.device = 1;
+
+	GTS80SS_locals.last_clock = timer_get_time();
+	stream_update(stream_locals.stream, 0);
 }
+
+/* From flipprojets.fr:
+	The speed variation exists on all MA-216 boards, but is
+	used on very few models, mainly for the TILT message (that speak decreasing
+	speed, and thus more and more deep).
+
+	The SC01-clock frequency is about 720 Khz at normal voice(when the 1408 receive
+	the value #7E at address $3000).The value #7E is about the middle of the
+	range and is used for all messages(except TILT).
+	For the “TILT”, the message start with the high value #A0 and end with the
+	low value #46 (the value is decreased by #0A, by 9 times).
+	The corresponding frequencies are :
+	Value #7E = 720 KHz (Must be adjusted to this frequency, for normal speech quality).
+	Value #46 = 398 KHz (Speech is very slow ...).
+	These frequencies were measured with the frequency meter, and data for
+	speech were programmed through our test equipment, so you can really use
+	them as a reference.
+*/
 
 /* D/A converter for voice clock */
 static WRITE_HANDLER(GTS80SS_da2_latch_w) {
 //	logerror("da2_w: 0x%02x\n", data);
 	if (GTS80SS_locals.boardData.subType)
-		votraxsc01_set_base_frequency(11025+(data*100));
+		//votraxsc01_set_base_frequency(11025+(data*100)); // OLD_VOTRAX
+		votraxsc01_set_clock(max((int)-4500 + (int)data*(int)5750,1)); // approximation for the 2 data points above
 	GTS80SS_locals.device = 3;
 }
 
@@ -364,11 +449,8 @@ static WRITE_HANDLER(GTS80SS_ext_board_3_w) {
 static WRITE_HANDLER(GTS80SS_vs_latch_w) {
 	logerror("vs_latch: %03x: %02x / %d\n", offset, data, GTS80SS_locals.device);
 	if (GTS80SS_locals.boardData.subType) {
-		if (GTS80SS_locals.device < 7) {
-			mixer_set_volume(0, 100);
-			mixer_set_volume(1, 100);
-			mixer_set_volume(2, 100);
-			mixer_set_volume(3, 100);
+		if (cpu_gettotalcpu() < 3 || GTS80SS_locals.device < 7) { // keep the old mute in place for caveman only!
+			votraxsc01_set_volume(100);
 			votraxsc01_w(0, data^0x3f);
 		}
 	}
@@ -384,7 +466,7 @@ static struct riot6532_interface GTS80SS_riot6532_intf = {
 
 static WRITE_HANDLER(GTS80SS_riot6532_3_ram_w)
 {
-	UINT8 *pMem = GTS80SS_locals.pRIOT6532_3_ram + (offset%0x80);
+	UINT8 * const pMem = GTS80SS_locals.pRIOT6532_3_ram + (offset%0x80);
 
 	pMem[0x0000] = pMem[0x0080] = pMem[0x0100] = pMem[0x0180] = data;
 }
@@ -398,10 +480,7 @@ static READ_HANDLER(GTS80SS_riot6532_3_ram_r)
 static WRITE_HANDLER(empty_w)
 {
 	if (GTS80SS_locals.boardData.subType) {
-		mixer_set_volume(0, 0);
-		mixer_set_volume(1, 0);
-		mixer_set_volume(2, 0);
-		mixer_set_volume(3, 0);
+		votraxsc01_set_volume(0);
 	}
 	GTS80SS_locals.device = 7;
 }
@@ -445,33 +524,52 @@ MEMORY_WRITE_START(GTS80SS_writemem)
 { 0xf000, 0xffff, empty_w}, // the soundboard does fake writes to the ROM area (used for a delay function)
 MEMORY_END
 
-static void GTS80_ss_Update(int num, INT16 *buffer, int length)
+static void GTS80SS_Update(int num, INT16 * const buffer, int length) // Mars - God of War, Black Hole, Haunted House, etc
 {
-	double dActClock, dInterval, dCurrentClock;
-	int i;
+	float* const __restrict buffer_f = (float*)buffer;
 
-	dCurrentClock = GTS80SS_locals.clock[0];
+	//logerror("%s %.8f %d\n", (GTS80SS_locals.last_sound == 0) ? "sc" : "s ", timer_get_time(), length);
 
-	dActClock = timer_get_time();
-	dInterval = (dActClock-GTS80SS_locals.clock[0]) / length;
+	/* zero-length? bail */
+	if (length == 0)
+		return;
 
-	if ( GTS80SS_locals.buf_pos>1 )
-		GTS80SS_locals.buf_pos = GTS80SS_locals.buf_pos;
+	if (length > DAC_SAMPLE_RATE/384) // there was quite some time since the last sound update? -> we're entering or leaving silence
+	{
+		if (GTS80SS_locals.last_sound != 0) // clock did not update next_value since the last update -> fade to silence (resolves clicks and simulates real DAC kinda)
+		{
+			float tmp = GTS80SS_locals.curr_value;
+			int i;
+			for (i = 0; i < length; i++, tmp *= 0.95f)
+				buffer_f[i] = tmp;
 
-	i = 0;
-	GTS80SS_locals.clock[GTS80SS_locals.buf_pos] = 9e99;
-	while ( length ) {
-		*buffer++ = GTS80SS_locals.buffer[i];
-		length--;
-		dCurrentClock += dInterval;
+			GTS80SS_locals.next_value = tmp; // update next_value with the faded value
+		}
+		else // clock did update next_value just now, so we now need to fade/lerp from silence to next_value
+		{
+			double data = GTS80SS_locals.curr_value;
+			const double slope = (GTS80SS_locals.next_value - data) / (double)length;
 
-		while ( (GTS80SS_locals.clock[i+1]<=dCurrentClock) )
-			i++;
+			int i;
+			for (i = 0; i < length; i++, data += slope)
+				buffer_f[i] = (float)data;
+		}
+	}
+	else // clock does the update (or the sound buffer catches up) -> fill buffer with curr_value, then next_value
+	{
+		const double diff = (timer_get_time() - GTS80SS_locals.last_soundupdate) / length;
+		double t = GTS80SS_locals.last_soundupdate;
+
+		int i;
+		for (i = 0; i < length; i++, t += diff)
+			buffer_f[i] = (t < GTS80SS_locals.last_clock) ? GTS80SS_locals.curr_value : GTS80SS_locals.next_value; // lerping between the values leads to noise for whatever reason, so raw values only!
 	}
 
-	GTS80SS_locals.clock[0] = dActClock;
-	GTS80SS_locals.buffer[0] = GTS80SS_locals.buffer[GTS80SS_locals.buf_pos-1];
-	GTS80SS_locals.buf_pos = 1;
+	GTS80SS_locals.curr_value = GTS80SS_locals.next_value;
+
+	GTS80SS_locals.last_soundupdate = timer_get_time();
+
+	GTS80SS_locals.last_sound = 1;
 }
 
 /*--------------
@@ -495,7 +593,7 @@ void gts80ss_init(struct sndbrdData *brdData) {
 		| ((core_getDip(4)&0x20) ? 0x02:0x00) /* S6: speech enabled */
 		| ((core_getDip(4)&0x40) ? 0x01:0x00) /* S7: connected, usage unknown */
 //		| ((core_getDip(4)&0x80) ? 0x80:0x00) /* S8: not used (goes to the expansion board, pin J1-17) */
-    ;
+	;
 
 	/*
 		Init RAM, i.e. set base of all banks to the base of bank 1,
@@ -507,21 +605,19 @@ void gts80ss_init(struct sndbrdData *brdData) {
 		cpu_setbank(i, memory_region(STATIC_BANK1));
 
 	/* init RIOT */
-    riot6532_config(3, &GTS80SS_riot6532_intf);
-    riot6532_set_clock(3, 905000);
+	riot6532_config(3, &GTS80SS_riot6532_intf);
+	riot6532_set_clock(3, Machine->drv->cpu[GTS80S_locals.boardData.cpuNo].cpu_clock);
 
-	GTS80SS_locals.clock[0]  = 0;
-	GTS80SS_locals.buffer[0] = 0;
-	GTS80SS_locals.buf_pos   = 1;
+	GTS80SS_locals.curr_value = 0.f;
+	GTS80SS_locals.next_value = 0.f;
+	GTS80SS_locals.last_sound = 0;
+	GTS80SS_locals.last_clock = GTS80SS_locals.last_soundupdate = 0.;
 
+	{
+	UINT8 * const mr = memory_region(GTS80SS_locals.boardData.cpuNo);
 	for(i = 0; i<8; i++)
-		memcpy(memory_region(GTS80SS_locals.boardData.cpuNo)+0x8000+0x1000*i, memory_region(GTS80SS_locals.boardData.cpuNo)+0x7000, 0x1000);
-
-	if (stream_locals.stream) {
-	  stream_free(stream_locals.stream);
+		memcpy(mr+0x8000+0x1000*i, mr+0x7000, 0x1000);
 	}
-	stream_locals.stream = stream_init("SND DAC", 50, 11025, 0, GTS80_ss_Update);
-	set_RC_filter(stream_locals.stream, 270000, 15000, 0, 10000);
 }
 
 /*--------------
@@ -556,15 +652,38 @@ WRITE_HANDLER(gts80ss_data_w)
 	riot6532_set_input_a(3, GTS80SS_locals.riot3a);
 }
 
-/* only in at the moment for the pinmame startup information */
-struct CustomSound_interface GTS80SS_customsoundinterface = {
-	NULL, NULL, NULL
-};
+static int s80ss_sh_start(const struct MachineSound *msound) {
+  if (Machine->gamedrv->flags & GAME_NO_SOUND) {
+    return -1;
+  }
+
+  stream_locals.stream = stream_init_float("SND DAC", 50, DAC_SAMPLE_RATE, 0, GTS80SS_Update, 1);
+  //set_RC_filter(stream_locals.stream, 270000, 15000, 0, 10000, DAC_SAMPLE_RATE); // if reactivated, replace with filter.c
+
+  return 0;
+}
+
+static void s80ss_sh_stop(void) {
+  if (stream_locals.stream) {
+    stream_free(stream_locals.stream);
+  }
+}
+
+struct CustomSound_interface GTS80SS_customsoundinterface = { s80ss_sh_start, s80ss_sh_stop };
 
 struct VOTRAXSC01interface GTS80SS_votrax_sc01_interface = {
 	1,						/* 1 chip */
-	{ 75 },					/* master volume */
-	{ 7000 },				/* initial sampling frequency */
+	{ 0 },					/* SC-01 */ // most likely only the oldest GTS80 with Votrax (Mars Prototype) features the 'old' SC-01, see comment in gts80games.c/Mars
+	{ 100 },				/* master volume */ // OLD_VOTRAX 75
+	{ 720000 },				/* initial sampling frequency */ //!! or ~895kHz? or MAME astrocde's 756000? // OLD_VOTRAX: 7000
+	{ &GTS80SS_nmi }		/* set NMI when busy signal get's low */
+};
+
+struct VOTRAXSC01interface GTS80SS_votrax_sc01a_interface = {
+	1,						/* 1 chip */
+	{ 1 },					/* SC-01-A */ // most likely only the oldest GTS80 with Votrax (Mars Prototype) features the 'old' SC-01, see comment in gts80games.c/Mars
+	{ 100 },				/* master volume */ // OLD_VOTRAX 75
+	{ 720000 },				/* initial sampling frequency */ //!! or ~895kHz? or MAME astrocde's 756000? // OLD_VOTRAX: 7000
 	{ &GTS80SS_nmi }		/* set NMI when busy signal get's low */
 };
 
@@ -572,14 +691,28 @@ const struct sndbrdIntf gts80ssIntf = {
   "GTS80SS", gts80ss_init, gts80ss_exit, gts80ss_diag, gts80ss_data_w, gts80ss_data_w, NULL, NULL, NULL, SNDBRD_NODATASYNC|SNDBRD_NOCTRLSYNC
 };
 
-MACHINE_DRIVER_START(gts80s_ss)
-  MDRV_CPU_ADD_TAG("scpu", M6502, 3579545/4)
+MACHINE_DRIVER_START(gts80s_ss_old)
+  MDRV_CPU_ADD_TAG("scpu", M6502, 3579545./4.) // verified by Bontango on real HW (~892KHz)
   MDRV_CPU_FLAGS(CPU_AUDIO_CPU)
   MDRV_CPU_MEMORY(GTS80SS_readmem, GTS80SS_writemem)
   MDRV_INTERLEAVE(50)
   MDRV_SOUND_ADD(CUSTOM, GTS80SS_customsoundinterface)
   MDRV_SOUND_ADD(VOTRAXSC01, GTS80SS_votrax_sc01_interface)
+#ifdef ENABLE_MECHANICAL_SAMPLES
   MDRV_SOUND_ADD(SAMPLES, samples_interface)
+#endif
+MACHINE_DRIVER_END
+
+MACHINE_DRIVER_START(gts80s_ss)
+  MDRV_CPU_ADD_TAG("scpu", M6502, 3579545./4.) // verified by Bontango on real HW (~892KHz)
+  MDRV_CPU_FLAGS(CPU_AUDIO_CPU)
+  MDRV_CPU_MEMORY(GTS80SS_readmem, GTS80SS_writemem)
+  MDRV_INTERLEAVE(50)
+  MDRV_SOUND_ADD(CUSTOM, GTS80SS_customsoundinterface)
+  MDRV_SOUND_ADD(VOTRAXSC01, GTS80SS_votrax_sc01a_interface)
+#ifdef ENABLE_MECHANICAL_SAMPLES
+  MDRV_SOUND_ADD(SAMPLES, samples_interface)
+#endif
 MACHINE_DRIVER_END
 
 /*----------------------------------------
@@ -590,11 +723,11 @@ MACHINE_DRIVER_END
 /  Local variables
 /-----------------*/
 static struct {
-  int    cpuNo;             // # of the fist sound CPU
+  int    cpuNo;				// # of the fist sound CPU
   int    ay_latch;			// Data Latch to AY-8913 chips
-  int    ym2151_port;		// Bit determines if Registor or Data is written to YM2151
   int    nmi_rate;			// Programmable NMI rate
   void   *nmi_timer;		// Timer for NMI
+  data8_t ym2151_port;		// Bit determines if Register or Data is written to YM2151
   UINT8  dac_volume, dac2_volume;
   UINT8  dac_data, dac2_data;
   UINT8  speechboard_drq;	// Gen 1 Only
@@ -636,13 +769,11 @@ static WRITE_HANDLER(s80bs_ay8910_latch_w)
 static void nmi_callback(int param)
 {
 	//Reset the timing frequency
-	double interval;
-	int cl1, cl2;
-	cl1 = 16-(GTS80BS_locals.nmi_rate&0x0f);
-	cl2 = 16-((GTS80BS_locals.nmi_rate&0xf0)>>4);
-	interval = (250000>>8);
-	if(cl1>0)	interval /= cl1;
-	if(cl2>0)	interval /= cl2;
+	int cl1 = 16-(GTS80BS_locals.nmi_rate&0x0f);
+	int cl2 = 16-((GTS80BS_locals.nmi_rate&0xf0)>>4);
+	double interval = (250000>>8);
+	/*if(cl1>0)*/	interval /= cl1;
+	/*if(cl2>0)*/	interval /= cl2;
 
 	//Set up timer to fire again
 	timer_set(TIME_IN_HZ(interval), 0, nmi_callback);
@@ -741,7 +872,7 @@ WRITE_HANDLER(s80bs_sh_w)
 static READ_HANDLER(s80bs1_sound_input_r)
 {
 	int data = (core_getDip(4) >> 4) | ((core_getDip(5) & 0x03) << 4) | ((~core_getDip(4) & 0x01) << 6);
-	if(GTS80BS_locals.speechboard_drq)	data |= 0x80;
+	if(GTS80BS_locals.speechboard_drq) data |= 0x80;
 	return data;
 }
 
@@ -791,6 +922,7 @@ static WRITE_HANDLER( s80bs1_sound_control_w )
 
 	/* bit 7 goes to the speech chip RESET pin */
 	//No interface in the sp0250 emulation for it yet?
+
 	last = data & 0x44;
 }
 
@@ -800,42 +932,40 @@ static WRITE_HANDLER( s80bs3_sound_control_w )
 {
 	common_sound_control_w(offset, data);
 	/* Bit 7 selects YM2151 register or data port */
-	GTS80BS_locals.ym2151_port = data & 0x80;
+	GTS80BS_locals.ym2151_port = (data & 0x80) ? 1 : 0;
 }
 
 //Determine whether to write data to YM2151 Registers or Data Port
 static WRITE_HANDLER( s80bs_ym2151_w )
 {
-	if (GTS80BS_locals.ym2151_port)
-		YM2151_data_port_0_w(offset, data);
-	else
-		YM2151_register_port_0_w(offset, data);
+	YM2151_word_0_w(GTS80BS_locals.ym2151_port, data);
 }
 
 //DAC Handling.. Set volume
 static WRITE_HANDLER( s80bs_dac_vol_w )
 {
 	GTS80BS_locals.dac_volume = data;
-	DAC_data_16_w(0, GTS80BS_locals.dac_volume * GTS80BS_locals.dac_data);
+	DAC_DC_offset_correction_data_16_w(0, (int)GTS80BS_locals.dac_volume * (int)GTS80BS_locals.dac_data);
 	//logerror("volume = %x\n",data);
 	//DAC_data_w(0,data);
 }
 static WRITE_HANDLER( s80bs_dac2_vol_w )
 {
 	GTS80BS_locals.dac2_volume = data;
-	DAC_data_16_w(1, GTS80BS_locals.dac2_volume * GTS80BS_locals.dac2_data);
+	DAC_DC_offset_correction_data_16_w(1, (int)GTS80BS_locals.dac2_volume * (int)GTS80BS_locals.dac2_data);
 }
+
 //DAC Handling.. Set data to send
 static WRITE_HANDLER( s80bs_dac_data_w )
 {
 	GTS80BS_locals.dac_data = data;
-	DAC_data_16_w(0, GTS80BS_locals.dac_volume * GTS80BS_locals.dac_data);
+	DAC_DC_offset_correction_data_16_w(0, (int)GTS80BS_locals.dac_volume * (int)GTS80BS_locals.dac_data);
 	//DAC_data_w(0,data);
 }
 static WRITE_HANDLER( s80bs_dac2_data_w )
 {
 	GTS80BS_locals.dac2_data = data;
-	DAC_data_16_w(1, GTS80BS_locals.dac2_volume * GTS80BS_locals.dac2_data);
+	DAC_DC_offset_correction_data_16_w(1, (int)GTS80BS_locals.dac2_volume * (int)GTS80BS_locals.dac2_data);
 }
 
 //Process command from Main CPU
@@ -1060,9 +1190,9 @@ static WRITE_HANDLER(u2latch_w)
 */
 static WRITE_HANDLER(sound_control_w)
 {
-	int hold_enable_w, hold_enable_cs, hold_u3;
+	int hold_enable_w, /*hold_enable_cs,*/ hold_u3;
 	hold_enable_w = GTS80BS_locals.enable_w;
-	hold_enable_cs = GTS80BS_locals.enable_cs;
+	//hold_enable_cs = GTS80BS_locals.enable_cs;
 	hold_u3 = GTS80BS_locals.u3_latch;
 
 	//Process common bits (D0 for NMI, D7 for YM2151)
@@ -1109,7 +1239,8 @@ static WRITE_HANDLER(sound_control_w)
 		logerror("Setting to rom #%d\n", GTS80BS_locals.rom_cs);
 
 		//D4 = 6295 - SS (Data = 1 = 7.575Khz; Data = 0 = 6.06 kHz (at 1MHz oscillation clock!)
-		OKIM6295_set_frequency(0,((GTS80BS_locals.u2_latch>>4)&1)? 7575.76 : 6060.61);
+		//OKIM6295_set_frequency(0,((GTS80BS_locals.u2_latch>>4)&1)? 7575.76 : 6060.61);
+		OKIM6295_set_pin7(0, 1000000., (GTS80BS_locals.u2_latch>>4)&1);
 
 		//D5 = LED (Active low?)
 		UpdateSoundLEDS(1,~(GTS80BS_locals.u2_latch>>5)&1);
@@ -1188,19 +1319,19 @@ MEMORY_END
 static struct DACinterface GTS3_dacInt =
 {
   2,			/*2 Chips - but it seems we only access 1?*/
- {100,100}		/* Volume */
+ {50,50}		/* Volume */
 };
 
 static struct OKIM6295interface GTS3_okim6295_interface = {
 	1,						/* 1 chip */
-	{ 7575.76 },			/* base frequency */
+	{ 1000000./132. },		/* base frequency */
 	{ GTS3_MEMREG_SROM1 },	/* memory region */
 	{ 50 }
 };
 
 // Init
 void gts80b_init(struct sndbrdData *brdData) {
-    int drq = GTS80BS_locals.speechboard_drq;
+	int drq = GTS80BS_locals.speechboard_drq;
 	//GTS80BS_locals.nmi_timer = NULL;
 	memset(&GTS80BS_locals, 0, sizeof(GTS80BS_locals));
 	GTS80BS_locals.cpuNo = brdData->cpuNo;
@@ -1235,7 +1366,9 @@ MACHINE_DRIVER_START(gts80s_b1)
   MDRV_SOUND_ADD(DAC, GTS80BS_dacInt)
   MDRV_SOUND_ADD(AY8910, GTS80BS_ay8910Int)
   MDRV_SOUND_ADD(SP0250, GTS80BS_sp0250_interface)
+#ifdef ENABLE_MECHANICAL_SAMPLES
   MDRV_SOUND_ADD(SAMPLES, samples_interface)
+#endif
 MACHINE_DRIVER_END
 //System S80B - Gen 2
 MACHINE_DRIVER_START(gts80s_b2)
@@ -1249,7 +1382,9 @@ MACHINE_DRIVER_START(gts80s_b2)
 
   MDRV_SOUND_ADD(DAC, GTS80BS_dacInt)
   MDRV_SOUND_ADD(AY8910, GTS80BS_ay8910Int)
+#ifdef ENABLE_MECHANICAL_SAMPLES
   MDRV_SOUND_ADD(SAMPLES, samples_interface)
+#endif
 MACHINE_DRIVER_END
 //System S80B - Gen 3
 MACHINE_DRIVER_START(gts80s_b3)
@@ -1264,7 +1399,9 @@ MACHINE_DRIVER_START(gts80s_b3)
   MDRV_SOUND_ATTRIBUTES(SOUND_SUPPORTS_STEREO)
   MDRV_SOUND_ADD(DAC, GTS80BS_dacInt)
   MDRV_SOUND_ADD(YM2151, GTS80BS_ym2151Int)
+#ifdef ENABLE_MECHANICAL_SAMPLES
   MDRV_SOUND_ADD(SAMPLES, samples_interface)
+#endif
 MACHINE_DRIVER_END
 
 //System S80B - Gen 3 with additional DAC (Bone Busters only)
@@ -1288,8 +1425,10 @@ MACHINE_DRIVER_START(gts80s_s3_no)
 
   MDRV_SOUND_ATTRIBUTES(SOUND_SUPPORTS_STEREO)
   MDRV_SOUND_ADD(DAC, GTS3_dacInt)
-  MDRV_SOUND_ADD(YM2151,  GTS80BS_ym2151Int)
+  MDRV_SOUND_ADD(YM2151, GTS80BS_ym2151Int)
+#ifdef ENABLE_MECHANICAL_SAMPLES
   MDRV_SOUND_ADD(SAMPLES, samples_interface)
+#endif
   MDRV_DIAGNOSTIC_LEDH(3)
 MACHINE_DRIVER_END
 
@@ -1305,9 +1444,11 @@ MACHINE_DRIVER_START(gts80s_s3)
 
   MDRV_SOUND_ATTRIBUTES(SOUND_SUPPORTS_STEREO)
   MDRV_SOUND_ADD(DAC, GTS3_dacInt)
-  MDRV_SOUND_ADD(YM2151,  GTS80BS_ym2151Int)
+  MDRV_SOUND_ADD(YM2151, GTS80BS_ym2151Int)
   MDRV_SOUND_ADD(OKIM6295, GTS3_okim6295_interface)
+#ifdef ENABLE_MECHANICAL_SAMPLES
   MDRV_SOUND_ADD(SAMPLES, samples_interface)
+#endif
 MACHINE_DRIVER_END
 
 
@@ -1352,8 +1493,8 @@ static void techno_nmi_callback(int param)
 	cl1 = 16-(techno_locals.nmi_rate&0x0f);
 	cl2 = 16-((techno_locals.nmi_rate&0xf0)>>4);
 	interval = (250000>>8);
-	if(cl1>0)	interval /= cl1;
-	if(cl2>0)	interval /= cl2;
+	/*if(cl1>0)*/	interval /= cl1;
+	/*if(cl2>0)*/	interval /= cl2;
 
 	//Set up timer to fire again
 	timer_set(TIME_IN_HZ(interval), 0, techno_nmi_callback);
@@ -1553,13 +1694,13 @@ static WRITE_HANDLER(techno_sp0250_latch) {
 static WRITE_HANDLER( techno_dac_vol_w )
 {
 	techno_locals.dac_volume = data;
-	DAC_data_16_w(0, techno_locals.dac_volume * techno_locals.dac_data);
+	DAC_DC_offset_correction_data_16_w(0, (int)techno_locals.dac_volume * (int)techno_locals.dac_data);
 }
 //DAC Handling.. Set data to send
 static WRITE_HANDLER( techno_dac_data_w )
 {
 	techno_locals.dac_data = data;
-	DAC_data_16_w(0, techno_locals.dac_volume * techno_locals.dac_data);
+	DAC_DC_offset_correction_data_16_w(0, (int)techno_locals.dac_volume * (int)techno_locals.dac_data);
 }
 
 //TMS7000 will use dac chip #1
@@ -1660,7 +1801,7 @@ MACHINE_DRIVER_START(techno)
   MDRV_SOUND_ADD(DAC, techno_6502dacInt)
 
   //MDRV_CPU_ADD(TMS7000, 4000000)
-  MDRV_CPU_ADD(TMS7000, 1500000)		//Sounds much better at 1.5Mhz than 4Mhz
+  MDRV_CPU_ADD(TMS7000, 1500000) //!! Sounds much better at 1.5Mhz than 4Mhz
   MDRV_CPU_FLAGS(CPU_AUDIO_CPU)
   MDRV_CPU_MEMORY(tms_readmem, tms_writemem)
   MDRV_CPU_PORTS(tms_readport, tms_writeport)

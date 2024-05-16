@@ -20,6 +20,15 @@
 #include "video.h"
 #include "rc.h"
 
+#include "../../ext/libsamplerate/config.h"
+#ifdef RESAMPLER_SSE_OPT
+ #if (defined(_M_IX86_FP) && _M_IX86_FP >= 2) || defined(__SSE2__) || defined(_M_X64) || defined(_M_AMD64) || defined(__ia64__) || defined(__x86_64__)
+  #include <xmmintrin.h>
+  #include <emmintrin.h>
+ #else // Arm Neon
+  #include "../sse2neon.h"
+ #endif
+#endif
 
 
 //============================================================
@@ -64,6 +73,7 @@ extern int verbose;
 
 // global parameters
 int							attenuation = 0;
+double						volume_gain = 1.;
 
 
 
@@ -106,17 +116,28 @@ static int					upper_thresh;
 // enabled state
 static int					is_enabled = 1;
 
+static int					is_stereo;
+static int					force_mono_to_stereo;
+
+static int					consecutive_lows = 0;
+static int					consecutive_mids = 0;
+static int					consecutive_highs = 0;
+
+// for mono -> stereo conversion
+static INT16 mix_buffer[ACCUMULATOR_SAMPLES * 2]; /* *2 for stereo */
+
 // debugging
 #if LOG_SOUND
 static FILE *				sound_log;
 #endif
 
-// sound options (none at this time)
+// sound options
 struct rc_option sound_opts[] =
 {
 	// name, shortname, type, dest, deflt, min, max, func, help
 	{ "Windows sound options", NULL, rc_seperator, NULL, NULL, 0, 0, NULL, NULL },
 	{ "audio_latency", NULL, rc_int, &audio_latency, "1", 1, 4, NULL, "set audio latency (increase to reduce glitches)" },
+	{ "force_stereo", NULL, rc_bool, &force_mono_to_stereo, "0", 0, 0, NULL, "always force stereo output (e.g. to better support multi channel sound systems)" },
 	{ NULL,	NULL, rc_end, NULL, NULL, 0, 0,	NULL, NULL }
 };
 
@@ -140,9 +161,7 @@ static void			dsound_destroy_buffers(void);
 INLINE int bytes_in_stream_buffer(void)
 {
 	DWORD play_position, write_position;
-	HRESULT result;
-
-	result = IDirectSoundBuffer_GetCurrentPosition(stream_buffer, &play_position, &write_position);
+	IDirectSoundBuffer_GetCurrentPosition(stream_buffer, &play_position, &write_position);
 	if (stream_buffer_in > play_position)
 		return stream_buffer_in - play_position;
 	else
@@ -161,6 +180,14 @@ int osd_start_audio_stream(int stereo)
 	sound_log = fopen("sound.log", "w");
 #endif
 
+	consecutive_lows = 0;
+	consecutive_mids = 0;
+	consecutive_highs = 0;
+
+	is_stereo = stereo;
+
+	force_mono_to_stereo = pmoptions.force_mono_to_stereo; //!! how to use/set the sound_opts in here?
+
 	// skip if sound disabled
 	if (Machine->sample_rate != 0)
 	{
@@ -173,7 +200,7 @@ int osd_start_audio_stream(int stereo)
 	}
 
 	// determine the number of samples per frame
-	samples_per_frame = (double)Machine->sample_rate / (double)Machine->drv->frames_per_second;
+	samples_per_frame = Machine->sample_rate / Machine->drv->frames_per_second;
 
 	// compute how many samples to generate the first frame
 	samples_left_over = samples_per_frame;
@@ -202,7 +229,7 @@ void osd_stop_audio_stream(void)
 
 	// print out over/underflow stats
 	if (verbose && (buffer_overflows || buffer_underflows))
-		fprintf(stderr, "Sound buffer: overflows=%d underflows=%d\n", buffer_overflows, buffer_underflows);
+		fprintf(stderr, "Sound: buffer overflows=%d underflows=%d\n", buffer_overflows, buffer_underflows);
 
 #if LOG_SOUND
 	if (sound_log)
@@ -219,10 +246,6 @@ void osd_stop_audio_stream(void)
 
 static void update_sample_adjustment(int buffered)
 {
-	static int consecutive_lows = 0;
-	static int consecutive_mids = 0;
-	static int consecutive_highs = 0;
-
 	// if we're not throttled don't bother
 	if (!throttle)
 	{
@@ -299,11 +322,12 @@ static void copy_sample_data(INT16 *data, int bytes_to_copy)	// adopted from MAM
 {
 	void *buffer1, *buffer2;
 	DWORD length1, length2;
-	HRESULT result;
 	int cur_bytes;
 
 	// attempt to lock the stream buffer
-	result = IDirectSoundBuffer_Lock(stream_buffer, stream_buffer_in, bytes_to_copy, &buffer1, &length1, &buffer2, &length2, 0);
+	HRESULT result = IDirectSoundBuffer_Lock(stream_buffer, stream_buffer_in, bytes_to_copy, &buffer1, &length1, &buffer2, &length2, 0);
+
+	// if we failed, assume it was an underflow (i.e.,
 	if (result != DS_OK)
 	{
 		buffer_underflows++;
@@ -321,8 +345,8 @@ static void copy_sample_data(INT16 *data, int bytes_to_copy)	// adopted from MAM
 	bytes_to_copy -= cur_bytes;
 	data = (INT16 *)((UINT8 *)data + cur_bytes);	// adopted from MAME 0.105
 
-	// copy the second chunk
-	if (bytes_to_copy != 0)
+	// copy the second chunk (2 pointers due to circular dsound buffer)
+	if (bytes_to_copy != 0 && buffer2)
 	{
 		cur_bytes = (bytes_to_copy > length2) ? length2 : bytes_to_copy;
 		memcpy(buffer2, data, cur_bytes);
@@ -343,12 +367,47 @@ int osd_update_audio_stream(INT16 *buffer)
 	// if nothing to do, don't do it
 	if (Machine->sample_rate != 0 && stream_buffer)
 	{
-		int original_bytes = bytes_in_stream_buffer();
-		int input_bytes = samples_this_frame * stream_format.nBlockAlign;
+		const int original_bytes = bytes_in_stream_buffer();
+		const int input_bytes = samples_this_frame * stream_format.nBlockAlign;
 		int final_bytes;
 
 		// update the sample adjustment
 		update_sample_adjustment(original_bytes);
+
+		// copy mono to stereo buffer if requested
+		if(!is_stereo && force_mono_to_stereo)
+		{
+			int i;
+			for (i = 0; i < input_bytes/2; ++i)
+				mix_buffer[i*2] = mix_buffer[i*2+1] = buffer[i];
+			buffer = mix_buffer;
+		}
+
+		if(volume_gain > 1.)
+		{
+			const float vgf = (float)volume_gain;
+			int i;
+			for (i = 0; i < input_bytes; ++i)
+			{
+#if defined(RESAMPLER_SSE_OPT)
+				const INT16 samplei = (INT16)_mm_cvtss_si32(_mm_max_ss(_mm_min_ss(_mm_mul_ss(_mm_cvtsi32_ss(_mm_setzero_ps(), buffer[i]), _mm_set_ss(vgf)), _mm_set_ss(32767.f)), _mm_set_ss(-32768.f)));
+#else
+				const float sample = (float)buffer[i] * vgf;
+				INT16 samplei;
+				if (sample <= -32768.f)
+					samplei = -32768;
+				else if (sample >= 32767.f)
+					samplei = 32767;
+				else
+#ifdef __GNUC__
+					samplei = (INT16)(sample + .5f);
+#else
+					samplei = (INT16)(lrintf(sample));
+#endif
+#endif
+				buffer[i] = samplei;
+			}
+		}
 
 		// copy data into the sound buffer
 		copy_sample_data(buffer, input_bytes);
@@ -400,16 +459,21 @@ int osd_update_audio_stream(INT16 *buffer)
 
 void osd_set_mastervolume(int _attenuation)
 {
-	// clamp the attenuation to 0-32 range
-	if (_attenuation > 0)
-		_attenuation = 0;
+	volume_gain = 1.;
+
+	// clamp the attenuation to -32 - 32 range
 	if (_attenuation < -32)
 		_attenuation = -32;
+	if (_attenuation > 32)
+		_attenuation = 32;
 	attenuation = _attenuation;
+
+	while (_attenuation-- > 0)
+		volume_gain *= 1.1220184543019634355910389464779; // = (10 ^ (1/20)) = 1dB
 
 	// set the master volume
 	if (stream_buffer && is_enabled)
-		IDirectSoundBuffer_SetVolume(stream_buffer, attenuation * 100);
+		IDirectSoundBuffer_SetVolume(stream_buffer, (attenuation == -32) ? DSBVOLUME_MIN : min(attenuation,0) * 100);
 }
 
 
@@ -434,7 +498,7 @@ void osd_sound_enable(int enable_it)
 	if (stream_buffer)
 	{
 		if (enable_it)
-			IDirectSoundBuffer_SetVolume(stream_buffer, attenuation * 100);
+			IDirectSoundBuffer_SetVolume(stream_buffer, min(attenuation,0) * 100);
 		else
 			IDirectSoundBuffer_SetVolume(stream_buffer, DSBVOLUME_MIN);
 
@@ -453,7 +517,7 @@ typedef struct
 // maximum number of handled devices
 #define MAX_HANDLED_DEVICES 10
 
-// AudioDevices informations
+// AudioDevices information
 AudioDevice audio_devices[MAX_HANDLED_DEVICES];
 
 // Number of enumerated audio devices
@@ -466,8 +530,8 @@ int current_audio_device = -1;
 BOOL CALLBACK EnumCallBack (LPGUID guid, LPCSTR desc,
 	LPCSTR mod, LPVOID list)
 {
-	AudioDevice *ad = NULL;
-	
+	AudioDevice *ad;
+
 	if(audio_devices_number>=MAX_HANDLED_DEVICES-1)
 		return FALSE;	// Hardcoded Max reached (TODO: realloc)
 
@@ -478,7 +542,7 @@ BOOL CALLBACK EnumCallBack (LPGUID guid, LPCSTR desc,
 		ad->guid = (LPGUID)malloc(sizeof (GUID));
 		memcpy (ad->guid, guid, sizeof (GUID));
 	}
-	
+
 	strcpy(ad->description,desc);
 	strcpy(ad->module,mod);
 
@@ -552,7 +616,7 @@ static int dsound_init(void)
 	LPGUID guid = NULL;	// Default audio device
 
 	osd_enum_audio_devices(); // (Re-)Enumerate devices
-	
+
 	// Get the guid to the user selected audio device (NULL if no selected)
 	if(current_audio_device>= 0 && current_audio_device<audio_devices_number)
 		guid = audio_devices[current_audio_device].guid;
@@ -578,23 +642,25 @@ static int dsound_init(void)
 	result = IDirectSound_SetCooperativeLevel(dsound, win_video_window, DSSCL_PRIORITY);
 	if (result != DS_OK)
 	{
-		fprintf(stderr, "Error setting cooperative level: %08x\n", (UINT32)result);
+		fprintf(stderr, "Error setting DirectSound cooperative level: %08x\n", (UINT32)result);
 		goto cant_set_coop_level;
 	}
 
 	// make a format description for what we want
 	stream_format.wBitsPerSample	= 16;
 	stream_format.wFormatTag		= WAVE_FORMAT_PCM;
-	stream_format.nChannels			= (Machine->drv->sound_attributes & SOUND_SUPPORTS_STEREO) ? 2 : 1;
-	stream_format.nSamplesPerSec	= Machine->sample_rate;
+	stream_format.nChannels			= (is_stereo || force_mono_to_stereo) ? 2 : 1;
+	stream_format.nSamplesPerSec	= (int)(Machine->sample_rate+0.5);
 	stream_format.nBlockAlign		= stream_format.wBitsPerSample * stream_format.nChannels / 8;
 	stream_format.nAvgBytesPerSec	= stream_format.nSamplesPerSec * stream_format.nBlockAlign;
 
 	// compute the buffer sizes
 	stream_buffer_size = ((UINT64)MAX_BUFFER_SIZE * (UINT64)stream_format.nSamplesPerSec) / 44100;
 	stream_buffer_size = (stream_buffer_size * stream_format.nBlockAlign) / 4;
-	stream_buffer_size = (stream_buffer_size * 30) / Machine->drv->frames_per_second;
+	stream_buffer_size = (UINT32)((stream_buffer_size * 30) / Machine->drv->frames_per_second + 0.5);
 	stream_buffer_size = (stream_buffer_size / 1024) * 1024;
+	if (stream_buffer_size < 1024)
+		stream_buffer_size = 1024;
 
 	// compute the upper/lower thresholds
 	lower_thresh = audio_latency * stream_buffer_size / 5;
@@ -659,6 +725,7 @@ static int dsound_create_buffers(void)
 	DWORD locked;
 
 	// create a buffer desc for the primary buffer
+	memset(&primary_desc, 0, sizeof(primary_desc));
 	primary_desc.dwSize				= sizeof(primary_desc);
 	primary_desc.dwFlags			= DSBCAPS_PRIMARYBUFFER |
 									  DSBCAPS_GETCURRENTPOSITION2;
@@ -668,7 +735,7 @@ static int dsound_create_buffers(void)
 	result = IDirectSound_CreateSoundBuffer(dsound, &primary_desc, &primary_buffer, NULL);
 	if (result != DS_OK)
 	{
-		fprintf(stderr, "Error creating primary buffer: %08x\n", (UINT32)result);
+		fprintf(stderr, "Error creating primary DirectSound buffer: %08x\n", (UINT32)result);
 		goto cant_create_primary;
 	}
 
@@ -676,7 +743,7 @@ static int dsound_create_buffers(void)
 	result = IDirectSoundBuffer_SetFormat(primary_buffer, &stream_format);
 	if (result != DS_OK)
 	{
-		fprintf(stderr, "Error setting primary format: %08x\n", (UINT32)result);
+		fprintf(stderr, "Error setting primary DirectSound buffer format: %08x\n", (UINT32)result);
 		goto cant_set_primary_format;
 	}
 
@@ -684,14 +751,15 @@ static int dsound_create_buffers(void)
 	result = IDirectSoundBuffer_GetFormat(primary_buffer, &primary_format, sizeof(primary_format), NULL);
 	if (result != DS_OK)
 	{
-		fprintf(stderr, "Error getting primary format: %08x\n", (UINT32)result);
+		fprintf(stderr, "Error getting primary DirectSound buffer format: %08x\n", (UINT32)result);
 		goto cant_get_primary_format;
 	}
 	if (verbose)
-		fprintf(stderr, "Primary buffer: %d Hz, %d bits, %d channels\n",
+		fprintf(stderr, "DirectSound: Primary buffer: %d Hz, %d bits, %d channels\n",
 				(int)primary_format.nSamplesPerSec, (int)primary_format.wBitsPerSample, (int)primary_format.nChannels);
 
 	// create a buffer desc for the stream buffer
+	memset(&stream_desc, 0, sizeof(stream_desc));
 	stream_desc.dwSize				= sizeof(stream_desc);
 	stream_desc.dwFlags				= DSBCAPS_CTRLVOLUME |
 									  DSBCAPS_GLOBALFOCUS |
@@ -703,7 +771,7 @@ static int dsound_create_buffers(void)
 	result = IDirectSound_CreateSoundBuffer(dsound, &stream_desc, &stream_buffer, NULL);
 	if (result != DS_OK)
 	{
-		fprintf(stderr, "Error creating DirectSound buffer: %08x\n", (UINT32)result);
+		fprintf(stderr, "Error creating DirectSound stream buffer: %08x\n", (UINT32)result);
 		goto cant_create_buffer;
 	}
 
@@ -711,7 +779,7 @@ static int dsound_create_buffers(void)
 	result = IDirectSoundBuffer_Lock(stream_buffer, 0, stream_buffer_size, &buffer, &locked, NULL, NULL, 0);
 	if (result != DS_OK)
 	{
-		fprintf(stderr, "Error locking stream buffer: %08x\n", (UINT32)result);
+		fprintf(stderr, "Error locking DirectSound stream buffer: %08x\n", (UINT32)result);
 		goto cant_lock_buffer;
 	}
 
@@ -745,8 +813,13 @@ static void dsound_destroy_buffers(void)
 	if (stream_buffer)
 		IDirectSoundBuffer_Stop(stream_buffer);
 
-	// release the buffer
+	// release the stream buffer
 	if (stream_buffer)
 		IDirectSoundBuffer_Release(stream_buffer);
 	stream_buffer = NULL;
+
+	// release the primary buffer
+	if (primary_buffer != NULL)
+		IDirectSoundBuffer_Release(primary_buffer);
+	primary_buffer = NULL;
 }

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /*******************************************************************************
  Black Rose (Bally, 1992) Pinball Simulator
 
@@ -389,6 +391,7 @@ static void br_drawStatic(BMTYPE **line) {
   }
 
 /* Solenoid-to-sample handling */
+#ifdef ENABLE_MECHANICAL_SAMPLES
 static wpc_tSamSolMap br_samsolmap[] = {
  /*Channel #0*/
  {sKnocker,0,SAM_KNOCKER}, {sTrough,0,SAM_BALLREL},
@@ -406,6 +409,7 @@ static wpc_tSamSolMap br_samsolmap[] = {
  {sBallLockup,3,SAM_SOLENOID_ON}, {sBallLockup,3,SAM_SOLENOID_OFF,WPCSAM_F_ONOFF},
  {sRampUp,3,SAM_FLAPOPEN}, {sRampDown,3,SAM_FLAPCLOSE},{-1}
 };
+#endif
 
 /*-----------------
 /  ROM definitions
@@ -462,25 +466,25 @@ WPC_ROMEND
 /  Game drivers
 /---------------*/
 CORE_GAMEDEF (br,l4,"Black Rose (L-4)",1993,"Bally",wpc_mFliptronS,0)
-CORE_CLONEDEF (br,d4,l4,"Black Rose (D-4) LED Ghost Fix",1992,"Bally",wpc_mFliptronS,0)
-CORE_CLONEDEF (br,p17,l4,"Black Rose (SP-1)",1992,"Bally",wpc_mFliptronS,0)
-CORE_CLONEDEF (br,p18,l4,"Black Rose (DSP-1) LED Ghost Fix",1992,"Bally",wpc_mFliptronS,0)
+CORE_CLONEDEF (br,d4,l4,"Black Rose (D-4 LED Ghost Fix)",1992,"Bally",wpc_mFliptronS,0)
+CORE_CLONEDEF (br,p17,l4,"Black Rose (P-17 Prototype, SP-1)",1992,"Bally",wpc_mFliptronS,0)
+CORE_CLONEDEF (br,p18,l4,"Black Rose (P-18 LED Ghost Fix)",1992,"Bally",wpc_mFliptronS,0)
 CORE_CLONEDEF (br,l1,l4,"Black Rose (L-1)",1992,"Bally",wpc_mFliptronS,0)
-CORE_CLONEDEF (br,d1,l4,"Black Rose (D-1) LED Ghost Fix",1992,"Bally",wpc_mFliptronS,0)
+CORE_CLONEDEF (br,d1,l4,"Black Rose (D-1 LED Ghost Fix)",1992,"Bally",wpc_mFliptronS,0)
 CORE_CLONEDEF (br,l3,l4,"Black Rose (L-3)",1993,"Bally",wpc_mFliptronS,0)
-CORE_CLONEDEF (br,d3,l4,"Black Rose (D-3) LED Ghost Fix",1993,"Bally",wpc_mFliptronS,0)
+CORE_CLONEDEF (br,d3,l4,"Black Rose (D-3 LED Ghost Fix)",1993,"Bally",wpc_mFliptronS,0)
 
 /*-----------------------
 / Simulation Definitions
 /-----------------------*/
 static sim_tSimData brSimData = {
-  2,    				/* 2 game specific input ports */
-  br_stateDef,				/* Definition of all states */
-  br_inportData,			/* Keyboard Entries */
+  2,					/* 2 game specific input ports */
+  br_stateDef,			/* Definition of all states */
+  br_inportData,		/* Keyboard Entries */
   { stRTrough, stCTrough, stLTrough, stDrain, stDrain, stDrain, stDrain },	/*Position where balls start.. Max 7 Balls Allowed*/
   NULL, 				/* no init */
-  br_handleBallState,			/*Function to handle ball state changes*/
-  br_drawStatic,			/*Function to handle mechanical state changes*/
+  br_handleBallState,	/*Function to handle ball state changes*/
+  br_drawStatic,		/*Function to handle mechanical state changes*/
   TRUE, 				/* Simulate manual shooter? */
   NULL  				/* Custom key conditions? */
 };
@@ -494,7 +498,10 @@ static core_tGameData brGameData = {
     FLIP_SW(FLIP_L | FLIP_UR) | FLIP_SOL(FLIP_L | FLIP_UR),
     0,0,0,0,0,0,0,
     NULL, br_handleMech, br_getMech, br_drawMech,
-    NULL, br_samsolmap
+    NULL
+#ifdef ENABLE_MECHANICAL_SAMPLES
+    , br_samsolmap
+#endif
   },
   &brSimData,
   {
@@ -511,6 +518,7 @@ static core_tGameData brGameData = {
 /----------------*/
 static void init_br(void) {
   core_gameData = &brGameData;
+  hc55516_set_sample_clock(0, 22372);
 }
 
 static void br_handleMech(int mech) {

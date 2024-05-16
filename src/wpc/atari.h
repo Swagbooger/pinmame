@@ -325,7 +325,7 @@
 
 #define ATARI_COMINPORT       CORE_COREINPORT
 
-#define ATARI_SOLSMOOTH       2 /* Smooth the Solenoids over this numer of VBLANKS */
+#define ATARI_SOLSMOOTH       2 /* Smooth the Solenoids over this number of VBLANKS */
 #define ATARI_LAMPSMOOTH      3 /* Smooth the lamps over this number of VBLANKS */
 #define ATARI_DISPLAYSMOOTH   2 /* Smooth the display over this number of VBLANKS */
 
@@ -373,7 +373,7 @@
 
 #define ATARI_SNDSTART(n1, chk1) \
      NORMALREGION(0x1000, REGION_SOUND1) \
-       ROM_LOAD(n1, 0x0000, 0x0200, chk1)
+       ROM_LOAD_NIB_LOW(n1, 0x0000, 0x0200, chk1)
 
 /*-- These are only here so the game structure can be in the game file --*/
 extern MACHINE_DRIVER_EXTERN(ATARI0);

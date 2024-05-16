@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 #ifndef INC_SNDCMD
 #define INC_SNDCMD
 #if !defined(__GNUC__) || (__GNUC__ == 3 && __GNUC_MINOR__ >= 4) || (__GNUC__ >= 4)	// GCC supports "pragma once" correctly since 3.4
@@ -14,18 +16,21 @@ void snd_cmd_exit(void);
 void snd_cmd_log(int boardNo, int cmd);
 int snd_get_cmd_log(int *last, int *buffer);
 
+void reinit_pinSound(void);
+
 /*Constants*/
 #define DCS_COMMS	14	/* # of Sequential Commands to trigger a sound (DCS )*/
 #define WPCS_COMMS	4	/* # of Sequential Commands to trigger a sound (Non-DCS )*/
 #define REPEATKEY	2	/* # of keystrokes pressed before registering
-				   Lower # = keypresses register faster, higher = slower*/
-#define MAXCOMMAND 	256	/* Highest Sound Command # that can be triggered*/
-#define SND_XROW	35  	/* Where to start display of sound command text*/
+							Lower # = keypresses register faster, higher = slower*/
+#define MAXCOMMAND	256	/* Highest Sound Command # that can be triggered*/
+#define SND_XROW	35	/* Where to start display of sound command text*/
 
 /*Keys which affect sound mode & recording*/
 /*-- REMEMBER: Change Help Text displayed on screen to match the keys here --*/
 #define SMDCMD_MODETOGGLE	KEYCODE_F4
 #define SMDCMD_RECORDTOGGLE	KEYCODE_F5
+#define SMDCMD_DUMPTOGGLE	KEYCODE_F6
 #define SMDCMD_NEXT		KEYCODE_RIGHT
 #define SMDCMD_PREV		KEYCODE_LEFT
 #define SMDCMD_UP		KEYCODE_UP
@@ -34,7 +39,7 @@ int snd_get_cmd_log(int *last, int *buffer);
 #define SMDCMD_PLAY		KEYCODE_SPACE
 #define SMDCMD_INSERT	KEYCODE_INSERT
 
-#define MAX_CMD_LOG     16
+#define MAX_CMD_LOG		16
 
 
 #endif	/*INC_SNDCMD*/

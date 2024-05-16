@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /*******************************************************************************
  Preliminary Safe Cracker (Bally, 1996) Pinball Simulator
 
@@ -243,35 +245,57 @@ static sim_tInportData sc_inportData[] = {
 /*-----------------
 /  ROM definitions
 /------------------*/
+// 1.0
 #define SC_SOUND \
 DCS_SOUNDROM3m(	"safsnds2.rom",CRC(20e14c63) SHA1(61b1c000a7afe5d0e9c31093e3fa963d6a594d54), \
 				"safsnds3.rom",CRC(99e318e7) SHA1(918f9013da82b29a559cb474bce93fb4ce88b731), \
 				"safsnds4.rom",CRC(9c8a23eb) SHA1(a0ee1174c8af0f262f9bec950da588cc9eb8747d))
 
-WPC_ROMSTART(sc,18,  "safe_18g.rom",0x80000,CRC(aeb4b669) SHA1(2925eb11133526ddff8ae92bb53f9b45c6ed8134)) SC_SOUND WPC_ROMEND
-WPC_ROMSTART(sc,18n, "safe_18n.rom",0x80000,CRC(4d5d5626) SHA1(2d6f201d47f24df2195f10267ec1426cf0a087c9)) SC_SOUND WPC_ROMEND
-
-WPC_ROMSTART(sc,18s2,"safe_18g.rom",0x80000,CRC(aeb4b669) SHA1(2925eb11133526ddff8ae92bb53f9b45c6ed8134))
-DCS_SOUNDROM3m(	"su2-24g.rom", CRC(712ce42e) SHA1(5d3b8e3eccdd1bc09a92de610161dd51293181b1),
-				"safsnds3.rom",CRC(99e318e7) SHA1(918f9013da82b29a559cb474bce93fb4ce88b731),
+// 1.1 This revision eliminates a 'buzzing' sound that is occasionally emitted from some games
+#define SC_11_SOUND \
+DCS_SOUNDROM3m(	"su2-11.rom",  CRC(2edf3aa8) SHA1(d0c05c22bc0b9048dc3a8d620e390f9e67cc8b76), \
+				"safsnds3.rom",CRC(99e318e7) SHA1(918f9013da82b29a559cb474bce93fb4ce88b731), \
 				"safsnds4.rom",CRC(9c8a23eb) SHA1(a0ee1174c8af0f262f9bec950da588cc9eb8747d))
-WPC_ROMEND
 
-WPC_ROMSTART(sc,17,  "g11-17g.rom", 0x80000,CRC(f3d64156) SHA1(9226664b59c7b65ac39e2f32597efc45672cf505)) SC_SOUND WPC_ROMEND
-WPC_ROMSTART(sc,17n, "g11-17n.rom", 0x80000,CRC(97628907) SHA1(3435f496e1850bf433add1bc403e3148de05c13a)) SC_SOUND WPC_ROMEND
-WPC_ROMSTART(sc,14,  "g11-14.rom",  0x80000,CRC(1103f976) SHA1(6d6d23af1cd03f63b94a0ceb9711be51dce202f8)) SC_SOUND WPC_ROMEND
+// German 2.3 exists
+
+// German 2.4 This revision eliminates a 'buzzing' sound that is occasionally emitted from some games
+#define SC_G_SOUND \
+DCS_SOUNDROM3m(	"su2-24g.rom", CRC(712ce42e) SHA1(5d3b8e3eccdd1bc09a92de610161dd51293181b1), \
+				"safsnds3.rom",CRC(99e318e7) SHA1(918f9013da82b29a559cb474bce93fb4ce88b731), \
+				"safsnds4.rom",CRC(9c8a23eb) SHA1(a0ee1174c8af0f262f9bec950da588cc9eb8747d))
+
+WPC_ROMSTART(sc,18s11,"safe_18g.rom",0x80000,CRC(aeb4b669) SHA1(2925eb11133526ddff8ae92bb53f9b45c6ed8134)) SC_11_SOUND WPC_ROMEND
+WPC_ROMSTART(sc,18n11,"safe_18n.rom",0x80000,CRC(4d5d5626) SHA1(2d6f201d47f24df2195f10267ec1426cf0a087c9)) SC_11_SOUND WPC_ROMEND
+
+WPC_ROMSTART(sc,18s2, "safe_18g.rom",0x80000,CRC(aeb4b669) SHA1(2925eb11133526ddff8ae92bb53f9b45c6ed8134)) SC_G_SOUND WPC_ROMEND
+WPC_ROMSTART(sc,18ns2,"safe_18n.rom",0x80000,CRC(4d5d5626) SHA1(2d6f201d47f24df2195f10267ec1426cf0a087c9)) SC_G_SOUND WPC_ROMEND
+
+WPC_ROMSTART(sc,17,   "g11-17g.rom", 0x80000,CRC(f3d64156) SHA1(9226664b59c7b65ac39e2f32597efc45672cf505)) SC_SOUND WPC_ROMEND
+WPC_ROMSTART(sc,17n,  "g11-17n.rom", 0x80000,CRC(97628907) SHA1(3435f496e1850bf433add1bc403e3148de05c13a)) SC_SOUND WPC_ROMEND
+WPC_ROMSTART(sc,14,   "g11-14.rom",  0x80000,CRC(1103f976) SHA1(6d6d23af1cd03f63b94a0ceb9711be51dce202f8)) SC_SOUND WPC_ROMEND
+WPC_ROMSTART(sc,10,   "g11-10.rom",  0x80000,CRC(752a00f7) SHA1(86dbd0203f2a651382179f433fa49ca92d9828ae)) SC_SOUND WPC_ROMEND
 WPC_ROMSTART(sc,091,  "sc_091.bin",  0x80000,CRC(b6f5307b) SHA1(93fab74db3aa62c2dd70d3a1d5664716c6548284)) SC_SOUND WPC_ROMEND
+
+WPC_ROMSTART(sc,18pfx,"safepfx_18g.rom",0x80000,CRC(4ba6b2be) SHA1(f1cc4186ed33c6f1210abbd712bece43cc7b8e6b)) SC_SOUND WPC_ROMEND // 4 bytes differ from safe_18g.rom and had the 1.0 Sound ROMs packaged
 
 /*--------------
 /  Game drivers
 /---------------*/
-CORE_GAMEDEF(sc,18,"Safe Cracker (1.8)",1998,"Bally",wpc_m95S,0)
-CORE_CLONEDEF(sc,18n,18,"Safe Cracker (1.8N)",1998,"Bally",wpc_m95S,0)
-CORE_CLONEDEF(sc,18s2,18,"Safe Cracker (1.8, alternate sound)",1998,"Bally",wpc_m95S,0)
-CORE_CLONEDEF(sc,17,18,"Safe Cracker (1.7)",1996,"Bally",wpc_m95S,0)
-CORE_CLONEDEF(sc,17n,18,"Safe Cracker (1.7N)",1996,"Bally",wpc_m95S,0)
-CORE_CLONEDEF(sc,14,18,"Safe Cracker (1.4)",1996,"Bally",wpc_m95S,0)
-CORE_CLONEDEF(sc,091,18,"Safe Cracker (0.91)",1996,"Bally",wpc_m95S,0)
+// With the percentaging version, the number of tokens issued is limited based on the game's earnings.
+// Therefore, if a game is set on free play it issues very few tokens.
+// So in a home environment the non-percentaging version is the way to go.
+CORE_GAMEDEF(sc,18s11,"Safe Cracker (1.8 / S1.1)",1998,"Bally",wpc_m95S,0)
+CORE_CLONEDEF(sc,18n11,18s11,"Safe Cracker (1.8 No Percentaging / S1.1)",1998,"Bally",wpc_m95S,0)
+CORE_CLONEDEF(sc,18s2,18s11,"Safe Cracker (1.8 / S2.4 German)",1998,"Bally",wpc_m95S,0)
+CORE_CLONEDEF(sc,18ns2,18s11,"Safe Cracker (1.8 No Percentaging / S2.4 German)",1998,"Bally",wpc_m95S,0)
+CORE_CLONEDEF(sc,17,18s11,"Safe Cracker (1.7 / S1.0)",1996,"Bally",wpc_m95S,0)
+CORE_CLONEDEF(sc,17n,18s11,"Safe Cracker (1.7 No Percentaging / S1.0)",1996,"Bally",wpc_m95S,0)
+CORE_CLONEDEF(sc,14,18s11,"Safe Cracker (1.4 / S1.0)",1996,"Bally",wpc_m95S,0)
+CORE_CLONEDEF(sc,10,18s11,"Safe Cracker (1.0 / S1.0)",1996,"Bally",wpc_m95S,0)
+CORE_CLONEDEF(sc,091,18s11,"Safe Cracker (0.91 Prototype / S1.0)",1996,"Bally",wpc_m95S,0)
+CORE_CLONEDEF(sc,18pfx,18s11,"Safe Cracker (1.8 Pinball FX / S1.0)",2019,"Zen Studios",wpc_m95S,0)
+// 1.1, 1.2, 1.5 and 1.6 exist
 
 /*-----------------------
 / Simulation Definitions
@@ -309,21 +333,27 @@ static core_tGameData scGameData = {
 
 static WRITE_HANDLER(parallel_0_out) {
   coreGlobals.lampMatrix[10] = coreGlobals.tmpLampMatrix[10] = core_revbyte(data);
+  core_write_pwm_output_8b(10 * 8, core_revbyte(data));
 }
 static WRITE_HANDLER(parallel_1_out) {
   coreGlobals.lampMatrix[9] = coreGlobals.tmpLampMatrix[9] = core_revbyte(data);
+  core_write_pwm_output_8b(9 * 8, core_revbyte(data));
 }
 static WRITE_HANDLER(parallel_2_out) {
   coreGlobals.lampMatrix[8] = coreGlobals.tmpLampMatrix[8] = core_revbyte(data);
+  core_write_pwm_output_8b(8 * 8, core_revbyte(data));
 }
 static WRITE_HANDLER(parallel_3_out) {
   coreGlobals.lampMatrix[13] = coreGlobals.tmpLampMatrix[13] = core_revbyte(data);
+  core_write_pwm_output_8b(13 * 8, core_revbyte(data));
 }
 static WRITE_HANDLER(parallel_4_out) {
   coreGlobals.lampMatrix[12] = coreGlobals.tmpLampMatrix[12] = core_revbyte(data);
+  core_write_pwm_output_8b(12 * 8, core_revbyte(data));
 }
 static WRITE_HANDLER(parallel_5_out) {
   coreGlobals.lampMatrix[11] = coreGlobals.tmpLampMatrix[11] = core_revbyte(data);
+  core_write_pwm_output_8b(11 * 8, core_revbyte(data));
 }
 static WRITE_HANDLER(qspin_0_out) {
   HC4094_data_w(1, data);
@@ -377,4 +407,5 @@ static void init_sc(void) {
   HC4094_oe_w(3, 1);
   HC4094_oe_w(4, 1);
   HC4094_oe_w(5, 1);
+  wpc_set_fastflip_addr(0x86);
 }

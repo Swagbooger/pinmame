@@ -23,8 +23,7 @@
 #define BASE_FREQUENCY 16000
 /*
   - can't say if the waveform is correct
-    (the waveform is build by a comparator chip and I'm not sure how it really 
-	works)
+    (the waveform is build by a comparator chip and I'm not sure how it really works)
   - base frequency for the counter is set to 16000 Hz, not sure if this is ok
 */
 
@@ -44,7 +43,10 @@ static struct {
   int pia0a_r;
   int pia0b_w;
 
-  int   channel;
+  int channel;
+
+  UINT8 iBuffer;
+  INT8 samples[2][32];
 } hnks_locals;
 
 MEMORY_READ_START(hnks_readmem)
@@ -66,23 +68,19 @@ static void hnks_irq(int state) {
   cpu_set_irq_line(hnks_locals.brdData.cpuNo, M6802_IRQ_LINE, state ? ASSERT_LINE : CLEAR_LINE);
 }
 
-static INT8 samples[2][32];
-static int iBuffer = 0;
-
 void start_samples(void)
 {
 	int i;
+	const unsigned char* adr = memory_region(HNK_MEMREG_SCPU) + 0xf000 + (hnks_locals.actSamples*0x20);
 
-	unsigned char* adr = memory_region(HNK_MEMREG_SCPU) + 0xf000 + (hnks_locals.actSamples*0x20);
-
-	iBuffer = 1-iBuffer;
+	hnks_locals.iBuffer = 1-hnks_locals.iBuffer;
 	for (i=0; i<0x20; i++)
-		samples[iBuffer][i] = (((*adr++)<<4)-0x80) * hnks_locals.volume; 
+		hnks_locals.samples[hnks_locals.iBuffer][i] = (INT8)((((*adr++)<<4)-0x80) * hnks_locals.volume);
 
 	// looks strange? (cond?32:1), thats ok!
 	mixer_play_sample(
 		hnks_locals.channel, 
-		samples[iBuffer],
+		hnks_locals.samples[hnks_locals.iBuffer],
 		!hnks_locals.counterReset?0x20:1, 
 		BASE_FREQUENCY/(hnks_locals.counterSpeed/((1-hnks_locals.div2)+1)+1),
 		1
@@ -98,7 +96,7 @@ static WRITE_HANDLER(pia0a_w)
   // logerror("pia0a_w: %02x\n", data);
 
   if ( samp == hnks_locals.actSamples )
-	  return;
+    return;
 
   hnks_locals.actSamples = samp;
   start_samples();
@@ -112,7 +110,7 @@ static WRITE_HANDLER(pia0b_w)
 {
   // logerror("pia0b_w: %02x\n", data);
   if ( hnks_locals.pia0b_w==data )
-	  return;
+    return;
   hnks_locals.pia0b_w = data;
 
   hnks_locals.counterSpeed = data&0x0f;
@@ -128,7 +126,7 @@ static WRITE_HANDLER(pia0ca2_w)
 {
   // logerror("pia0ca2_w: %02x\n", data);
   if ( hnks_locals.div2==data )
-	  return;
+    return;
 
   hnks_locals.div2 = data;
   start_samples();
@@ -140,7 +138,7 @@ static WRITE_HANDLER(pia0cb2_w)
 {
   // logerror("pia0cb2_w: %02x\n", data);
   if ( hnks_locals.counterReset==data )
-	  return;
+    return;
 
   hnks_locals.counterReset = data;
   start_samples();
@@ -187,7 +185,9 @@ static WRITE_HANDLER(hnks_manCmd_w) {
 
 static void hnks_init(struct sndbrdData *brdData)
 {
+  int oldCh = hnks_locals.channel;
   memset(&hnks_locals, 0x00, sizeof(hnks_locals));
+  hnks_locals.channel = oldCh;
   hnks_locals.brdData = *brdData;
 
   hnks_locals.pia0b_w = 0xff;
@@ -196,8 +196,7 @@ static void hnks_init(struct sndbrdData *brdData)
 }
 
 static int hnks_sh_start(const struct MachineSound *msound) {
-  hnks_locals.channel = mixer_allocate_channel(15);
-  mixer_set_volume(hnks_locals.channel,0xff);
+  hnks_locals.channel = mixer_allocate_channel(25);
   return 0;
 }
 

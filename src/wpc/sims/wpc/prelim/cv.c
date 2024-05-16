@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /*******************************************************************************
  Preliminary Cirqus Voltaire (Bally, 1997) Pinball Simulator
 
@@ -245,7 +247,7 @@ static void cv_drawStatic(BMTYPE **line) {
 
 static mech_tInitData cv_ringMech = {
   22, 43, MECH_LINEAR|MECH_REVERSE|MECH_ONEDIRSOL, 128, 128,
-  {{42, 0, 4},{43, 33, 38},{44,123,127}}
+  {{42, 0, 4},{43, 33, 38},{44,123,127}},0
 };
 
 static void cv_handleMech(int mech) {
@@ -296,6 +298,14 @@ DCS_SOUNDROM5xm("s2v1_0.rom",CRC(79dbb8ee) SHA1(f76c0db93b89beaf1e90c5f2199262e2
                 "s6v0_4.rom",CRC(36ca43d3) SHA1(b599f88649c220143aa44cd5213e725e62afb0bc))
 WPC_ROMEND
 
+WPC_ROMSTART(cv,d52, "cv_g11_d52.rom", 0x100000, CRC(2b6b2822) SHA1(177ddd826b7dee060d090cd79f972836a23d6df9))
+DCS_SOUNDROM5xm("s2v0_1.rom",NO_DUMP,
+                "s3v0_1.rom",NO_DUMP,
+                "s4v0_1.rom",NO_DUMP,
+                "s5v0_1.rom",NO_DUMP,
+                "s6v0_1.rom",NO_DUMP)
+WPC_ROMEND
+
 WPC_ROMSTART(cv,10, "g11_100.rom", 0x100000, CRC(00028589) SHA1(46639c45abbdc59ca0f861824eca3efa10547123))
 DCS_SOUNDROM5xm("s2v1_0.rom",CRC(79dbb8ee) SHA1(f76c0db93b89beaf1e90c5f2199262e296fb1b78),
                 "s3v0_4.rom",CRC(8c6c0c56) SHA1(792431cc5b06c3d5028168297614f5eb7e8af34f),
@@ -326,6 +336,7 @@ WPC_ROMEND
 CORE_GAMEDEF(cv,14,"Cirqus Voltaire (1.4)",1997,"Bally",wpc_m95S,0)
 CORE_CLONEDEF(cv,20h, 14, "Cirqus Voltaire (2.0H)", 1997,"Bally",wpc_m95S,0)
 CORE_CLONEDEF(cv,20hc, 14, "Cirqus Voltaire (2.0H Coin Play)", 1997,"Bally",wpc_m95S,0)
+CORE_CLONEDEF(cv,d52, 14, "Cirqus Voltaire (D.52 Prototype)", 1997,"Bally",wpc_m95S,0)
 CORE_CLONEDEF(cv,10, 14, "Cirqus Voltaire (1.0)", 1997,"Bally",wpc_m95S,0)
 CORE_CLONEDEF(cv,11, 14, "Cirqus Voltaire (1.1)", 1997,"Bally",wpc_m95S,0)
 CORE_CLONEDEF(cv,13, 14, "Cirqus Voltaire (1.3)", 1997,"Bally",wpc_m95S,0)
@@ -334,13 +345,13 @@ CORE_CLONEDEF(cv,13, 14, "Cirqus Voltaire (1.3)", 1997,"Bally",wpc_m95S,0)
 / Simulation Definitions
 /-----------------------*/
 static sim_tSimData cvSimData = {
-  2,    				/* 2 game specific input ports */
-  cv_stateDef,				/* Definition of all states */
-  cv_inportData,			/* Keyboard Entries */
+  2,					/* 2 game specific input ports */
+  cv_stateDef,			/* Definition of all states */
+  cv_inportData,		/* Keyboard Entries */
   { stTrough1, stTrough2, stTrough3, stTrough4, stDrain, stDrain, stDrain },	/*Position where balls start.. Max 7 Balls Allowed*/
   NULL, 				/* no init */
-  cv_handleBallState,			/*Function to handle ball state changes*/
-  cv_drawStatic,			/*Function to handle mechanical state changes*/
+  cv_handleBallState,	/*Function to handle ball state changes*/
+  cv_drawStatic,		/*Function to handle mechanical state changes*/
   TRUE, 				/* Simulate manual shooter? */
   NULL  				/* Custom key conditions? */
 };
@@ -354,7 +365,10 @@ static core_tGameData cvGameData = {
     FLIP_SW(FLIP_L | FLIP_U) | FLIP_SOL(FLIP_L),
     0,0,2,0,0,1,0,
     cv_getSol, cv_handleMech, cv_getMech, cv_drawMech,
-    NULL, NULL
+    NULL
+#ifdef ENABLE_MECHANICAL_SAMPLES
+    , NULL
+#endif
   },
   &cvSimData,
   {
@@ -372,5 +386,6 @@ static core_tGameData cvGameData = {
 static void init_cv(void) {
   core_gameData = &cvGameData;
   mech_add(0, &cv_ringMech);
+  wpc_set_fastflip_addr(0x80);
 }
 

@@ -40,7 +40,7 @@ static struct {
   int p0_a;
   int bcd[5];
   int lampaddr;
-  int diagnosticLed;
+  //int diagnosticLed;
   int vblankCount;
   int swCol;
   int disp_enable;		//Is Display Enabled
@@ -49,6 +49,8 @@ static struct {
   UINT32 solenoids;
   core_tSeg segments,pseg;
   WRITE_HANDLER((*PORTA_WRITE));
+
+  UINT8 val;
 } locals;
 
 static void GP_dispStrobe(int mask) {
@@ -91,7 +93,7 @@ static void GP_lampStrobe2(int lampadr, int lampdata) {
 
 static void GP_UpdateSolenoids (int bank, int data) {
   static UINT32 mask = 0xC0008000;
-  UINT32 sols = 0;
+  UINT32 sols;
   int soldata = data & 0x0f;
   if (bank == 0) { // solenoids 1-15
     if (soldata != 0x0f) {
@@ -102,7 +104,7 @@ static void GP_UpdateSolenoids (int bank, int data) {
       locals.solenoids |= sols;
       coreGlobals.solenoids = locals.solenoids;
     } else { // until we find another way to turn the solenoids back off...
-	  if (core_gameData->hw.soundBoard == SNDBRD_GPSSU1) sndbrd_0_data_w(0, soldata);
+      if (core_gameData->hw.soundBoard == SNDBRD_GPSSU1) sndbrd_0_data_w(0, soldata);
       coreGlobals.pulsedSolState &= mask;
       locals.solenoids &= mask;
     }
@@ -126,7 +128,7 @@ static INTERRUPT_GEN(GP_vblank) {
   /*-------------------------------
   /  copy local data to interface
   /--------------------------------*/
-  locals.vblankCount += 1;
+  locals.vblankCount++;
 
   /*-- lamps --*/
   if ((locals.vblankCount % GP_LAMPSMOOTH) == 0) {
@@ -149,16 +151,15 @@ static INTERRUPT_GEN(GP_vblank) {
 }
 
 static SWITCH_UPDATE(GP) {
-  static UINT8 val = 0;
   if (inports) {
-	coreGlobals.swMatrix[0] = (inports[GP_COMINPORT]>>9) & 0x03;
-	coreGlobals.swMatrix[1] = (coreGlobals.swMatrix[1] & (~0xf7)) |
+    coreGlobals.swMatrix[0] = (inports[GP_COMINPORT]>>9) & 0x03;
+    coreGlobals.swMatrix[1] = (coreGlobals.swMatrix[1] & (~0xf7)) |
                               ((inports[GP_COMINPORT] & 0xff) & 0xf7);
-	coreGlobals.swMatrix[4] = (coreGlobals.swMatrix[4] & (~0x02)) |
+    coreGlobals.swMatrix[4] = (coreGlobals.swMatrix[4] & (~0x02)) |
                               ((inports[GP_COMINPORT]>>7) & 0x02);
   }
   /*-- Diagnostic buttons on CPU board --*/
-  if (core_getSw(GP_SWTEST)) generic_nvram[0xac] = val++;
+  if (core_getSw(GP_SWTEST)) generic_nvram[0xac] = locals.val++;
   if (core_getSw(GP_SWSOUNDDIAG) && core_gameData->hw.soundBoard == SNDBRD_GPMSU3)
     cpu_set_nmi_line(GP_SCPUNO, PULSE_LINE);
 }
@@ -339,9 +340,21 @@ static WRITE_HANDLER(ppi0_pc_w) {
 	//Display Enabled only when this value is 0
 	locals.disp_enable = !((data>>4)&1);
 
-	if ((data>>7)&1) locals.solenoids |= 0x8000; else locals.solenoids &= ~0x8000;
-	if ((data>>5)&1) locals.solenoids |= 0x40000000; else locals.solenoids &= ~0x40000000;
-	if ((data>>6)&1) locals.solenoids |= 0x80000000; else locals.solenoids &= ~0x80000000;
+	if ((data>>7)&1) {
+		locals.solenoids |= 0x8000; coreGlobals.pulsedSolState |= 0x8000;
+	} else {
+		locals.solenoids &= ~0x8000; coreGlobals.pulsedSolState &= ~0x8000;
+	}
+	if ((data>>5)&1) {
+		locals.solenoids |= 0x40000000; coreGlobals.pulsedSolState |= 0x40000000;
+	} else {
+		locals.solenoids &= ~0x40000000; coreGlobals.pulsedSolState &= ~0x40000000;
+	}
+	if ((data>>6)&1) {
+		locals.solenoids |= 0x80000000; coreGlobals.pulsedSolState |= 0x80000000;
+	} else {
+		locals.solenoids &= ~0x80000000; coreGlobals.pulsedSolState &= ~0x80000000;
+	}
 }
 
 /*

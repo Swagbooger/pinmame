@@ -12,16 +12,19 @@
 #pragma once
 #endif
 
-#ifdef WIN32
+#ifdef _WIN32
 
+#ifndef WIN32_LEAN_AND_MEAN
+//#define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <direct.h>
 #include <sys/types.h>
 
 #if !defined(__GNUC__)
 /* Convienience macros used with stat structures */
-#define S_ISDIR(x) (x & _S_IFDIR)
-#define S_ISREG(x) (x & _S_IFREG)
+#define S_ISDIR(x) ((x) & _S_IFDIR)
+#define S_ISREG(x) ((x) & _S_IFREG)
 #endif
 
 /* Structure to keep track of the current directory status */
@@ -34,7 +37,7 @@ typedef struct my_dir {
 
 /* Standard directory name entry returned by readdir() */
 struct dirent {
-  char d_namlen;
+  unsigned int d_namlen;
   char d_name[MAX_PATH];
 };
 

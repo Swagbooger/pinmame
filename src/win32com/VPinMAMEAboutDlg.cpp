@@ -12,6 +12,10 @@
 static 	HBRUSH hLinkBrush = 0;
 static	HFONT  hFont = 0;
 
+#ifdef _WIN64
+ #define GCL_HCURSOR         (-12)
+#endif
+
 class CAboutDlg : public CDialogImpl<CAboutDlg> {
 public:
 	BEGIN_MSG_MAP(CAboutDlg)
@@ -28,11 +32,11 @@ public:
 private:
 	int GetVersionResourceEntry(LPCTSTR lpszFilename, LPCTSTR lpszResourceEntry, LPTSTR lpszBuffer, WORD wMaxSize) {
 		DWORD   dwVerHandle; 
-		DWORD	dwInfoSize;
+		DWORD   dwInfoSize;
 		HANDLE  hVersionInfo;
 		LPVOID  lpEntryInfo;
 		LPVOID  lpEntry;
-		UINT	wEntrySize;
+		UINT    wEntrySize;
 		LPDWORD lpdwVar;
 		UINT    wVarSize;
 		DWORD   dwTranslation;
@@ -63,7 +67,7 @@ private:
 		
 		dwTranslation = (*lpdwVar/65536) + (*lpdwVar%65536)*65536;
 
-		wsprintf(szEntry, "StringFileInfo\\%0.8x\\%s", dwTranslation, lpszResourceEntry);
+		wsprintf(szEntry, TEXT("StringFileInfo\\%0.8x\\%s"), dwTranslation, lpszResourceEntry);
 
 		if ( !VerQueryValue(lpEntryInfo, szEntry, &lpEntry, &wEntrySize) )
 			return 0;
@@ -71,7 +75,7 @@ private:
 		if ( wEntrySize>wMaxSize )
 			wEntrySize = wMaxSize;
 
-		lstrcpyn(lpszBuffer, (LPSTR) lpEntry, wEntrySize);
+		strncpy(lpszBuffer, (LPSTR) lpEntry, wEntrySize);
 
 		GlobalUnlock(hVersionInfo);
 		GlobalFree(hVersionInfo);
@@ -89,27 +93,23 @@ private:
 		char szVersion[256];
 		GetVersionResourceEntry(szFilename, TEXT("ProductVersion"), szVersion, sizeof szVersion);
 
-		char szVersionText[256], szBuildDateText[256], szFormat[256];  
+		TCHAR szVersionText[256], szBuildDateText[256], szFormat[256];
 		GetDlgItemText(IDC_VERSION, szFormat, sizeof szVersionText);
 		wsprintf(szVersionText, szFormat, szVersion);
 
-		//Add compile time specific strings to version string
-		char szAdjust[MAX_PATH];
-		wsprintf(szAdjust,"%s","");
-#ifdef MAME_DEBUG
-		wsprintf(szAdjust,"%s","DEBUG");
-#else
-	#ifdef TEST_NEW_STERN
-		wsprintf(szAdjust,"%s","STERN");
-	#endif
-	#ifdef NO_EXPIRATION_DATE
-		if(strcmp(szAdjust,"STERN")==0)
-			wsprintf(szAdjust,"%s","DEV");
-		else
-			wsprintf(szAdjust,"%s%s",szAdjust,"NO EXPIRE");
-	#endif
+#if defined(__LP64__) || defined(_WIN64)
+		wsprintf(szVersionText, TEXT("%s (x64)"), szVersionText);
 #endif
-		if(strlen(szAdjust)) wsprintf(szVersionText, "%s (%s)",szVersionText,szAdjust);
+
+		//Add compile time specific strings to version string
+		TCHAR szAdjust[MAX_PATH];
+#ifdef MAME_DEBUG
+		wsprintf(szAdjust,TEXT("%s"),TEXT("DEBUG"));
+#else
+		wsprintf(szAdjust,TEXT("%s"),TEXT(""));
+#endif
+		if(strlen(szAdjust))
+			wsprintf(szVersionText, TEXT("%s (%s)"),szVersionText,szAdjust);
 		//
 		SetDlgItemText(IDC_VERSION, szVersionText);
 		wsprintf(szBuildDateText,GetBuildDateString());
@@ -131,7 +131,7 @@ private:
 			// so the mouse cursor will turn to a pointing finger over the link.
 			// However this won't compile on certain OS's, but MAKEINTRESOURCE(32649)
 			// seems to work fine, so we just use this one instead...
-			SetClassLong(GetDlgItem(IDC_HOMEPAGELINK),GCL_HCURSOR, (long)LoadCursor(NULL, MAKEINTRESOURCE(32649)));
+			SetClassLongPtr(GetDlgItem(IDC_HOMEPAGELINK),GCL_HCURSOR, (LONG_PTR)LoadCursor(NULL, MAKEINTRESOURCE(32649)));
 		}
 		//MUST RETURN 1
 		return 1;
@@ -151,10 +151,10 @@ private:
 
 	/*HOMEPAGELINK CLICKED*/
 	LRESULT OnHomePageLink(WORD, UINT, HWND, BOOL&) {
-		ShellExecute(GetActiveWindow(),"open","http://www.pinmame.com",NULL,NULL,SW_SHOW);
+		ShellExecute(GetActiveWindow(),"open","https://github.com/vpinball/pinmame/",NULL,NULL,SW_SHOW);
 		return 0;
 	}
-	
+
 	/*Dialog Destroy*/
 	LRESULT OnDestroyDialog(UINT, WPARAM, LPARAM, BOOL&) {
 		DeleteObject(hLinkBrush);
@@ -184,7 +184,7 @@ void ShowAboutDlg(HWND hParent)
 
 char * GetBuildDateString(void)
 {
-    static char tmp[120];
-    wsprintf(tmp,"%s",__DATE__);
-    return tmp;
+	static TCHAR tmp[120];
+	wsprintf(tmp,TEXT("%s"),__DATE__);
+	return tmp;
 }

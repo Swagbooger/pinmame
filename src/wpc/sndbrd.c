@@ -12,6 +12,9 @@
    static const struct sndbrdIntf *allsndboards[] = { &noSound,
 #  include "sndbrd.c"
    NULL};
+#if defined(PINMAME) && defined(LISY_SUPPORT)
+#include "lisy/lisy.h"
+#endif /* PINMAME && LISY_SUPPORT */
 
 static struct intfData {
   const struct sndbrdIntf *brdIntf;
@@ -45,6 +48,8 @@ void sndbrd_init(int brdNo, int brdType, int cpuNo, UINT8 *romRegion,
     if (b && (coreGlobals.soundEn || b->flags & SNDBRD_NOTSOUND) && b->init)
       b->init(&brdData);
   }
+
+  reinit_pinSound();
 }
 
 int sndbrd_exists(int board) {
@@ -69,8 +74,12 @@ void sndbrd_diag(int board, int button) {
 
 void sndbrd_data_w(int board, int data) {
   const struct sndbrdIntf *b = intf[board].brdIntf;
-    if(b && (b->flags & SNDBRD_NOTSOUND)==0)
-		snd_cmd_log(board, data);
+  if(b && (b->flags & SNDBRD_NOTSOUND)==0) {
+	snd_cmd_log(board, data);
+#if defined(LISY_SUPPORT)
+	lisy_sound_handler( board, data );
+#endif
+  }
   if (b && (coreGlobals.soundEn || (b->flags & SNDBRD_NOTSOUND)) && b->data_w) {
 #if 0
     if((b->flags & SNDBRD_NOTSOUND)==0)
@@ -79,7 +88,10 @@ void sndbrd_data_w(int board, int data) {
     if (b->flags & SNDBRD_NODATASYNC)
       b->data_w(board, data);
     else
+    {
       sndbrd_sync_w(b->data_w, board, data);
+      //snd_cmd_log(board, data);
+    }
   }
 }
 int sndbrd_data_r(int board) {
@@ -239,6 +251,9 @@ const struct sndbrdIntf NULLIntf = { 0 }; // remove when all boards below works.
   SNDBRDINTF(play2s)
   SNDBRDINTF(play3s)
   SNDBRDINTF(play4s)
+  SNDBRDINTF(zsu)
   SNDBRDINTF(playzs)
   SNDBRDINTF(tecnoplay)
+  SNDBRDINTF(joctronic)
+  SNDBRDINTF(barni)
 #endif /* SNDBRD_RECURSIVE */

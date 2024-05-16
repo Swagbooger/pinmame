@@ -43,15 +43,15 @@ struct MachineCPU
 {
 	int			cpu_type;					/* index for the CPU type */
 	int			cpu_flags;					/* flags; see #defines below */
-	int			cpu_clock;					/* in Hertz */
+	double		cpu_clock;					/* in Hertz */
 	const void *memory_read;				/* struct Memory_ReadAddress */
 	const void *memory_write;				/* struct Memory_WriteAddress */
 	const void *port_read;
 	const void *port_write;
-	void 		(*vblank_interrupt)(void);	/* for interrupts tied to VBLANK */
-	int 		vblank_interrupts_per_frame;/* usually 1 */
-	void 		(*timed_interrupt)(void);	/* for interrupts not tied to VBLANK */
-	int 		timed_interrupts_per_second;
+	void		(*vblank_interrupt)(void);	/* for interrupts tied to VBLANK */
+	double		vblank_interrupts_per_frame;/* usually 1 */
+	void		(*timed_interrupt)(void);	/* for interrupts not tied to VBLANK */
+	double		timed_interrupts_per_second;
 	void *		reset_param;				/* parameter for cpu_reset */
 	const char *tag;
 };
@@ -217,11 +217,9 @@ int cycles_currently_ran(void);
 int cycles_left_to_run(void);
 
 /* Returns the total number of CPU cycles */
-UINT32 activecpu_gettotalcycles(void);
 UINT64 activecpu_gettotalcycles64(void);
 
 /* Returns the total number of CPU cycles for a given CPU */
-UINT32 cpunum_gettotalcycles(int cpunum);
 UINT64 cpunum_gettotalcycles64(int cpunum);
 
 /* Returns the number of CPU cycles before the next interrupt handler call */
@@ -231,7 +229,6 @@ int activecpu_geticount(void);
 int cpu_scalebyfcount(int value);
 
 /* Backwards compatibility */
-#define cpu_gettotalcycles cpunum_gettotalcycles
 #define cpu_gettotalcycles64 cpunum_gettotalcycles64
 
 
@@ -326,7 +323,9 @@ void cpu_yielduntil_time(double duration);
    that the interrupt handler will be called once. */
 int cpu_getiloops(void);
 
-
+#ifdef PINMAME
+void run_one_timeslice(void);
+#endif
 
 /*************************************
  *

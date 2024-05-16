@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /*******************************************************************************
  Harley Davidson (Sega/Stern) Pinball Simulator
 
@@ -499,13 +501,13 @@ SE128_ROMSTART(harl_l13,"harcpu.103",CRC(2a812c75) SHA1(46e1f18e1c9992ca1823f781
 DE_DMD32ROM8x("hddisps.104",CRC(2d26514a) SHA1(f15b22cad6329f29cd5cccfb91a2ba7ca2cd6d59)) HARLEY_SOUND
 SE_ROMEND
 
-CORE_GAMEDEF(harl,a13,"Harley Davidson (1.03)",1999,"Sega",de_mSES1,0)
-CORE_CLONEDEF(harl,u13,a13,"Harley Davidson (1.03 UK)",1999,"Sega",de_mSES1,0)
-CORE_CLONEDEF(harl,a10,a13,"Harley Davidson (1.03, Display rev. 1.00)",1999,"Sega",de_mSES1,0)
-CORE_CLONEDEF(harl,f13,a13,"Harley Davidson (1.03, France)",1999,"Sega",de_mSES1,0)
-CORE_CLONEDEF(harl,g13,a13,"Harley Davidson (1.03, Germany)",1999,"Sega",de_mSES1,0)
-CORE_CLONEDEF(harl,i13,a13,"Harley Davidson (1.03, Italy)",1999,"Sega",de_mSES1,0)
-CORE_CLONEDEF(harl,l13,a13,"Harley Davidson (1.03, Spain)",1999,"Sega",de_mSES1,0)
+CORE_GAMEDEF(harl,a13,"Harley-Davidson (Sega, 1.03, Display 1.04)",1999,"Sega",de_mSES1,0)
+CORE_CLONEDEF(harl,u13,a13,"Harley-Davidson (Sega, 1.03 English)",1999,"Sega",de_mSES1,0)
+CORE_CLONEDEF(harl,a10,a13,"Harley-Davidson (Sega, 1.03, Display 1.00)",1999,"Sega",de_mSES1,0)
+CORE_CLONEDEF(harl,f13,a13,"Harley-Davidson (Sega, 1.03 French)",1999,"Sega",de_mSES1,0)
+CORE_CLONEDEF(harl,g13,a13,"Harley-Davidson (Sega, 1.03 German)",1999,"Sega",de_mSES1,0)
+CORE_CLONEDEF(harl,i13,a13,"Harley-Davidson (Sega, 1.03 Italian)",1999,"Sega",de_mSES1,0)
+CORE_CLONEDEF(harl,l13,a13,"Harley-Davidson (Sega, 1.03 Spanish)",1999,"Sega",de_mSES1,0)
 
 /********************* STERN GAMES  **********************/
 /*-------------------------------------------------------------------
@@ -571,24 +573,21 @@ SE128_ROMSTART(harl_l18,"harcpu.108",CRC(a8e24328) SHA1(cc32d97521f706e3d8ddcf41
 DE_DMD32ROM8x("hddisps.105",CRC(6d6f2a7c) SHA1(1609c69a1584398c3504bb5a0c46f878e8dd547c)) HARLEY_SOUND
 SE_ROMEND
 
-CORE_GAMEDEF(harl,a40,"Harley Davidson (4.00)",2004,"Stern",de_mSES1,0)
-CORE_CLONEDEF(harl,f40,a40,"Harley Davidson (4.00, France)",2004,"Stern",de_mSES1,0)
-CORE_CLONEDEF(harl,g40,a40,"Harley Davidson (4.00, Germany)",2004,"Stern",de_mSES1,0)
-CORE_CLONEDEF(harl,i40,a40,"Harley Davidson (4.00, Italy)",2004,"Stern",de_mSES1,0)
-CORE_CLONEDEF(harl,l40,a40,"Harley Davidson (4.00, Spain)",2004,"Stern",de_mSES1,0)
-CORE_CLONEDEF(harl,a30,a40,"Harley Davidson (3.00)",2004,"Stern",de_mSES1,0)
-CORE_CLONEDEF(harl,f30,a40,"Harley Davidson (3.00, France)",2004,"Stern",de_mSES1,0)
-CORE_CLONEDEF(harl,g30,a40,"Harley Davidson (3.00, Germany)",2004,"Stern",de_mSES1,0)
-CORE_CLONEDEF(harl,i30,a40,"Harley Davidson (3.00, Italy)",2004,"Stern",de_mSES1,0)
-CORE_CLONEDEF(harl,l30,a40,"Harley Davidson (3.00, Spain)",2004,"Stern",de_mSES1,0)
-CORE_CLONEDEF(harl,a18,a40,"Harley Davidson (1.08)",2003,"Stern",de_mSES1,0)
-CORE_CLONEDEF(harl,f18,a40,"Harley Davidson (1.08, France)",2003,"Stern",de_mSES1,0)
-CORE_CLONEDEF(harl,g18,a40,"Harley Davidson (1.08, Germany)",2003,"Stern",de_mSES1,0)
-CORE_CLONEDEF(harl,i18,a40,"Harley Davidson (1.08, Italy)",2003,"Stern",de_mSES1,0)
-CORE_CLONEDEF(harl,l18,a40,"Harley Davidson (1.08, Spain)",2003,"Stern",de_mSES1,0)
-
-
-
+CORE_GAMEDEF(harl,a40,"Harley-Davidson (Stern, 4.00)",2004,"Stern",de_mSES1,0)
+CORE_CLONEDEF(harl,f40,a40,"Harley-Davidson (Stern, 4.00 French)",2004,"Stern",de_mSES1,0)
+CORE_CLONEDEF(harl,g40,a40,"Harley-Davidson (Stern, 4.00 German)",2004,"Stern",de_mSES1,0)
+CORE_CLONEDEF(harl,i40,a40,"Harley-Davidson (Stern, 4.00 Italian)",2004,"Stern",de_mSES1,0)
+CORE_CLONEDEF(harl,l40,a40,"Harley-Davidson (Stern, 4.00 Spanish)",2004,"Stern",de_mSES1,0)
+CORE_CLONEDEF(harl,a30,a40,"Harley-Davidson (Stern, 3.00)",2004,"Stern",de_mSES1,0)
+CORE_CLONEDEF(harl,f30,a40,"Harley-Davidson (Stern, 3.00 French)",2004,"Stern",de_mSES1,0)
+CORE_CLONEDEF(harl,g30,a40,"Harley-Davidson (Stern, 3.00 German)",2004,"Stern",de_mSES1,0)
+CORE_CLONEDEF(harl,i30,a40,"Harley-Davidson (Stern, 3.00 Italian)",2004,"Stern",de_mSES1,0)
+CORE_CLONEDEF(harl,l30,a40,"Harley-Davidson (Stern, 3.00 Spanish)",2004,"Stern",de_mSES1,0)
+CORE_CLONEDEF(harl,a18,a40,"Harley-Davidson (Stern, 1.08)",2003,"Stern",de_mSES1,0)
+CORE_CLONEDEF(harl,f18,a40,"Harley-Davidson (Stern, 1.08 French)",2003,"Stern",de_mSES1,0)
+CORE_CLONEDEF(harl,g18,a40,"Harley-Davidson (Stern, 1.08 German)",2003,"Stern",de_mSES1,0)
+CORE_CLONEDEF(harl,i18,a40,"Harley-Davidson (Stern, 1.08 Italian)",2003,"Stern",de_mSES1,0)
+CORE_CLONEDEF(harl,l18,a40,"Harley-Davidson (Stern, 1.08 Spanish)",2003,"Stern",de_mSES1,0)
 
 
 
@@ -638,7 +637,7 @@ static core_tGameData harlGameData = {
 static void init_harl(void) {
   core_gameData = &harlGameData;
   /* initialize random seed: */
-  srand ( time(NULL) );
+  srand ( (unsigned int)time(NULL) );
 }
 
 
@@ -684,6 +683,7 @@ static void harley_handleMech(int mech)
 					locals.motodir = MOTO_DIR_UP;
 				else
 					locals.motodir = MOTO_DIR_DOWN;
+				break;
 			case MOTO_DIR_UP:
 				locals.motopos++;
 				//stop at top

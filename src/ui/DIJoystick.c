@@ -23,7 +23,7 @@
 #include <stdio.h>
 #include <math.h>
 
-#include "screenshot.h"
+#include "Screenshot.h"
 #include "MAME32.h"
 #include "DirectInput.h"
 #include "DIJoystick.h"
@@ -226,7 +226,7 @@ static void DIJoystick_poll_joysticks(void)
 
 static int DIJoystick_is_joy_pressed(int joycode)
 {
-	int joy_num;
+	unsigned int joy_num;
 	int stick;
 	int axis;
 	int dir;
@@ -290,9 +290,9 @@ static int DIJoystick_is_joy_pressed(int joycode)
 
 		/* angle is now in degrees counterclockwise from x axis*/
 		if (axis == 1)
-			axis_value = 128 + (int)(127 * cos(2 * PI * angle / 360.0)); /* x */
+			axis_value = 128 + (int)(127. * cos((2. * PI / 360.0) * angle )); /* x */
 		else
-			axis_value = 128 + (int)(127 * sin(2 * PI * angle / 360.0)); /* y */
+			axis_value = 128 + (int)(127. * sin((2. * PI / 360.0) * angle )); /* y */
 
 		if (dir == 1)
 			return axis_value <= (128 - 128 * dz / 100);

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /*******************************************************************************
  Preliminary Indianapolis 500 (Bally, 1995) Pinball Simulator
 
@@ -299,20 +301,20 @@ WPC_ROMEND
 /  Game drivers
 /---------------*/
 CORE_GAMEDEF(i500,11r,"Indianapolis 500 (1.1R)",1995,"Bally",wpc_mSecurityS,0)
-CORE_CLONEDEF(i500,11b,11r,"Indianapolis 500 (1.1 Belgium)",1995,"Bally",wpc_mSecurityS,0)
+CORE_CLONEDEF(i500,11b,11r,"Indianapolis 500 (1.1 Belgian)",1995,"Bally",wpc_mSecurityS,0)
 CORE_CLONEDEF(i500,10r,11r,"Indianapolis 500 (1.0R)",1995,"Bally",wpc_mSecurityS,0)
 
 /*-----------------------
 / Simulation Definitions
 /-----------------------*/
 static sim_tSimData i500SimData = {
-  2,    				/* 2 game specific input ports */
-  i500_stateDef,			/* Definition of all states */
-  i500_inportData,			/* Keyboard Entries */
+  2,					/* 2 game specific input ports */
+  i500_stateDef,		/* Definition of all states */
+  i500_inportData,		/* Keyboard Entries */
   { stTrough1, stTrough2, stTrough3, stTrough4, stDrain, stDrain, stDrain },	/*Position where balls start.. Max 7 Balls Allowed*/
   NULL, 				/* no init */
-  i500_handleBallState,			/*Function to handle ball state changes*/
-  i500_drawStatic,			/*Function to handle mechanical state changes*/
+  i500_handleBallState,	/*Function to handle ball state changes*/
+  i500_drawStatic,		/*Function to handle mechanical state changes*/
   FALSE, 				/* Simulate manual shooter? */
   NULL  				/* Custom key conditions? */
 };
@@ -326,7 +328,10 @@ static core_tGameData i500GameData = {
     FLIP_SW(FLIP_L | FLIP_U) | FLIP_SOL(FLIP_L | FLIP_UR),
     0,0,0,0,0,0,0,
     NULL, i500_handleMech, i500_getMech, i500_drawMech,
-    NULL, NULL
+    NULL
+#ifdef ENABLE_MECHANICAL_SAMPLES
+    , NULL
+#endif
   },
   &i500SimData,
   {
@@ -344,4 +349,3 @@ static core_tGameData i500GameData = {
 static void init_i500(void) {
   core_gameData = &i500GameData;
 }
-

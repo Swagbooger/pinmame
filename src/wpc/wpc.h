@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 #ifndef INC_WPC
 #define INC_WPC
 #if !defined(__GNUC__) || (__GNUC__ == 3 && __GNUC_MINOR__ >= 4) || (__GNUC__ >= 4)	// GCC supports "pragma once" correctly since 3.4
@@ -109,6 +111,13 @@ extern const core_tLCDLayout wpc_dispDMD[];
        ROM_LOAD(n1, 0x00000, size, chk1)
 #define WPC_ROMEND ROM_END
 
+#define WPC_ROMSTARTNV(name, n1, size, chk1) \
+   ROM_START(name) \
+     NORMALREGION(0x10000, WPC_CPUREGION) \
+     NORMALREGION(0x2000,  WPC_DMDREGION) \
+     NORMALREGION(size,    WPC_ROMREGION) \
+       ROM_LOAD(n1, 0x00000, size, chk1)
+
 /*----------------------------------
 /  Start address for the WPC chip
 /-----------------------------------*/
@@ -150,6 +159,11 @@ extern const core_tLCDLayout wpc_dispDMD[];
 #define WPC_PRINTBUSY     (0x3fc0 - WPC_BASE) /* xxxxx  R: Printer ready ??? */
 #define WPC_PRINTDATA     (0x3fc1 - WPC_BASE) /* xxxxx  W: send to printer */
 #define WPC_PRINTDATAX    (0x3fc2 - WPC_BASE) /* xxxxx  W: 0: Printer data available */
+#define WPC_SERIAL_DATA   (0x3fc3 - WPC_BASE)
+#define WPC_SERIAL_CTRL   (0x3fc4 - WPC_BASE)
+#define WPC_SERIAL_BAUD   (0x3fc5 - WPC_BASE)
+/* Ticket dispenser board */
+#define WPC_TICKET_DISP   (0x3fc6 - WPC_BASE)
 /* Fliptronics 2 Board */
 #define WPC_FLIPPERS      (0x3fd4 - WPC_BASE) /*   xxx  R: switches W: Solenoids */
 /* Sound board */
@@ -177,7 +191,7 @@ extern const core_tLCDLayout wpc_dispDMD[];
 #define WPC_ALPHA1LO      (0x3fed - WPC_BASE) /* x      W: Display 1st row lo bits */
 #define WPC_EXTBOARD4     (0x3fee - WPC_BASE) /*   x    W: Extension Driver Board 4 */
 #define WPC_FLIPPERCOIL95 (0x3fee - WPC_BASE) /*      x W: Flipper Solenoids */
-#define WPC_ALPHA2HI      (0x3fee - WPC_BASE) /* x      W: Display 2nd row hi bits */
+#define WPC_ALPHA2HI      (0x3fef - WPC_BASE) /* x      W: Display 2nd row hi bits */
 #define WPC_ALPHA2LO      (0x3fee - WPC_BASE) /* x      W:           b 2nd row lo bits */
 #define WPC_EXTBOARD5     (0x3fef - WPC_BASE) /*   x    W: Extension Driver Board 5 */
 #define WPC_FLIPPERSW95   (0x3fef - WPC_BASE) /*      x R: Flipper switches */
@@ -195,14 +209,18 @@ extern const core_tLCDLayout wpc_dispDMD[];
 #define WPC_PROTMEMCTRL   (0x3ffe - WPC_BASE) /* xxxxxx W: Set protected memory area */
 #define WPC_WATCHDOG      (0x3fff - WPC_BASE) /* xxxxxx W: Watchdog */
 
-#define WPC_VBLANKFREQ    60 /* VBLANK frequency */
-
 /*-- the internal state of the WPC chip. Should only be used in memory handlers --*/
 extern UINT8 *wpc_data;
+extern UINT8 *wpc_ram;
 
 /*---------------------
 /  Exported functions
 /----------------------*/
+
+/*--- memory handlers for the Orkin debugger interface --*/
+extern READ_HANDLER(orkin_r);
+extern WRITE_HANDLER(orkin_w);
+
 /*-- use this if a fallback is required in a custom memory handler --*/
 extern READ_HANDLER(wpc_r);
 extern WRITE_HANDLER(wpc_w);
@@ -210,7 +228,6 @@ extern WRITE_HANDLER(wpc_w);
 /*-- use this function to send FIRQ to main CPU --*/
 #define WPC_FIRQ_DMD    0x01
 #define WPC_FIRQ_SOUND  0x02
-extern void wpc_firq(int set, int src);
 
 extern MACHINE_DRIVER_EXTERN(wpc_alpha);
 extern MACHINE_DRIVER_EXTERN(wpc_dmd);
@@ -232,5 +249,19 @@ extern MACHINE_DRIVER_EXTERN(wpc_95S);
 #define wpc_m95DCSS      wpc_dcsS
 #define wpc_m95S         wpc_95S
 
-#endif /* INC_WPC */
+// Game specific options
+#define WPC_CFTBL       0x01 // CFTBL specific hardware: chase light 2 bit decoder from solenoid #3 output, wired through triacs to 2 GI outputs, leading to 8 additional PWM controlled GI
+#define WPC_PH          0x02 // Phantom Haus specific hardware (not really a pinball)
 
+
+int wpc_m2sw(int col, int row);
+void wpc_set_modsol_aux_board(int board);
+void wpc_set_fastflip_addr(int addr);
+
+#ifdef PROC_SUPPORT
+  typedef void (*wpc_proc_solenoid_handler_t)(int solNum, int enabled, int smoothed);
+  void default_wpc_proc_solenoid_handler(int solNum, int enabled, int smoothed);
+  extern wpc_proc_solenoid_handler_t wpc_proc_solenoid_handler;
+#endif
+
+#endif /* INC_WPC */

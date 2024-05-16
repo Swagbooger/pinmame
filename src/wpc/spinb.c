@@ -165,7 +165,7 @@ SND CPU #2 8255 PPI
 #include "sndbrd.h"
 #include "spinb.h"
 
-//#define VERBOSE 1
+//#define VERBOSE
 
 #ifdef VERBOSE
 #define LOG(x)	logerror x
@@ -180,9 +180,8 @@ SND CPU #2 8255 PPI
 #define DMD_FROM_RAM 0
 
 #define SPINB_Z80CPU_FREQ   5000000 /* should be  2500000 2.5 MHz, tweaked for playability */
-#define SPINB_8051CPU_FREQ 24000000 /* should be 16000000  16 MHz, tweaked for playability */
+#define SPINB_8051CPU_FREQ 20000000 /* should be 16000000  16 MHz, tweaked for playability */
 
-//#define SPINB_INTFREQ      210 /* (180 ?) Z80 Interrupt frequency (variable! according to schematics!) */
 #define INTCYCLES             90 /* keep irq high for this many cycles */
 #define SPINB_NMIFREQ       1440 /* Z80 NMI frequency (confirmed by Jolly Park schematics) (should probably be INTFRQ*8=2000) */
 
@@ -247,7 +246,7 @@ struct {
   UINT32 solenoids;
   UINT16 lampColumn;
   int    lampRow, swCol;
-  int    diagnosticLed;
+  //int    diagnosticLed;
   int    ssEn;
   int    L16isGameOn;
   int    mainIrq;
@@ -464,11 +463,11 @@ READ_HANDLER(ci20_portb_r) { LOG(("UNDOCUMENTED: ci20_portb_r\n")); return 0; }
 
 //Switch Returns
 READ_HANDLER(ci20_portc_r) {
-	UINT8 data = 0;
+	UINT8 data;
 	if (SPINBlocals.swCol > 2)	//Switch Column Strobe
 		data = coreGlobals.swMatrix[SPINBlocals.swCol-2];	//so we begin by reading column 1 of input matrix instead of 0 which is used for special switches in many drivers
 	else	//Dip Column Strobe
- 		data = core_getDip(SPINBlocals.swCol);
+		data = core_getDip(SPINBlocals.swCol);
 
 	return data; //(data & 0xf0) | (core_revnyb(data & 0x0f));	//Lower nibble is reversed according to schematic, but not IRL!
 }
@@ -656,7 +655,7 @@ WRITE_HANDLER(ci21_portb_w) {
   if (!SPINBlocals.nmiSeries)
     coreGlobals.tmpLampMatrix[0] |= data;
   else
-    if (data) solenoid_w(2,data ^ ~SPINBlocals.solInv2);
+    solenoid_w(2,data ^ ~SPINBlocals.solInv2);
 }
 /*
 CI-21 8255 PPI
@@ -896,17 +895,17 @@ static MACHINE_INIT(spinb) {
 
   /* Init the dmd & sound board */
   sndbrd_0_init(core_gameData->hw.soundBoard,   2, memory_region(SPINB_MEMREG_SND1),NULL,NULL);
-  SPINBlocals.nmiSeries=0;
+  SPINBlocals.nmiSeries = 0;
 }
 
 static MACHINE_INIT(spinbnmi) {
   machine_init_spinb();
-  SPINBlocals.nmiSeries=1;
+  SPINBlocals.nmiSeries = 1;
 }
 
 static MACHINE_INIT(spinbnmi2) {
   machine_init_spinb();
-  SPINBlocals.nmiSeries=2;
+  SPINBlocals.nmiSeries = 2;
 }
 
 static MACHINE_RESET(spinb) {
@@ -915,6 +914,8 @@ static MACHINE_RESET(spinb) {
 
 static MACHINE_STOP(spinb) {
   sndbrd_0_exit();
+
+  timer_remove(SPINBlocals.irqtimer);
 }
 
 //Only the INT0 pin is configured for read access and we handle that in the dmd command handler
@@ -1387,6 +1388,36 @@ MACHINE_DRIVER_START(spinbs1n2)
   MDRV_SOUND_CMDHEADING("spinb")
 MACHINE_DRIVER_END
 
+// Gun Shot: single MSM6585 sound board, no display, no NVRAM, just 8 DIPs
+static SWITCH_UPDATE(gunshot) {
+  if (inports) {
+    CORE_SETKEYSW(inports[CORE_COREINPORT], 0x29, 1);
+  }
+}
+static struct MSM5205interface gunshot_msm6585Int = {
+  1,
+  384000,
+  {SPINB_S1_msmIrq},
+  {MSM5205_S48_4B},
+  {50}
+};
+MACHINE_DRIVER_START(gunshot)
+  MDRV_IMPORT_FROM(PinMAME)
+  MDRV_CORE_INIT_RESET_STOP(spinb,spinb,spinb)
+  MDRV_CPU_ADD(Z80, 4000000) // Z80A, pics show 8 MHz quartz, so divided by 2
+  MDRV_CPU_MEMORY(spinb_readmem, spinb_writemem)
+  MDRV_CPU_VBLANK_INT(spinb_vblank, 1)
+  MDRV_SWITCH_UPDATE(gunshot)
+  MDRV_DIPS(8)
+
+  MDRV_CPU_ADD(Z80, 3000000)
+  MDRV_CPU_FLAGS(CPU_AUDIO_CPU)
+  MDRV_CPU_MEMORY(spinbsnd1_readmem, spinbsnd1_writemem)
+  MDRV_SOUND_ADD(MSM5205, gunshot_msm6585Int)
+  MDRV_SOUND_CMD(spinb_sndCmd_w)
+  MDRV_SOUND_CMDHEADING("spinb")
+MACHINE_DRIVER_END
+
 /* -------------------- */
 /* DMD DRAWING ROUTINES */
 /* -------------------- */
@@ -1400,7 +1431,6 @@ PINMAME_VIDEO_UPDATE(SPINBdmd_update) {
 #endif
   UINT8 *RAM  = ((UINT8 *)dmd32RAM);
   UINT8 *RAM2;
-  tDMDDot dotCol;
   int ii,jj;
 
   RAM = RAM + SPINBlocals.DMDPage;
@@ -1408,7 +1438,7 @@ PINMAME_VIDEO_UPDATE(SPINBdmd_update) {
 
 #ifdef MAME_DEBUG
   core_textOutf(50,20,1,"offset=%08x", offset);
-  memset(&dotCol,0,sizeof(dotCol));
+  memset(coreGlobals.dotCol,0,sizeof(coreGlobals.dotCol));
 
   if(!debugger_focus) {
   if(keyboard_pressed_memory_repeat(KEYCODE_C,2))
@@ -1435,7 +1465,7 @@ PINMAME_VIDEO_UPDATE(SPINBdmd_update) {
 #endif
 
   for (ii = 1; ii <= 32; ii++) {
-    UINT8 *line = &dotCol[ii][0];
+    UINT8 *line = &coreGlobals.dotCol[ii][0];
     for (jj = 0; jj < (128/8); jj++) {
 	  UINT8 intens1, intens2, dot1, dot2;
 	  dot1 = core_revbyte(RAM[0]);
@@ -1455,7 +1485,7 @@ PINMAME_VIDEO_UPDATE(SPINBdmd_update) {
     }
     *line = 0;
   }
-  video_update_core_dmd(bitmap, cliprect, dotCol, layout);
+  video_update_core_dmd(bitmap, cliprect, layout);
   return 0;
 }
 
@@ -1464,7 +1494,7 @@ PINMAME_VIDEO_UPDATE(SPINBdmd_update) {
 //DRAW DMD FROM SERIAL PORT DATA
 
 // translate dot intensities
-static int intens[3][4]= {
+static const int intens[3][4]= {
  {0,3,3,3},
  {0,1,3,3},
  {0,1,2,3}
@@ -1473,12 +1503,12 @@ static int intens[3][4]= {
 PINMAME_VIDEO_UPDATE(SPINBdmd_update) {
   int     row,col,bit,dot;
   UINT8   *line;
-  tDMDDot dotCol={{0}};
   UINT8   d1,d2,d3;
 
+  memset(coreGlobals.dotCol, 0, sizeof(coreGlobals.dotCol));
   for (row=0; row < 32; row++)
   {
-    line = &dotCol[row+1][0];
+    line = &coreGlobals.dotCol[row+1][0];
     for (col=0; col < 16; col++)
     {
       d1=dmd32RAM[0][row][col];
@@ -1494,7 +1524,7 @@ PINMAME_VIDEO_UPDATE(SPINBdmd_update) {
     }
     *line = 0;
   }
-  video_update_core_dmd(bitmap, cliprect, dotCol, layout);
+  video_update_core_dmd(bitmap, cliprect, layout);
   return 0;
 
 }

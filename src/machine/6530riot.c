@@ -9,6 +9,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include "timer.h"
 #include "driver.h"
 #include "6530riot.h"
 
@@ -22,6 +23,14 @@
 
 
 /******************* internal RIOT data structure *******************/
+
+#define RIOT6530_PORTA	0x00
+#define RIOT6530_DDRA	0x01
+#define RIOT6530_PORTB	0x02
+#define RIOT6530_DDRB	0x03
+
+#define RIOT6530_TIMER	0x00
+#define RIOT6530_IRF	0x01
 
 struct riot6530
 {
@@ -40,11 +49,11 @@ struct riot6530
 	UINT8 timer_start;
 	UINT16 timer_divider;
 	UINT8 timer_irq_enabled;
-  
+
 	UINT8 irq_state;
 	UINT8 irq;
 
-	void *t;
+	mame_timer *t;
 	double time;
 
 	double cycles_to_sec;
@@ -52,7 +61,7 @@ struct riot6530
 };
 
 #define V_CYCLES_TO_TIME(c) ((double)(c) * p->cycles_to_sec)
-#define V_TIME_TO_CYCLES(t) ((int)((t) * p->sec_to_cycles))
+#define V_TIME_TO_CYCLES(t) ((int)((t) * p->sec_to_cycles + 0.5)) // round
 
 
 /******************* convenince macros and defines *******************/
@@ -78,8 +87,6 @@ struct riot6530
 #define C2_STROBE_MODE(c)		(!(c & 0x10))
 #define C2_OUTPUT(c)			(c & 0x20)
 #define C2_INPUT(c)				(!(c & 0x20))
-
-#define IFR_DELAY 3
 
 /******************* static variables *******************/
 
@@ -107,8 +114,10 @@ void riot6530_unconfig(void)
 
 /******************* configuration *******************/
 
-void riot6530_set_clock(int which, int clock)
+void riot6530_set_clock(int which, double clock)
 {
+	LOG(("RIOT6530-%d clock = %.3f\n", which, clock));
+
 	riot[which].sec_to_cycles = clock;
 	riot[which].cycles_to_sec = 1.0 / riot[which].sec_to_cycles;
 }
@@ -116,6 +125,7 @@ void riot6530_set_clock(int which, int clock)
 void riot6530_config(int which, const struct riot6530_interface *intf)
 {
 	if (which >= MAX_RIOT_6530) return;
+	memset(&riot[which], 0x00, sizeof(riot[which]));
 	riot[which].intf = intf;
 	riot[which].t = NULL;
 
@@ -132,16 +142,18 @@ void riot6530_reset(void)
 {
 	int i;
 
+	LOG(("RIOT6530-all reset\n"));
+
 	/* zap each structure, preserving the interface and swizzle */
 	for (i = 0; i < MAX_RIOT_6530; i++)
 	{
-		riot[i].timer_divider = 1;
+		riot[i].timer_divider = 1024;
 		riot[i].timer_start   = 0x00;
 		riot[i].timer_irq_enabled = 0;
 
 		riot[i].time = timer_get_time();
 		riot[i].t = timer_alloc(riot_timeout);
-		timer_adjust(riot[i].t,IFR_DELAY*riot[i].cycles_to_sec, i, 0);
+		timer_adjust(riot[i].t,256ul*(UINT32)riot[i].timer_divider*riot[i].cycles_to_sec, i, 0);
 	}
 }
 
@@ -209,7 +221,7 @@ static void riot_timeout(int which)
 	if ( p->irq_state & RIOT_TIMERIRQ )
 		timer_enable(p->t,0);
 	else {
-		timer_reset(p->t, V_CYCLES_TO_TIME(255));
+		timer_reset(p->t, V_CYCLES_TO_TIME(256));
 		p->time = timer_get_time();
 
 		p->irq_state |= RIOT_TIMERIRQ;
@@ -223,13 +235,12 @@ int riot6530_read(int which, int offset)
 {
 	struct riot6530 *p = riot + which;
 	int val = 0;
-	int old_timer_enabled;
 
 	/* adjust offset for 16-bit */
 	offset &= 0x0f;
 
 	if ( !(offset & 0x04) ) {
-		switch( offset&0x03 ) {
+		switch( offset & 0x03 ) {
 		case RIOT6530_PORTA:
 			/* update the input */
 			if (p->intf->in_a_func) p->in_a = p->intf->in_a_func(0);
@@ -262,24 +273,29 @@ int riot6530_read(int which, int offset)
 		}
 	}
 	else {
-		switch ( offset&0x01 ) {
-		case RIOT6530_TIMER:
-			old_timer_enabled = timer_enable(p->t, 0);
+		switch ( offset & 0x01 ) {
+		case RIOT6530_TIMER: {
+			int old_timer_enabled = timer_enable(p->t, 0);
 			if ( old_timer_enabled ) // was timer enabled? re-enable it
 				timer_enable(p->t, 1);
 
 			if ( old_timer_enabled ) {
+				const int ttc = V_TIME_TO_CYCLES(timer_get_time() - p->time);
 				if ( p->irq_state & RIOT_TIMERIRQ ) {
-					val = 255 - V_TIME_TO_CYCLES(timer_get_time() - p->time);
+					val = 255 - ttc;
 				}
-				else
-					val = p->timer_start - V_TIME_TO_CYCLES(timer_get_time() - p->time) / p->timer_divider;
+				else {
+					const int diff = (ttc + (p->timer_divider - 1)) / p->timer_divider;
+					val = p->timer_start - diff;
+				}
 			}
 			else {
-				val = p->timer_start - V_TIME_TO_CYCLES(timer_get_time() - p->time) / p->timer_divider;
-				if ( val<0 )
-					val = 0x00;
+				const int ttc = V_TIME_TO_CYCLES(timer_get_time() - p->time);
+				const int diff = (ttc + (p->timer_divider - 1)) / p->timer_divider;
+				val = p->timer_start - diff;
 			}
+			if ( val<0 )
+				val = 0x00;
 
 			p->irq_state &= ~RIOT_TIMERIRQ;
 			p->timer_irq_enabled = offset&0x08;
@@ -287,6 +303,7 @@ int riot6530_read(int which, int offset)
 
 			// LOG(("RIOT6530-%d read timer = %02X %02X\n", which, val, offset&0x08));
 			break;
+			}
 
 		case RIOT6530_IRF:
 			val = p->irq_state;
@@ -366,7 +383,7 @@ void riot6530_write(int which, int offset, int data)
 		}
 	}
 	else {
-		/* timer releated stuff */
+		/* timer and interrupt releated stuff */
 		p->timer_irq_enabled = offset&0x08;
 		p->timer_start = data;
 
@@ -390,7 +407,7 @@ void riot6530_write(int which, int offset, int data)
 		p->irq_state &= ~RIOT_TIMERIRQ;
 		update_6530_interrupts(p);
 
-		timer_reset(p->t, V_CYCLES_TO_TIME(p->timer_divider * p->timer_start + IFR_DELAY));
+		timer_reset(p->t, V_CYCLES_TO_TIME(p->timer_divider * p->timer_start + 1));
 		p->time = timer_get_time();
 
 		LOG(("RIOT6530-%d write timer = %02X * %04X, %04X\n", which, data, p->timer_divider, offset&0x08));
@@ -407,8 +424,6 @@ void riot6530_set_input_a(int which, int data)
 
 	p->in_a = data;
 
-	if ( data & 0x80 )
-		data = data;
 	check_pa7_interrupt(p, old_port_a, data);
 }
 

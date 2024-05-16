@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /************************************************************************************************
  Inder (Spain)
  -------------
@@ -12,12 +14,12 @@
    Hardware:
    ---------
 		CPU:     Z80 @ 2.5 MHz
-			INT: IRQ @ 250 Hz (4 ms) for the games up to Lap by Lap, slightly less for later games
+		    INT: IRQ @ 250 Hz (4 ms) for the games up to Lap by Lap, slightly less for later games
 		IO:      DMA for earlier games,
 		         PIAs for later ones.
 		DISPLAY: 6-digit or 7-digit 7-segment panels with direct segment access
-		SOUND:	 TI76489 @ 2 or 4 MHz for Brave Team
-				 AY8910 @ 2 MHz for Canasta86, 2x AY8910 on separate Z80 CPU for Lap By Lap,
+		SOUND:   TI76489 @ 2 MHz for Brave Team
+		         AY8910 @ 2 MHz for Canasta86, 2x AY8910 on separate Z80 CPU for Lap By Lap,
 		         MSM5205 @ 384 kHz on Z80 CPU for later games.
  ************************************************************************************************/
 
@@ -126,36 +128,15 @@ static READ_HANDLER(sndcmd_r) {
   return locals.sndCmd;
 }
 
-// earlier games, 6502 based, WIP (needs more ROM dumps)
-
-static MEMORY_READ_START(INDERP_readmem)
-  {0x0000,0x00ff, MRA_RAM},
-  {0x8000,0xffff, MRA_ROM},
-MEMORY_END
-
-static MEMORY_WRITE_START(INDERP_writemem)
-  {0x0000,0x00ff, MWA_RAM},
-MEMORY_END
-
-MACHINE_DRIVER_START(INDERP)
-  MDRV_IMPORT_FROM(PinMAME)
-  MDRV_CPU_ADD_TAG("mcpu", M6502, 1000000)
-  MDRV_CPU_MEMORY(INDERP_readmem, INDERP_writemem)
-  MDRV_CPU_VBLANK_INT(INDER_vblank, 1)
-  MDRV_CPU_PERIODIC_INT(INDER_irq, 250)
-  MDRV_SWITCH_UPDATE(INDER)
-  MDRV_DIAGNOSTIC_LEDH(1)
-MACHINE_DRIVER_END
-
 /*-------------------------------------------------------
-/ Brave Team: Using a TI76489 chip, equivalent to 76496.
+/ Brave Team: Using a TI76489 chip, similar to 76496.
 /--------------------------------------------------------*/
-struct SN76496interface INDER_ti76489Int = {
+struct SN76489interface INDER_ti76489Int = {
 	1,	/* total number of chips in the machine */
-	{ 2000000 },	/* base clock 2 MHz (or 4 MHz?) */
+	{ 2000000 },	/* base clock 2 MHz */
 	{ 75 }	/* volume */
 };
-static WRITE_HANDLER(ti76489_0_w)	{ SN76496_0_w(0, core_revbyte(data)); }
+static WRITE_HANDLER(ti76489_0_w)	{ SN76489_0_w(0, core_revbyte(data)); }
 
 /*--------------------------------------------------
 / Canasta 86: Using a AY8910 chip, no extra ROMs.
@@ -368,7 +349,7 @@ MACHINE_DRIVER_START(INDER0)
   MDRV_IMPORT_FROM(INDER)
   MDRV_CPU_MODIFY("mcpu")
   MDRV_CPU_MEMORY(INDER0_readmem, INDER0_writemem)
-  MDRV_SOUND_ADD(SN76496, INDER_ti76489Int)
+  MDRV_SOUND_ADD(SN76489, INDER_ti76489Int)
 MACHINE_DRIVER_END
 
 static MEMORY_READ_START(INDER1_readmem)
@@ -562,7 +543,7 @@ MEMORY_END
 MACHINE_DRIVER_START(INDERS1)
   MDRV_IMPORT_FROM(INDER)
   MDRV_CPU_MODIFY("mcpu")
-  MDRV_CPU_PERIODIC_INT(INDER_irq, 200) // at 250, switch hits are missed!
+  MDRV_CPU_PERIODIC_INT(INDER_irq, 180) // any higher, and switches behave erratic
 
   MDRV_CPU_ADD_TAG("scpu", Z80, 2500000)
   MDRV_CPU_FLAGS(CPU_AUDIO_CPU)
@@ -619,7 +600,7 @@ static ppi8255_interface ppi8255_intf0 =
 };
 
 static MACHINE_INIT(INDERS0) {
-  init_common();
+	init_common();
 
 	/* init PPI */
 	ppi8255_init(&ppi8255_intf0);
@@ -711,14 +692,14 @@ static READ_HANDLER(snd1_porta_r) { /* LOGSND(("SND1_PORTA_R\n")); */ return 0; 
 static READ_HANDLER(snd1_portb_r) { /* LOGSND(("SND1_PORTB_R\n")); */ return 0; }
 static READ_HANDLER(snd1_portc_r) {
 	int data = sndlocals2.S1_PC0;
-  //LOGSND(("SND1_PORTC_R = %x\n",data));
+	//LOGSND(("SND1_PORTC_R = %x\n",data));
 	return data;
 }
 
 static WRITE_HANDLER(snd1_porta_w) { sndlocals2.S1_AHI = data; }
 static WRITE_HANDLER(snd1_portb_w) { sndlocals2.S1_ALO = data; }
 static WRITE_HANDLER(snd1_portc_w) {
-  //LOGSND(("SND1_PORTC_W = %02x\n",data));
+	//LOGSND(("SND1_PORTC_W = %02x\n",data));
 
 	//Set Reset Line on the chip
 	MSM5205_reset_w(0, GET_BIT6);
@@ -727,7 +708,7 @@ static WRITE_HANDLER(snd1_portc_w) {
 	if (GET_BIT6) {
 		sndlocals2.S1_PC0 = 1;
 	} else {
-    //Read Data from ROM & Write Data To MSM Chip
+		//Read Data from ROM & Write Data To MSM Chip
 		int msmdata = INDER_S1_MSM5205_READROM(0);
 		INDER_S1_MSM5205_w(0,msmdata);
 	}
@@ -774,7 +755,7 @@ static WRITE_HANDLER(snd2_portc_w) {
 	if (GET_BIT6) {
 		sndlocals2.S2_PC0 = 1;
 	} else {
-    //Read Data from ROM & Write Data To MSM Chip
+		//Read Data from ROM & Write Data To MSM Chip
 		int msmdata = INDER_S2_MSM5205_READROM(0);
 		INDER_S2_MSM5205_w(0,msmdata);
 	}
@@ -818,7 +799,7 @@ static WRITE_HANDLER(sndctrl_2_w) {
 static READ_HANDLER(INDER_S1_MSM5205_READROM) {
 	int addr, data;
 	addr = (sndlocals2.S1_CS1 << 18) | (sndlocals2.S1_A17 << 17) | (sndlocals2.S1_A16 << 16)
-	  | (sndlocals2.S1_AHI << 8) | sndlocals2.S1_ALO;
+	     | (sndlocals2.S1_AHI << 8) | sndlocals2.S1_ALO;
 	data = (UINT8)*(memory_region(REGION_USER1) + addr);
 	return data;
 }
@@ -826,7 +807,7 @@ static READ_HANDLER(INDER_S1_MSM5205_READROM) {
 static READ_HANDLER(INDER_S2_MSM5205_READROM) {
 	int addr, data;
 	addr = (sndlocals2.S2_CS1 << 18) | (sndlocals2.S2_A17 << 17) | (sndlocals2.S2_A16 << 16)
-	  | (sndlocals2.S2_AHI << 8) | sndlocals2.S2_ALO;
+	     | (sndlocals2.S2_AHI << 8) | sndlocals2.S2_ALO;
 	data = (UINT8)*(memory_region(REGION_USER2) + addr);
 	return data;
 }
@@ -921,7 +902,7 @@ static MEMORY_WRITE_START(indersnd1_writemem)
 	{ 0x0000, 0x1fff, MWA_ROM },
 	{ 0x2000, 0x3fff, MWA_RAM },
 	{ 0x4000, 0x4003, ppi8255_4_w},
-//{ 0x4900, 0x4900, MWA_NOP}, // unknown stuff here
+//	{ 0x4900, 0x4900, MWA_NOP}, // unknown stuff here
 	{ 0x6000, 0x6000, sndctrl_1_w},
 MEMORY_END
 
@@ -936,7 +917,7 @@ static MEMORY_WRITE_START(indersnd2_writemem)
 	{ 0x0000, 0x1fff, MWA_ROM },
 	{ 0x2000, 0x3fff, MWA_RAM },
 	{ 0x4000, 0x4003, ppi8255_5_w},
-//{ 0x4900, 0x4900, MWA_NOP}, // unknown stuff here
+//	{ 0x4900, 0x4900, MWA_NOP}, // unknown stuff here
 	{ 0x6000, 0x6000, sndctrl_2_w},
 MEMORY_END
 
@@ -944,7 +925,7 @@ MACHINE_DRIVER_START(INDERS2)
   MDRV_IMPORT_FROM(INDER)
   MDRV_CPU_MODIFY("mcpu")
   MDRV_CPU_MEMORY(INDERS2_readmem, INDERS2_writemem)
-  MDRV_CPU_PERIODIC_INT(INDER_irq, 175) // adjustable on real machine
+  MDRV_CPU_PERIODIC_INT(INDER_irq, 180) // adjustable on real machine
   MDRV_CORE_INIT_RESET_STOP(INDERS2,NULL,INDER2)
   MDRV_NVRAM_HANDLER(generic_0fill)
 
@@ -958,4 +939,28 @@ MACHINE_DRIVER_START(INDERS2)
 
   MDRV_INTERLEAVE(50)
   MDRV_SOUND_ADD(MSM5205, inder_msm5205Int2)
+MACHINE_DRIVER_END
+
+static struct MSM5205interface INDER_msm5205IntRana = {
+  1,
+  640000., // no idea, sounds OK
+  {INDER_msmIrq},
+  {MSM5205_S48_4B},
+  {100}
+};
+
+MACHINE_DRIVER_START(INDERS1RANA)
+  MDRV_IMPORT_FROM(INDER)
+  MDRV_CPU_MODIFY("mcpu")
+  MDRV_CPU_MEMORY(INDERS2_readmem, INDERS2_writemem) // extended NVRAM, see INDERS2 = metalman
+  MDRV_CPU_PERIODIC_INT(INDER_irq, 225) // at this rate, game time is decrementing by one unit per second
+  MDRV_NVRAM_HANDLER(generic_0fill)
+
+  MDRV_CPU_ADD_TAG("scpu", Z80, 2500000)
+  MDRV_CPU_FLAGS(CPU_AUDIO_CPU)
+  MDRV_CORE_INIT_RESET_STOP(INDERS1,NULL,INDER2)
+  MDRV_CPU_MEMORY(indersnd_readmem, indersnd_writemem)
+
+  MDRV_INTERLEAVE(50)
+  MDRV_SOUND_ADD(MSM5205, INDER_msm5205IntRana)
 MACHINE_DRIVER_END

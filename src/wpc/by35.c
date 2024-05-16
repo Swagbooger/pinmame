@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 #include <stdarg.h>
 #include <time.h>
 #include "driver.h"
@@ -10,10 +12,16 @@
 #include "hnks.h"
 #include "by35.h"
 
+#if defined(PINMAME) && defined(LISY_SUPPORT)
+ #include "lisy/lisy35.h"
+#endif /* PINMAME && LISY_SUPPORT */
+
+#define BY35_DEBUG_KEY_SUPPORT 0
+
 #define BY35_PIA0 0
 #define BY35_PIA1 1
 
-#define BY35_SOLSMOOTH       2 /* Smooth the Solenoids over this numer of VBLANKS */
+#define BY35_SOLSMOOTH       2 /* Smooth the Solenoids over this number of VBLANKS */
 #define BY35_LAMPSMOOTH      2 /* Smooth the lamps over this number of VBLANKS */
 #define BY35_DISPLAYSMOOTH   4 /* Smooth the display over this number of VBLANKS */
 
@@ -66,18 +74,22 @@ static struct {
   int vblankCount;
   int hw;
   int irqstates[4];
+
+  int oldstate;
+  int counter;
+  int pos0;
+  int pos1;
 } locals;
 
 static void piaIrq(int num, int state) {
-  static int oldstate;
   int irqstate;
   locals.irqstates[num] = state;
   irqstate = locals.irqstates[0] || locals.irqstates[1] || locals.irqstates[2] || locals.irqstates[3];
-  if (oldstate != irqstate) {
-    logerror("IRQ state: %d\n", irqstate);
+  if (locals.oldstate != irqstate) {
+//    logerror("IRQ state: %d\n", irqstate);
     cpu_set_irq_line(0, M6800_IRQ_LINE, irqstate ? ASSERT_LINE : CLEAR_LINE);
   }
-  oldstate = irqstate;
+  locals.oldstate = irqstate;
 }
 
 static void piaIrq0(int state) { piaIrq(0, state); }
@@ -98,7 +110,13 @@ static void by35_dispStrobe(int mask) {
       UINT8 dispMask = mask;
       for (jj = 0; dispMask; jj++, dispMask>>=1)
         if (dispMask & 0x01)
+        {
           locals.segments[jj*8+ii].w |= locals.pseg[jj*8+ii].w = locals.bcd2seg[locals.bcd[jj] & 0x0f];
+#ifdef LISY_SUPPORT
+          //lisy35_display_handler( jj*8+ii, locals.segments[jj*8+ii].w);
+          lisy35_display_handler( jj*8+ii, locals.bcd[jj] );
+#endif
+        }
     }
 
   /* This handles the fake zero for Nuova Bell games */
@@ -113,6 +131,9 @@ static void by35_dispStrobe(int mask) {
 static void by35_lampStrobe(int board, int lampadr) {
   if (lampadr != 0x0f) {
     int lampdata = (locals.a0>>4)^0x0f;
+#ifdef LISY_SUPPORT
+    if ( lampdata ) lisy35_lamp_handler( 0, board, lampadr, lampdata);
+#endif
     UINT8 *matrix = &coreGlobals.tmpLampMatrix[(lampadr>>3)+8*board];
     int bit = 1<<(lampadr & 0x07);
 
@@ -142,45 +163,31 @@ static WRITE_HANDLER(pia0a_w) {
   }
 }
 
-static const UINT16 nuova_ascii2seg[] = {
-  /* 0x00-0x07 */ 0x0000, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff,
-  /* 0x08-0x0f */ 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff,
-  /* 0x10-0x17 */ 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff,
-  /* 0x18-0x1f */ 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff,
-  /* 0x20-0x27 */ 0x0000, 0xffff, 0xffff, 0xffff, 0xffff, 0xee99, 0x9379, 0x0200, //      %&'
-  /* 0x28-0x2f */ 0x1400, 0x4100, 0xff00, 0xaa00, 0x0040, 0x8800, 0x0020, 0x4400, // ()*+,-./
-  /* 0x30-0x37 */ 0x00ff, 0x2200, 0x8877, 0x883f, 0x888c, 0x88bb, 0x88fb, 0x000f, // 01234567
-  /* 0x38-0x3f */ 0x88ff, 0x88bf, 0x8020, 0x8040, 0x1400, 0x8830, 0x4100, 0x2807, // 89:;<=>?
-  /* 0x40-0x47 */ 0xa07f, 0x88cf, 0x2a3f, 0x00f3, 0x223f, 0x80f3, 0x80c3, 0x08fb, // @ABCDEFG
-  /* 0x48-0x4f */ 0x88cc, 0x2233, 0x007c, 0x94c0, 0x00f0, 0x05cc, 0x11cc, 0x00ff, // HIJKLMNO
-  /* 0x50-0x57 */ 0x88c7, 0x10ff, 0x98c7, 0x88bb, 0x2203, 0x00fc, 0x44c0, 0x50cc, // PRQSTUVW
-  /* 0x58-0x5f */ 0x5500, 0x2500, 0x4433, 0x2212, 0x1100, 0x2221, 0x0404, 0x0030, // XYZ[\]^_
-  /* 0x60-0x67 */ 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff,
-  /* 0x68-0x6f */ 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff,
-  /* 0x70-0x77 */ 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff,
-  /* 0x78-0x7f */ 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff,
-};
-
 /* PIA1:A-W  0,2-7 Display handling */
 /*        W  1     Sound E */
 static WRITE_HANDLER(pia1a_w) {
-  static int counter, pos0, pos1;
-  if (locals.hw & BY35HW_SOUNDE) sndbrd_0_ctrl_w(0, (locals.cb21 ? 1 : 0) | (data & 0x02));
+  if (locals.hw & BY35HW_SOUNDE)
+  {
+    sndbrd_0_ctrl_w(0, (locals.cb21 ? 1 : 0) | (data & 0x02));
+#ifdef LISY_SUPPORT
+    lisy35_sound_handler( LISY35_SOUND_HANDLER_IS_CTRL, (locals.cb21 ? 1 : 0) | (data & 0x02));
+#endif
+  }
 
   if (core_gameData->hw.gameSpecific1 & BY35GD_ALPHA) {
     if (data & 0x80) { // 1st alphanumeric display strobe
-      if (pos0 < 20)
-        locals.segments[pos0++].w = nuova_ascii2seg[locals.a0 & 0x7f] | (locals.a0 & 0x80);
-      counter++;
-      if (counter > 7) {
-        counter = 0;
-        pos0 = 0;
-        pos1 = 0;
+      if (locals.pos0 < 20)
+        locals.segments[locals.pos0++].w = core_ascii2seg16s[locals.a0 & 0x7f] | (locals.a0 & 0x80);
+      locals.counter++;
+      if (locals.counter > 7) {
+        locals.counter = 0;
+        locals.pos0 = 0;
+        locals.pos1 = 0;
       }
     } else if (data & 0x40) { // 2nd alphanumeric display strobe
-      counter = 0;
-      if (pos1 < 12)
-        locals.segments[20+(pos1++)].w = nuova_ascii2seg[locals.a0 & 0x7f] | (locals.a0 & 0x80);
+      locals.counter = 0;
+      if (locals.pos1 < 12)
+        locals.segments[20+(locals.pos1++)].w = core_ascii2seg16s[locals.a0 & 0x7f] | (locals.a0 & 0x80);
     }
   } else if (!locals.ca20) {
     if (locals.hw & BY35HW_INVDISP4) {
@@ -210,10 +217,22 @@ static WRITE_HANDLER(pia1a_w) {
 
 /* PIA0:B-R  Get Data depending on PIA0:A */
 static READ_HANDLER(pia0b_r) {
+#ifndef LISY_SUPPORT
   if (locals.a0 & 0x20) return core_getDip(0); // DIP#1 1-8
   if (locals.a0 & 0x40) return core_getDip(1); // DIP#2 9-16
   if (locals.a0 & 0x80) return core_getDip(2); // DIP#3 17-24
   if ((locals.hw & BY35HW_DIP4) && locals.cb20) return core_getDip(3); // DIP#4 25-32
+#else
+  int ret;
+  if (locals.a0 & 0x20)
+   {  ret = lisy35_get_mpudips(0); if (ret<0) return core_getDip(0); else return ret; } // DIP#1 1-8
+  if (locals.a0 & 0x40)
+   {  ret = lisy35_get_mpudips(1); if (ret<0) return core_getDip(1); else return ret; } // DIP#1 9-16
+  if (locals.a0 & 0x80)
+   {  ret = lisy35_get_mpudips(2); if (ret<0) return core_getDip(2); else return ret; } // DIP#1 17-24
+  if ((locals.hw & BY35HW_DIP4) && locals.cb20)
+   {  ret = lisy35_get_mpudips(3); if (ret<0) return core_getDip(3); else return ret; } // DIP#1 25-32
+#endif
   {
     int col = locals.a0 & 0x1f;
     UINT8 sw;
@@ -236,7 +255,7 @@ static READ_HANDLER(pia0cb1_r) {
 /* PIA0:CB2-W Lamp Strobe #1, DIPBank3 STROBE */
 static WRITE_HANDLER(pia0cb2_w) {
   int sb = core_gameData->hw.soundBoard;		// ok
-  if (locals.cb20 & ~data) locals.lampadr1 = locals.a0 & 0x0f;
+  if (locals.cb20 && ~data) locals.lampadr1 = locals.a0 & 0x0f;
   locals.cb20 = data;
 // ok
   if (sb == SNDBRD_ST300V) {
@@ -251,18 +270,25 @@ static WRITE_HANDLER(pia0cb2_w) {
 /* PIA1:CA2-W Lamp Strobe #2 */
 static WRITE_HANDLER(pia1ca2_w) {
   int sb = core_gameData->hw.soundBoard;		// ok
-  if (locals.ca21 & ~data) {
+  if (locals.ca21 && ~data) {
     locals.lampadr2 = locals.a0 & 0x0f;
     if (core_gameData->hw.display & 0x01)
       { locals.bcd[6] = locals.a0>>4; by35_dispStrobe(0x40); }
   }
-  if (locals.hw & BY35HW_SCTRL) sndbrd_0_ctrl_w(0, data);
+  if (locals.hw & BY35HW_SCTRL)
+  {
+    sndbrd_0_ctrl_w(0, data);
+    //Note: HNK only, not for LISY at the moment
+  }
 //  ok
   if ((sb == SNDBRD_ST300V) && (data)) {
     sndbrd_0_diag(1); // gv - switches over to voice board
     sndbrd_0_ctrl_w(0, locals.a0);
   }
   locals.ca21 = locals.diagnosticLed = data;
+#ifdef LISY_SUPPORT
+  coil_bally_led_set(locals.diagnosticLed);
+#endif
 }
 
 /* PIA0:CA2-W Display Strobe */
@@ -274,11 +300,22 @@ static WRITE_HANDLER(pia0ca2_w) {
 /* PIA1:B-W Solenoid/Sound output */
 static WRITE_HANDLER(pia1b_w) {
   int sb = core_gameData->hw.soundBoard;		// ok
+#ifdef LISY_SUPPORT
+     //send to solenoid_handler already here with locals.cb21=Soundselect
+     //as sometimes continous solenoid data changes with Soundselect==0
+     lisy35_solenoid_handler( data , locals.cb21);
+#endif
   // check for extra display connected to solenoids
   if (~locals.b1 & data & core_gameData->hw.display & 0xf0)
     { locals.bcd[5] = locals.a0>>4; by35_dispStrobe(0x20); }
   locals.b1 = data;
-  if ((sb & 0xff00) != SNDBRD_ST300 && sb != SNDBRD_ASTRO && (sb & 0xff00) != SNDBRD_ST100 && sb != SNDBRD_GRAND) sndbrd_0_data_w(0, data & 0x0f); 	// ok
+  if ((sb & 0xff00) != SNDBRD_ST300 && sb != SNDBRD_ASTRO && (sb & 0xff00) != SNDBRD_ST100 && sb != SNDBRD_GRAND)
+  {
+    sndbrd_0_data_w(0, data & 0x0f); 	// ok
+#ifdef LISY_SUPPORT
+    if (locals.cb21) lisy35_sound_handler( LISY35_SOUND_HANDLER_IS_DATA, data & 0x0f );
+#endif
+  }
   coreGlobals.pulsedSolState = 0;
   if (!locals.cb21) {
     locals.solenoids |= coreGlobals.pulsedSolState = (1<<(data & 0x0f)) & 0x7fff;
@@ -302,18 +339,25 @@ static WRITE_HANDLER(pia1cb2_w) {
   if (((locals.hw & BY35HW_SCTRL) == 0) && ((sb & 0xff00) != SNDBRD_ST300) && (sb != SNDBRD_ASTRO) && (sb & 0xff00) != SNDBRD_ST100)
    	// ok
     sndbrd_0_ctrl_w(0, (data ? 1 : 0) | (locals.a1 & 0x02));
+#ifdef LISY_SUPPORT
+    lisy35_sound_handler( LISY35_SOUND_HANDLER_IS_CTRL, (data ? 1 : 0) | (locals.a1 & 0x02));
+#endif
+
 }
 
 static INTERRUPT_GEN(by35_vblank) {
   /*-------------------------------
   /  copy local data to interface
   /--------------------------------*/
-  locals.vblankCount += 1;
+  locals.vblankCount++;
 
   /*-- lamps --*/
   if ((locals.vblankCount % BY35_LAMPSMOOTH) == 0) {
     memcpy(coreGlobals.lampMatrix, coreGlobals.tmpLampMatrix, sizeof(coreGlobals.tmpLampMatrix));
     memset(coreGlobals.tmpLampMatrix, 0, sizeof(coreGlobals.tmpLampMatrix));
+#ifdef LISY_SUPPORT
+    lisy35_lamp_handler( 1, 0, 0, 0); //tell the lamp handler that we blank lamps
+#endif
   }
 
   /*-- solenoids --*/
@@ -324,17 +368,20 @@ static INTERRUPT_GEN(by35_vblank) {
   /*-- display --*/
   if ((locals.vblankCount % BY35_DISPLAYSMOOTH) == 0) {
     memcpy(coreGlobals.segments, locals.segments, sizeof(coreGlobals.segments));
-	if (!(core_gameData->hw.gameSpecific1 & BY35GD_ALPHA)) {
-	  memcpy(locals.segments, locals.pseg, sizeof(locals.segments));
+    if (!(core_gameData->hw.gameSpecific1 & BY35GD_ALPHA)) {
+      memcpy(locals.segments, locals.pseg, sizeof(locals.segments));
       memset(locals.pseg,0,sizeof(locals.pseg));
-	}
+    }
     coreGlobals.diagnosticLed = locals.diagnosticLed;
     locals.diagnosticLed = 0;
   }
+#ifdef LISY_SUPPORT
+  lisy35_switch_update(); //get the switches from LISY35
+#endif
   core_updateSw(core_getSol(19));
 }
 
-#ifdef MAME_DEBUG
+#if BY35_DEBUG_KEY_SUPPORT
 static void adjust_timer(int offset) {
   static char s[2];
   static UINT8 cmd;
@@ -347,10 +394,10 @@ static void adjust_timer(int offset) {
     sndbrd_0_data_w(0, cmd);
   }
 }
-#endif /* MAME_DEBUG */
+#endif /* BY35_DEBUG_KEY_SUPPORT */
 
 static SWITCH_UPDATE(by35) {
-#ifdef MAME_DEBUG
+#if BY35_DEBUG_KEY_SUPPORT
   if      (keyboard_pressed_memory_repeat(KEYCODE_Z, 2))
     adjust_timer(-0x10);
   else if (keyboard_pressed_memory_repeat(KEYCODE_X, 2))
@@ -361,7 +408,8 @@ static SWITCH_UPDATE(by35) {
     adjust_timer(0x10);
   else if (keyboard_pressed_memory_repeat(KEYCODE_SPACE, 2))
     adjust_timer(0);
-#endif /* MAME_DEBUG */
+#endif /* BY35_DEBUG_KEY_SUPPORT */
+#ifndef LISY_SUPPORT
   if (inports) {
     if (core_gameData->gen & (GEN_BY17|GEN_BY35|GEN_STMPU100)) {
       CORE_SETKEYSW(inports[BY35_COMINPORT],   0x07,0);
@@ -380,7 +428,6 @@ static SWITCH_UPDATE(by35) {
     }
     else if (core_gameData->gen & GEN_ASTRO) {
       CORE_SETKEYSW(inports[BY35_COMINPORT],   0x07,0);
-      CORE_SETKEYSW(inports[BY35_COMINPORT]>>8,0x03,1);
       CORE_SETKEYSW((inports[BY35_COMINPORT]&0x20)<<2,0x80,5);
     }
     else if (core_gameData->gen & GEN_BOWLING) {
@@ -390,11 +437,25 @@ static SWITCH_UPDATE(by35) {
       CORE_SETKEYSW(inports[BY35_COMINPORT]>>15,0x01,5);
     }
   }
+#endif
+
   /*-- Diagnostic buttons on CPU board --*/
+#ifndef LISY_SUPPORT
   cpu_set_nmi_line(0, core_getSw(BY35_SWCPUDIAG) ? ASSERT_LINE : CLEAR_LINE);
+#else
+  cpu_set_nmi_line(0, lisy35_get_SW_S33() ? ASSERT_LINE : CLEAR_LINE);
+#endif
   sndbrd_0_diag(core_getSw(BY35_SWSOUNDDIAG));
   /*-- coin door switches --*/
+#ifndef LISY_SUPPORT
   pia_set_input_ca1(BY35_PIA0, !core_getSw(BY35_SWSELFTEST));
+#else
+  pia_set_input_ca1(BY35_PIA0, !lisy35_get_SW_Selftest());
+#endif
+}
+
+static READ_HANDLER(pia0ca2_r) {
+  return locals.ca20;
 }
 
 /* PIA 0 (U10)
@@ -421,15 +482,15 @@ PB0-3: (o) Momentary Solenoid/Sound Data
 PB4-7: (o) Continuous Solenoid
 CA1:   (i) Display Interrupt Generator
 CA2:   (o) Diag LED + Lamp Strobe #2/Sound select
-CB1:   ?
+CB1:   (i) Lamp Interrupt on Stern boards, tested by sam_iv, pulled to GND by default
 CB2:   (o) Solenoid/Sound Bank Select
 */
 static struct pia6821_interface by35_pia[] = {{
-/* I:  A/B,CA1/B1,CA2/B2 */  0, pia0b_r, PIA_UNUSED_VAL(1), pia0cb1_r, 0,0,
+/* I:  A/B,CA1/B1,CA2/B2 */  0, pia0b_r, PIA_UNUSED_VAL(1), pia0cb1_r, pia0ca2_r,0,
 /* O:  A/B,CA2/B2        */  pia0a_w,0, pia0ca2_w,pia0cb2_w,
 /* IRQ: A/B              */  piaIrq0,piaIrq1
 },{
-/* I:  A/B,CA1/B1,CA2/B2 */  0,0, pia1ca1_r, PIA_UNUSED_VAL(1), 0,0,
+/* I:  A/B,CA1/B1,CA2/B2 */  0,0, pia1ca1_r, PIA_UNUSED_VAL(0), 0,0,
 /* O:  A/B,CA2/B2        */  pia1a_w,pia1b_w,pia1ca2_w,pia1cb2_w,
 /* IRQ: A/B              */  piaIrq2,piaIrq3
 }};
@@ -440,6 +501,9 @@ static INTERRUPT_GEN(by35_irq) {
 
 static void by35_zeroCross(int data) {
     pia_set_input_cb1(BY35_PIA0, locals.cb10 = !locals.cb10);
+#ifdef LISY_SUPPORT
+    lisy35_throttle();
+#endif
 }
 
 /*-----------------------------------------------
@@ -449,24 +513,34 @@ static UINT8 *by35_CMOS;
 
 static NVRAM_HANDLER(by35) {
   core_nvram(file, read_or_write, by35_CMOS, 0x100, (core_gameData->gen & (GEN_STMPU100|GEN_STMPU200))?0x00:0xff);
+#ifdef LISY_SUPPORT
+  // 0 = read; 1 = write
+  // inform lisy about position of pinmame nvram memory
+  if ( read_or_write == 0) lisy35_nvram_handler( by35_CMOS);
+#endif
 }
 // Bally only uses top 4 bits
 static WRITE_HANDLER(by35_CMOS_w) {
   by35_CMOS[offset] = data | ((core_gameData->gen & (GEN_STMPU100|GEN_STMPU200|GEN_ASTRO))? 0x00 : 0x0f);
 }
 
-// These games use the A0 memory address for extra sound solenoids only.
-WRITE_HANDLER(extra_sol_w) {
-  logerror("%04x: extra sol w (a0)  data  %02x \n", activecpu_get_previouspc(),data);
+// These games use the A0 memory address for monotone sounds
+WRITE_HANDLER(stern100_snd_w) {
+  logerror("%04x: stern100_snd_w (a0) data  %02x \n", activecpu_get_previouspc(),data);
   sndbrd_0_data_w(0,data);
 //if (data != 0)
 //  coreGlobals.pulsedSolState = (data << 24);
 //locals.solenoids = (locals.solenoids & 0x00ffffff) | coreGlobals.pulsedSolState;
 }
 
-WRITE_HANDLER(stern100_sol_w) {
-  logerror("%04x: stern100_sol (c0) data  %02x \n", activecpu_get_previouspc(),data);
-//extra_sol_w(offset, data ^ 0xff);
+// These games can use the C0 memory address for electronic chime sounds
+WRITE_HANDLER(stern100_chm_w) {
+  logerror("%04x: stern100_chm_w (c0) data  %02x \n", activecpu_get_previouspc(),data);
+  sndbrd_0_ctrl_w(0, ~data & 0x0f);
+}
+
+static WRITE_HANDLER(sb_ctrl_cb) {
+  coreGlobals.diagnosticLed = (locals.diagnosticLed |= (data << 1));
 }
 
 static MACHINE_INIT(by35) {
@@ -479,7 +553,7 @@ static MACHINE_INIT(by35) {
   pia_set_input_ca1(BY35_PIA1, 1);
 
 //   if ((sb & 0xff00) != SNDBRD_ST300)		// ok
-  sndbrd_0_init(sb, 1, memory_region(REGION_SOUND1), NULL, NULL);
+  sndbrd_0_init(sb, 1, memory_region(REGION_SOUND1), NULL, sb_ctrl_cb);
 
   locals.vblankCount = 1;
   // set up hardware
@@ -503,14 +577,14 @@ static MACHINE_INIT(by35) {
   }
 
   if ((sb & 0xff00) == SNDBRD_ST300 || sb == SNDBRD_ASTRO) {
-    install_mem_write_handler(0,0x00a0, 0x00a7, snd300_w);	// ok
-    install_mem_read_handler (0,0x00a0, 0x00a7, snd300_r);    	// ok
-    install_mem_write_handler(0,0x00c0, 0x00c0, snd300_wex);	// ok
+    install_mem_write_handler(0,0x00a0, 0x00a7, snd300_w);  // ok
+    install_mem_read_handler (0,0x00a0, 0x00a7, snd300_r);  // ok
+    install_mem_write_handler(0,0x00c0, 0x00c0, snd300_wex);// ok
   } else if (sb == SNDBRD_ST100) {
-    install_mem_write_handler(0,0x00a0, 0x00a0, extra_sol_w); // sounds on (DIP 23 = 1)
-    install_mem_write_handler(0,0x00c0, 0x00c0, stern100_sol_w); // chimes on (DIP 23 = 0)
+    install_mem_write_handler(0,0x00a0, 0x00a0, stern100_snd_w); // sounds on (DIP 23 = 1)
+    install_mem_write_handler(0,0x00c0, 0x00c0, stern100_chm_w); // chimes on (DIP 23 = 0)
   } else if (sb == SNDBRD_ST100B) {
-    install_mem_write_handler(0,0x00a0, 0x00a0, extra_sol_w);
+    install_mem_write_handler(0,0x00a0, 0x00a0, stern100_snd_w);
   } else if (sb == SNDBRD_GRAND) {
     install_mem_write_handler(0,0x0080, 0x0080, sndbrd_0_data_w);
   }
@@ -545,6 +619,7 @@ static MEMORY_WRITE_START(by35_writemem)
   { 0x0088, 0x008b, pia_w(BY35_PIA0) }, /* U10 PIA: Switches + Display + Lamps*/
   { 0x0090, 0x0093, pia_w(BY35_PIA1) }, /* U11 PIA: Solenoids/Sounds + Display Strobe */
   { 0x0200, 0x02ff, by35_CMOS_w, &by35_CMOS }, /* CMOS Battery Backed*/
+  { 0x1000, 0xffff, MWA_NOP },
 MEMORY_END
 
 MACHINE_DRIVER_START(by35)
@@ -566,6 +641,11 @@ MACHINE_DRIVER_START(st100s)
   MDRV_IMPORT_FROM(st100)
 MACHINE_DRIVER_END
 
+MACHINE_DRIVER_START(st100bs)
+  MDRV_IMPORT_FROM(by35)
+  MDRV_IMPORT_FROM(st100b)
+MACHINE_DRIVER_END
+
 MACHINE_DRIVER_START(by35_32S)
   MDRV_IMPORT_FROM(by35)
   MDRV_IMPORT_FROM(by32)
@@ -576,6 +656,11 @@ MACHINE_DRIVER_START(by35_51S)
   MDRV_IMPORT_FROM(by51)
 MACHINE_DRIVER_END
 
+MACHINE_DRIVER_START(by35_51NS)
+  MDRV_IMPORT_FROM(by35)
+  MDRV_IMPORT_FROM(by51N)
+MACHINE_DRIVER_END
+
 MACHINE_DRIVER_START(by35_56S)
   MDRV_IMPORT_FROM(by35)
   MDRV_IMPORT_FROM(by56)
@@ -583,12 +668,19 @@ MACHINE_DRIVER_END
 
 MACHINE_DRIVER_START(by35_61S)
   MDRV_IMPORT_FROM(by35)
-//  MDRV_CPU_REPLACE("mcpu", M6800, 525000)
+  MDRV_DIAGNOSTIC_LEDH(2)
   MDRV_IMPORT_FROM(by61)
+MACHINE_DRIVER_END
+
+MACHINE_DRIVER_START(by35_61S2)
+  MDRV_IMPORT_FROM(by35)
+  MDRV_DIAGNOSTIC_LEDH(3)
+  MDRV_IMPORT_FROM(by61x2)
 MACHINE_DRIVER_END
 
 MACHINE_DRIVER_START(by35_45S)
   MDRV_IMPORT_FROM(by35)
+  MDRV_DIAGNOSTIC_LEDH(2)
   MDRV_IMPORT_FROM(by45)
 MACHINE_DRIVER_END
 
@@ -597,6 +689,7 @@ MACHINE_DRIVER_START(by6802_61S)
   MDRV_IMPORT_FROM(by35)
   MDRV_CPU_REPLACE("mcpu",M6802, 375000)
   MDRV_CPU_PERIODIC_INT(by35_irq, BY35_6802IRQFREQ*2)
+  MDRV_DIAGNOSTIC_LEDH(2)
   MDRV_IMPORT_FROM(by61)
 MACHINE_DRIVER_END
 #endif
@@ -605,6 +698,7 @@ MACHINE_DRIVER_START(by6802_45S)
   MDRV_IMPORT_FROM(by35)
   MDRV_CPU_REPLACE("mcpu",M6802, 375000)
   MDRV_CPU_PERIODIC_INT(by35_irq, BY35_6802IRQFREQ*2)
+  MDRV_DIAGNOSTIC_LEDH(2)
   MDRV_IMPORT_FROM(by45)
 MACHINE_DRIVER_END
 
@@ -618,9 +712,9 @@ MACHINE_DRIVER_START(st200)
   MDRV_IMPORT_FROM(st300)
 MACHINE_DRIVER_END
 
-MACHINE_DRIVER_START(st200s100)
+MACHINE_DRIVER_START(st200s100b)
   MDRV_IMPORT_FROM(st200NS)
-  MDRV_IMPORT_FROM(st100)
+  MDRV_IMPORT_FROM(st100b)
 MACHINE_DRIVER_END
 
 MACHINE_DRIVER_START(st200v)
@@ -634,4 +728,202 @@ MACHINE_DRIVER_START(hnk)
   MDRV_CPU_PERIODIC_INT(NULL, 0) // no irq
   MDRV_DIPS(24)
   MDRV_IMPORT_FROM(hnks)
+MACHINE_DRIVER_END
+
+
+// Stern S.A.M. (Service Assistance Module)
+
+static READ_HANDLER(sam0b_r) {
+  logerror("0B %04x %02x\n", activecpu_get_pc(), pia_0_portb_r(0)); 
+  if (locals.a0 & 0x20) return core_getDip(0);
+  if (locals.a0 & 0x40) return core_getDip(1);
+  if (locals.a0 & 0x80) return core_getDip(2);
+  if (locals.cb20) return core_getDip(3);
+  return pia_0_portb_r(0);
+}
+static WRITE_HANDLER(sam0b_w) {
+  logerror("0B:%02x\n", data);
+  locals.b0 = data;
+  pia_set_input_b(0, data);
+}
+static WRITE_HANDLER(sam0cb2_w) {
+  logerror("0CB2:%x\n", data);
+  locals.cb20 = data;
+  pia_set_input_cb2(0, data);
+  pia_set_input_cb1(2, data); // J1-11
+}
+static WRITE_HANDLER(sam1ca2_w) {
+  logerror("1CA2:%x\n", data);
+  locals.ca21 = data;
+  pia_set_input_ca2(1, data);
+  pia_set_input_cb1(2, data); // J1-08
+  cpu_set_irq_line(0, 0, data ? ASSERT_LINE : CLEAR_LINE); // J5-34 (deactivate)
+}
+static WRITE_HANDLER(sam1cb2_w) {
+  logerror("1CB2:%x\n", data);
+  locals.cb21 = data;
+  pia_set_input_cb2(1, data);
+  pia_set_input_cb1(4, data); // J4-10
+}
+static READ_HANDLER(sam2a_r) {
+  int lastbcd;
+  logerror("2A %04x %x %02x %02x %02x\n", activecpu_get_pc(), locals.ca20, locals.a0, locals.a1, locals.lastbcd);
+  if (locals.ca20) {
+    lastbcd = locals.lastbcd;
+    locals.lastbcd = 1;
+    return lastbcd ? 0x80 : 0x00;
+  }
+  return 0x80 | (~locals.a0 & 0x0f) | ((~locals.a1 & 0x01) << 4);
+}
+static WRITE_HANDLER(sam2b_w) {
+  logerror("2B:%02x\n", data);
+  pia_set_input_b(0, data);
+  pia_set_input_b(2, data);
+}
+static READ_HANDLER(sam3a_r) {
+  logerror("3A %04x %02x\n", activecpu_get_pc(), locals.a1);
+  return locals.a1;
+}
+static READ_HANDLER(sam3b_r) {
+  logerror("3B %04x %02x\n", activecpu_get_pc(), locals.b0);
+  return locals.b0;
+}
+static WRITE_HANDLER(sam3ca2_w) {
+  logerror("3CA2:%x\n", data);
+  pia_set_input_ca2(3, data);
+  pia_set_input_ca1(0, data); // J3-01
+}
+static WRITE_HANDLER(sam3cb2_w) {
+  logerror("3CB2:%x\n", data);
+  pia_set_input_cb2(3, data);
+  pia_set_input_cb1(1, data); // J5-32
+}
+static READ_HANDLER(sam4a_r) {
+  logerror("4A %04x %02x\n", activecpu_get_pc(), locals.b1);
+  return locals.b1;
+}
+static READ_HANDLER(sam4b_r) {
+  UINT8 retVal = locals.a0 & 0x7f;
+  if (retVal == 0x1e || retVal == 0x1d || retVal == 0x1b || retVal == 0x17 || retVal == 0x0f) retVal = 0xff;
+  logerror("4B %04x %02x:%02x\n", activecpu_get_pc(), locals.a0, retVal);
+  return retVal;
+}
+static void samirq4b(int state) {
+  logerror("-- IRQ4B %x --\n", state);
+  cpu_set_irq_line(0, 0, state ? ASSERT_LINE : CLEAR_LINE); // J5-34 (activate)
+}
+static READ_HANDLER(sam5b_r) {
+  logerror("5B %04x %02x\n", activecpu_get_pc(), locals.a0);
+  return locals.a0;
+}
+static WRITE_HANDLER(sam5a_w) {
+  pia_set_input_a(5, data);
+}
+static WRITE_HANDLER(sam5b_w) {
+  pia_set_input_b(5, data);
+  if (data) locals.pseg[43 - core_BitColToNum(data)].w = locals.segments[43 - core_BitColToNum(data)].w = pia_5_porta_r(0);
+}
+static READ_HANDLER(sam6a_r) {
+  logerror("6A %04x %02x\n", activecpu_get_pc(), locals.a0);
+  return locals.a0;
+}
+static WRITE_HANDLER(sam6b_w) {
+  logerror("6B:%02x\n", data);
+  pia_set_input_b(6, data);
+  cpu_set_nmi_line(0, data != 0xff ? PULSE_LINE : CLEAR_LINE); // J3-05
+}
+
+static struct pia6821_interface sam_pia[] = {{
+/* I:  A/B,CA1/B1,CA2/B2 */  0, sam0b_r, PIA_UNUSED_VAL(1), pia0cb1_r, pia0ca2_r, 0,
+/* O:  A/B,CA2/B2        */  pia0a_w, sam0b_w, pia0ca2_w, sam0cb2_w,
+/* IRQ: A/B              */  piaIrq0, piaIrq1
+},{
+/* I:  A/B,CA1/B1,CA2/B2 */  0, 0, pia1ca1_r, PIA_UNUSED_VAL(0), 0, 0,
+/* O:  A/B,CA2/B2        */  pia1a_w, pia1b_w, sam1ca2_w, sam1cb2_w,
+/* IRQ: A/B              */  piaIrq2, piaIrq3
+},{
+/* I:  A/B,CA1/B1,CA2/B2 */  sam2a_r, PIA_UNUSED_VAL(0xff), 0, 0, 0, 0,
+/* O:  A/B               */  0, sam2b_w
+},{
+/* I:  A/B,CA1/B1,CA2/B2 */  sam3a_r, sam3b_r, 0, 0, 0, 0,
+/* O:  A/B,CA2/B2        */  0, 0, sam3ca2_w, sam3cb2_w
+},{
+/* I:  A/B,CA1/B1,CA2/B2 */  sam4a_r, sam4b_r, 0, 0, 0, 0,
+/* O:  A/B,CA2/B2        */  0, 0, 0, 0,
+/* IRQ: A/B              */  0, samirq4b
+},{
+/* I:  A/B,CA1/B1,CA2/B2 */  0, sam5b_r, 0, 0, 0, 0,
+/* O:  A/B               */  sam5a_w, sam5b_w
+},{
+/* I:  A/B,CA1/B1,CA2/B2 */  sam6a_r, 0, 0, 0, 0, 0,
+/* O:  A/B               */  0, sam6b_w
+}};
+
+static INTERRUPT_GEN(sam_display_irq) {
+  pia_set_input_ca1(1, locals.ca11 = !locals.ca11);
+  pia_set_input_cb1(5, !core_getSw(BY35_SWSELFTEST));
+}
+
+static MACHINE_INIT(sam) {
+  memset(&locals, 0, sizeof(locals));
+  pia_config(0, PIA_STANDARD_ORDERING, &sam_pia[0]);
+  pia_config(1, PIA_STANDARD_ORDERING, &sam_pia[1]);
+  pia_config(2, PIA_STANDARD_ORDERING, &sam_pia[2]);
+  pia_config(3, PIA_STANDARD_ORDERING, &sam_pia[3]);
+  pia_config(4, PIA_STANDARD_ORDERING, &sam_pia[4]);
+  pia_config(5, PIA_STANDARD_ORDERING, &sam_pia[5]);
+  pia_config(6, PIA_STANDARD_ORDERING, &sam_pia[6]);
+  pia_set_input_cb1(0, 1);
+  pia_set_input_ca1(1, 1);
+  sndbrd_0_init(core_gameData->hw.soundBoard, 1, memory_region(REGION_SOUND1), NULL, sb_ctrl_cb);
+  locals.hw = BY35HW_INVDISP4|BY35HW_DIP4;
+  locals.bcd2seg = core_bcd2seg;
+  install_mem_write_handler(0,0x00a0, 0x00a7, snd300_w);
+  install_mem_read_handler (0,0x00a0, 0x00a7, snd300_r);
+  install_mem_write_handler(0,0x00c0, 0x00c0, snd300_wex);
+}
+
+static MEMORY_READ_START(sam_readmem)
+  { 0x0000, 0x007f, MRA_RAM },
+  { 0x0088, 0x008b, pia_0_r },
+  { 0x0090, 0x0093, pia_1_r },
+  { 0x0200, 0x02ff, MRA_RAM },
+  { 0x1000, 0x1fff, MRA_ROM },
+  { 0x2000, 0x207f, MRA_RAM },
+  { 0x2104, 0x2107, pia_2_r },
+  { 0x2108, 0x210b, pia_3_r },
+  { 0x2110, 0x2113, pia_4_r },
+  { 0x2120, 0x2123, pia_5_r },
+  { 0x2140, 0x2143, pia_6_r },
+  { 0x2800, 0xffff, MRA_ROM },
+MEMORY_END
+
+static MEMORY_WRITE_START(sam_writemem)
+  { 0x0000, 0x007f, MWA_RAM },
+  { 0x0088, 0x008b, pia_0_w },
+  { 0x0090, 0x0093, pia_1_w },
+  { 0x0200, 0x02ff, by35_CMOS_w, &by35_CMOS },
+  { 0x1000, 0x1fff, MWA_NOP },
+  { 0x2000, 0x207f, MWA_RAM },
+  { 0x2104, 0x2107, pia_2_w },
+  { 0x2108, 0x210b, pia_3_w },
+  { 0x2110, 0x2113, pia_4_w },
+  { 0x2120, 0x2123, pia_5_w },
+  { 0x2140, 0x2143, pia_6_w },
+  { 0x2800, 0xffff, MWA_NOP },
+MEMORY_END
+
+MACHINE_DRIVER_START(st200sam)
+  MDRV_IMPORT_FROM(PinMAME)
+  MDRV_CORE_INIT_RESET_STOP(sam,by35,by35)
+  MDRV_CPU_ADD_TAG("mcpu", M6800, 530000)
+  MDRV_CPU_MEMORY(sam_readmem, sam_writemem)
+  MDRV_CPU_VBLANK_INT(by35_vblank, 1)
+  MDRV_CPU_PERIODIC_INT(sam_display_irq, BY35_IRQFREQ*2)
+  MDRV_TIMER_ADD(by35_zeroCross, BY35_ZCFREQ*2)
+  MDRV_SWITCH_UPDATE(by35)
+  MDRV_NVRAM_HANDLER(by35)
+  MDRV_DIPS(32)
+  MDRV_DIAGNOSTIC_LEDH(1)
+  MDRV_IMPORT_FROM(st300)
 MACHINE_DRIVER_END

@@ -178,7 +178,7 @@ INITGAME(gwarfare, 0,dispGP_BDU2,FLIP_SW(FLIP_L),SNDBRD_GPMSU1,0)
 GP_ROMSTART888(gwarfare,"240a.716",CRC(30206428) SHA1(7a9029e4fd4c4c00da3256ed06464c0bd8022168),
 						"240b.716",CRC(a54eb15d) SHA1(b9235bd188c1251eb213789800b7686b5e3c557f),
 						"240c.716",CRC(60d115a8) SHA1(e970fdd7cbbb2c81ab8c8209edfb681798c683b9))
-GP_SOUNDROM88("gw240bot.rom", CRC(3245a206) SHA1(b321b2d276fbd74199eff2d8c0d1b8a2f5c93604),
+GP_SOUNDROM88("gw240bot.rom",CRC(3245a206) SHA1(b321b2d276fbd74199eff2d8c0d1b8a2f5c93604),
               "gw240top.rom",CRC(faaf3de1) SHA1(9c984d1ac696eb16f7bf35463a69a470344314a7))
 GP_ROMEND
 CORE_GAMEDEFNV(gwarfare,"Global Warfare",1981,"Game Plan",mGP2SM,0)
@@ -254,21 +254,29 @@ CORE_GAMEDEFNV(cpthook,"Captain Hook",1985,"Game Plan",mGP2SM,0)
 /*-------------------------------------------------------------------
 / Lady Sharpshooter (May 1985) - Cocktail Model #830
 /-------------------------------------------------------------------*/
-INITGAME(ladyshot, 0,dispGP_BDU2,FLIP_SW(FLIP_L),SNDBRD_GPMSU1,0)
+static core_tLCDLayout disp_LSS[] = {
+ {0, 0, 0,7,CORE_SEG7}, {0,24, 8,7,CORE_SEG7},
+ {3,14,33,2,CORE_SEG7}, {3,20,37,2,CORE_SEG7},{0}
+};
+
+// Lady Sharpshooter uses the MSU-2 sound module (unique to this game)
+// which is just an MSU-1 without the 6840, with one PIA only, and an added DAC.
+// So it is essentially working exactly like the later MSU-3 sound board.
+INITGAME(ladyshot, 0,disp_LSS,FLIP_SW(FLIP_L),SNDBRD_GPMSU3,0)
 GP_ROMSTART888(ladyshot,"830a.716",CRC(c055b993) SHA1(a9a7156e5ec0a32db1ffe36b3c6280953a2606ff),
 						"830b.716",CRC(1e3308ea) SHA1(a5955a6a15b33c4cf35105ab524a8e7e03d748b6),
 						"830c.716",CRC(f5e1db15) SHA1(e8168ab37ba30211045fc96b23dad5f06592b38d))
 GP_SOUNDROM0("830.snd",NO_DUMP)
 GP_ROMEND
-CORE_GAMEDEFNV(ladyshot,"Lady Sharpshooter",1985,"Game Plan",mGP2SM,0)
+CORE_GAMEDEFNV(ladyshot,"Lady Sharpshooter",1985,"Game Plan",mGP2SM3,0)
 
-INITGAME(ldyshot2, 0,dispGP_BDU2,FLIP_SW(FLIP_L),SNDBRD_GPMSU1,0)
+INITGAME(ldyshot2, 0,disp_LSS,FLIP_SW(FLIP_L),SNDBRD_GPMSU3,0)
 GP_ROMSTART888(ldyshot2,"830a2.716",CRC(2c1f1629) SHA1(9233ce4328d779ff6548cdd5d6819cd368bef313),
 						"830b2.716",CRC(2105a538) SHA1(0360d3e740d8b6f816cfe7fe1fb32ac476251b9f),
 						"830c2.716",CRC(2d96bdde) SHA1(7c03a29a91f03fba9ed5e53a93335113a7cbafb3))
 GP_SOUNDROM0("830.snd",NO_DUMP)
 GP_ROMEND
-CORE_CLONEDEFNV(ldyshot2, ladyshot, "Lady Sharpshooter (alternate set)",1985,"Game Plan",mGP2SM,0)
+CORE_CLONEDEFNV(ldyshot2, ladyshot, "Lady Sharpshooter (alternate set)",1985,"Game Plan",mGP2SM3,0)
 
 /*-------------------------------------------------------------------
 / Andromeda (August 1985) - Model #850
@@ -297,6 +305,15 @@ GP_ROMSTART000(cyclopes,"800.a",CRC(3e9628e5) SHA1(4dad9e082a9f4140162bc155f2b0f
 						"800.c",CRC(7ea18e65) SHA1(e86d82e3ba659499dfbf14920b196252784724f7))
 GP_SOUNDROM0("800.snd",CRC(290db3d2) SHA1(a236594f7a89969981bd5707d6dfbb5120fb8f46))
 GP_ROMEND
-CORE_GAMEDEFNV(cyclopes,"Cyclopes",1985,"Game Plan",mGP2SM3,0)
+CORE_GAMEDEFNV(cyclopes,"Cyclopes (12/85)",1985,"Game Plan",mGP2SM3,0)
+
+GP_ROMSTART000(cyclope1,"800a.111585",CRC(13131b90) SHA1(33f6c4aaaa2511a9c78e68f8df9a6461cd92c23f),
+						"800b.111585",CRC(3d515632) SHA1(2c4a7f18760b591a85331fa0304177a730540489),
+						"800c.111585",CRC(2078bd3f) SHA1(fed719ffdbd71242393c0786ad6e763a9e25ff8e))
+GP_SOUNDROM0("800.snd",CRC(290db3d2) SHA1(a236594f7a89969981bd5707d6dfbb5120fb8f46))
+GP_ROMEND
+#define init_cyclope1 init_andromed
+GP_INPUT_PORTS_START(cyclope1, 1) GP_INPUT_PORTS_END
+CORE_CLONEDEFNV(cyclope1,cyclopes,"Cyclopes (11/85)",1985,"Game Plan",mGP2SM3,0)
 
 //Loch Ness Monster (November 1985) - Model #???

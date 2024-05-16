@@ -8,7 +8,7 @@
  *
  *	 HJB 08/31/98
  *	 modified to use an automatically selected oversampling factor
- *	 for the current Machine->sample_rate
+ *   for the current sample rate
  *
  *	 01/06/99
  *	separate MSM5205 emulator form adpcm.c and some fix
@@ -18,6 +18,42 @@
 #include <stdlib.h>
 #include <math.h>
 
+/*
+
+    MSM 5205 ADPCM chip:
+
+    Data is streamed from a CPU by means of a clock generated on the chip.
+
+    Holding the rate selector lines (S1 and S2) both high places the MSM5205 in an undocumented
+    mode which disables the sampling clock generator and makes VCK an input line.
+
+    A reset signal is set high or low to determine whether playback (and interrupts) are occurring.
+
+  MSM6585: is an upgraded MSM5205 voice synth IC.
+   Improvements:
+    More precise internal DA converter
+    Built in low-pass filter
+    Expanded sampling frequency
+
+   Differences between MSM6585 & MSM5205:
+
+                              MSM6585                      MSM5205
+    Master clock frequency    640kHz                       384k/768kHz
+    Sampling frequency        4k/8k/16k/32kHz at 640kHz    4k/6k/8kHz at 384kHz
+    ADPCM bit length          4-bit                        3-bit/4-bit
+    Data capture timing       3µsec at 640kHz              15.6µsec at 384kHz
+    DA converter              12-bit                       10-bit
+    Low-pass filter           -40dB/oct                    N/A
+    Overflow prevent circuit  Included                     N/A
+    Cutoff Frequency          (Sampling Frequency/2.5)kHz  N/A
+
+    Data capture follows VCK falling edge on MSM5205 (VCK rising edge on MSM6585)
+
+   TODO:
+   - lowpass filter for MSM6585
+
+ */
+
 #include "driver.h"
 #include "msm5205.h"
 
@@ -26,7 +62,7 @@
  */
 
 /* step size index shift table */
-static int index_shift[8] = { -1, -1, -1, -1, 2, 4, 6, 8 };
+static const int index_shift[8] = { -1, -1, -1, -1, 2, 4, 6, 8 };
 
 /* lookup table for the precomputed difference */
 static int diff_lookup[49*16];
@@ -38,7 +74,7 @@ static int diff_lookup[49*16];
 static void ComputeTables (void)
 {
 	/* nibble to bit map */
-	static int nbl2bit[16][4] =
+	static const int nbl2bit[16][4] =
 	{
 		{ 1, 0, 0, 0}, { 1, 0, 0, 1}, { 1, 0, 1, 0}, { 1, 0, 1, 1},
 		{ 1, 1, 0, 0}, { 1, 1, 0, 1}, { 1, 1, 1, 0}, { 1, 1, 1, 1},
@@ -52,7 +88,7 @@ static void ComputeTables (void)
 	for (step = 0; step <= 48; step++)
 	{
 		/* compute the step value */
-		int stepval = floor (16.0 * pow (11.0 / 10.0, (double)step));
+		int stepval = (int)floor(16.0 * pow (11.0 / 10.0, (double)step));
 
 		/* loop over all nibbles and compute the difference */
 		for (nib = 0; nib < 16; nib++)
@@ -100,12 +136,10 @@ static void MSM5205_update(int chip,INT16 *buffer,int length)
 	/* if this voice is active */
 	if(voice->signal)
 	{
-		short val = voice->signal * 16;
-		while (length)
-		{
-			*buffer++ = val;
-			length--;
-		}
+		const INT16 val = voice->signal * 16;
+		int i;
+		for (i = 0; i < length; i++)
+			buffer[i] = val;
 	}
 	else
 		memset (buffer,0,length*sizeof(INT16));
@@ -275,14 +309,18 @@ void MSM5205_data_w (int num, int data)
 }
 
 /*
- *    Handle an change of the selector
+ *    Handle a change of the selector
  */
 
 void MSM5205_playmode_w(int num,int select)
 {
 	struct MSM5205Voice *voice = &msm5205[num];
-	static int prescaler_table[4] = {96,48,64,0};
-	int prescaler = prescaler_table[select & 3];
+	static const int prescaler_table[2][4] =
+	{
+		{ 96, 48, 64,  0},
+		{160, 40, 80, 20}
+	};
+	int prescaler = prescaler_table[select >> 3 & 1][select & 3];
 	int bitwidth = (select & 4) ? 4 : 3;
 
 

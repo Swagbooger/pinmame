@@ -31,15 +31,15 @@
 #include <math.h>
 #include <driver.h>
 
-#include "screenshot.h"
-#include "bitmask.h"
-#include "mame32.h"
-#include "m32util.h"
+#include "Screenshot.h"
+#include "Bitmask.h"
+#include "MAME32.h"
+#include "M32Util.h"
 #include "resource.h"
-#include "treeview.h"
+#include "TreeView.h"
 #include "file.h"
-#include "splitters.h"
-#include "dijoystick.h"
+#include "Splitters.h"
+#include "DIJoystick.h"
 #include "audit.h"
 #include "options.h"
 
@@ -205,6 +205,8 @@ static REG_OPTION regSettings[] =
 };
 #define NUM_SETTINGS (sizeof(regSettings) / sizeof(regSettings[0]))
 
+static BOOL tmp;
+
 // options in mame32.ini or (gamename).ini
 static REG_OPTION regGameOpts[] =
 {
@@ -278,7 +280,7 @@ static REG_OPTION regGameOpts[] =
         // sound
         { "samplerate",             RO_INT,     &gOpts.samplerate,        0, 0},
         { "samples",                RO_BOOL,    &gOpts.use_samples,       0, 0},
-        { "resamplefilter",         RO_BOOL,    &gOpts.use_filter,        0, 0},
+        //{ "resamplefilter",         RO_BOOL,    &gOpts.use_filter,        0, 0},
         { "sound",                  RO_BOOL,    &gOpts.enable_sound,      0, 0},
         { "volume",                 RO_INT,     &gOpts.attenuation,       0, 0},
         { "audio_latency",          RO_INT,     &gOpts.audio_latency,     0, 0},
@@ -296,7 +298,7 @@ static REG_OPTION regGameOpts[] =
         { "debug",                  RO_BOOL,    &gOpts.mame_debug,        0, 0},
         { "log",                    RO_BOOL,    &gOpts.errorlog,          0, 0},
         { "sleep",                  RO_BOOL,    &gOpts.sleep,             0, 0},
-        { "rdtsc",                  RO_BOOL,    &gOpts.old_timing,        0, 0},
+        { "rdtsc",                  RO_BOOL,    &tmp,                     0, 0}, //unsupported
         { "leds",                   RO_BOOL,    &gOpts.leds,              0, 0},
         { "bios",                   RO_INT,     &gOpts.bios,              0, 0},
 #ifdef PINMAME
@@ -319,6 +321,13 @@ static REG_OPTION regGameOpts[] =
         { "dmd_red66",              RO_INT,     &gOpts.dmd_red66,         0, 0},
         { "dmd_green66",            RO_INT,     &gOpts.dmd_green66,       0, 0},
         { "dmd_blue66",             RO_INT,     &gOpts.dmd_blue66,        0, 0},
+        { "dmd_opacity",            RO_INT,     &gOpts.dmd_opacity,       0, 0},
+        { "resampling_quality",     RO_INT,     &gOpts.resampling_quality,0, 0},
+#if defined(VPINMAME_ALTSOUND) || defined(VPINMAME_PINSOUND)
+        { "sound_mode",             RO_INT,     &gOpts.sound_mode,        0, 0},
+#endif
+        { "vgmwrite",               RO_BOOL,    &gOpts.vgmwrite,          0, 0},
+        { "force_stereo",           RO_BOOL,    &gOpts.force_mono_to_stereo, 0, 0},
 #endif /* PINMAME */
 
 };
@@ -333,6 +342,9 @@ static REG_OPTION global_game_options[] =
 
         {"rompath",            RO_STRING,  &settings.romdirs,          0, 0},
         {"samplepath",         RO_STRING,  &settings.sampledirs,       0, 0},
+#if defined(PINMAME) && defined(PROC_SUPPORT)
+        {"procpath",           RO_STRING,  &settings.procdirs,         0, 0},
+#endif /* PINMAME && PROC_SUPPORT */
         {"inipath",            RO_STRING,  &settings.inidir,           0, 0},
         {"cfg_directory",      RO_STRING,  &settings.cfgdir,           0, 0},
         {"nvram_directory",    RO_STRING,  &settings.nvramdir,         0, 0},
@@ -644,7 +656,10 @@ BOOL OptionsInit()
 
         settings.romdirs           = _strdup("roms");
         settings.sampledirs        = _strdup("samples");
-        settings.inidir                    = _strdup("ini");
+#if defined(PINMAME) && defined(PROC_SUPPORT)
+        settings.procdirs          = _strdup("proc");
+#endif /* PINMAME && PROC_SUPPORT */
+        settings.inidir            = _strdup("ini");
         settings.cfgdir            = _strdup("cfg");
         settings.nvramdir          = _strdup("nvram");
         settings.memcarddir        = _strdup("memcard");
@@ -694,7 +709,7 @@ BOOL OptionsInit()
         global.wait_vsync        = FALSE;
         global.use_triplebuf     = FALSE;
         global.window_mode       = FALSE;
-        global.use_ddraw         = TRUE;
+        global.use_ddraw         = FALSE;
         global.ddraw_stretch     = TRUE;
         global.resolution        = _strdup("auto");
         global.gfx_refresh       = 0;
@@ -754,9 +769,9 @@ BOOL OptionsInit()
         global.f_intensity               = 1.5;
 
         /* Sound */
-        global.samplerate        = 44100;
+        global.samplerate        = 48000;
         global.use_samples       = TRUE;
-        global.use_filter        = TRUE;
+        //global.use_filter        = TRUE;
         global.enable_sound      = TRUE;
         global.attenuation       = 0;
         global.audio_latency     = 1;
@@ -774,8 +789,7 @@ BOOL OptionsInit()
         global.mame_debug        = FALSE;
         global.errorlog          = FALSE;
         global.sleep             = FALSE;
-        global.old_timing        = TRUE;
-        global.leds                              = FALSE;
+        global.leds              = FALSE;
         global.bios              = 0;
 #ifdef PINMAME
         global.dmd_red           = 225;
@@ -797,6 +811,13 @@ BOOL OptionsInit()
         global.dmd_red66         = 225;
         global.dmd_green66       = 15;
         global.dmd_blue66        = 193;
+        global.dmd_opacity       = 100;
+        global.resampling_quality= 0;
+#if defined(VPINMAME_ALTSOUND) || defined(VPINMAME_PINSOUND)
+        global.sound_mode        = 0;
+#endif
+        global.vgmwrite          = FALSE;
+        global.force_mono_to_stereo = FALSE;
 #endif /* PINMAME */
 
         // game_options[x] is valid if game_variables[i].options_loaded == true
@@ -832,6 +853,9 @@ BOOL OptionsInit()
         // this leaks a little, but the win32 file core writes to this string
         set_pathlist(FILETYPE_ROM,_strdup(settings.romdirs));
         set_pathlist(FILETYPE_SAMPLE,_strdup(settings.sampledirs));
+#if defined(PINMAME) && defined(PROC_SUPPORT)
+        set_pathlist(FILETYPE_PROC,_strdup(settings.procdirs));
+#endif /* PINMAME && PROC_SUPPORT */
 #ifdef MESS
         set_pathlist(FILETYPE_CRC,_strdup(settings.crcdir));
 #endif
@@ -856,6 +880,9 @@ void OptionsExit(void)
     FreeIfAllocated(&settings.language);
     FreeIfAllocated(&settings.romdirs);
     FreeIfAllocated(&settings.sampledirs);
+#if defined(PINMAME) && defined(PROC_SUPPORT)
+    FreeIfAllocated(&settings.procdirs);
+#endif /* PINMAME && PROC_SUPPORT */
     FreeIfAllocated(&settings.inidir);
     FreeIfAllocated(&settings.cfgdir);
     FreeIfAllocated(&settings.hidir);
@@ -1457,6 +1484,27 @@ void SetSampleDirs(const char* paths)
 
 }
 
+#if defined(PINMAME) && defined(PROC_SUPPORT)
+const char* GetProcDirs(void)
+{
+	return settings.procdirs;
+}
+
+void SetProcDirs(const char* paths)
+{
+	FreeIfAllocated(&settings.procdirs);
+
+	if (paths != NULL)
+	{
+		settings.procdirs = _strdup(paths);
+
+		// have our mame core (file code) know about it
+		// this leaks a little, but the win32 file core writes to this string
+		set_pathlist(FILETYPE_PROC,_strdup(settings.procdirs));
+	}
+}
+#endif /* PINMAME && PROC_SUPPORT */
+
 const char * GetIniDir(void)
 {
         return settings.inidir;
@@ -1834,14 +1882,14 @@ int GetPlayCount(int driver_index)
         return game_variables[driver_index].play_count;
 }
 
-int GetPlayTime(int driver_index)
+time_t GetPlayTime(int driver_index)
 {
         assert(0 <= driver_index && driver_index < num_games);
 
         return game_variables[driver_index].play_time;
 }
 
-void IncrementPlayTime(int driver_index,int playtime)
+void IncrementPlayTime(int driver_index,time_t playtime)
 {
         assert(0 <= driver_index && driver_index < num_games);
         game_variables[driver_index].play_time += playtime;
@@ -1849,8 +1897,8 @@ void IncrementPlayTime(int driver_index,int playtime)
 
 void GetTextPlayTime(int driver_index,char *buf)
 {
-        int hour, minute, second;
-        int temp = game_variables[driver_index].play_time;
+        time_t hour, minute, second;
+        time_t temp = game_variables[driver_index].play_time;
 
         assert(0 <= driver_index && driver_index < num_games);
 
@@ -1860,9 +1908,9 @@ void GetTextPlayTime(int driver_index,char *buf)
         second = temp - 60*minute;
 
         if (hour == 0)
-                sprintf(buf, "%d:%02d", minute, second );
+                sprintf(buf, "%lld:%02lld", minute, second );
         else
-                sprintf(buf, "%d:%02d:%02d", hour, minute, second );
+                sprintf(buf, "%lld:%02lld:%02lld", hour, minute, second );
 }
 
 int GetUIJoyUp(int joycodeIndex)
@@ -2944,7 +2992,7 @@ void SaveGameOptions(int driver_index)
         {
                 if (DeleteFile(buffer) == 0)
                 {
-                        dprintf("error deleting %s; error %d\n",buffer, GetLastError());
+                        dprintf("error deleting %s; error %d",buffer, GetLastError());
                 }
         }
 }

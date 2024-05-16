@@ -80,10 +80,6 @@
 #include "network.h"
 #endif /* MAME_NET */
 
-#ifdef MMSND
-#include "mmsnd/mmsnd.h"
-#endif
-
 #ifdef PINMAME
 typedef struct {
   int dmd_red, dmd_green, dmd_blue;
@@ -93,6 +89,18 @@ typedef struct {
   int dmd_red66, dmd_green66, dmd_blue66;
   int dmd_red33, dmd_green33, dmd_blue33;
   int dmd_red0, dmd_green0, dmd_blue0;
+  int dmd_opacity;
+  int resampling_quality;
+#if defined(VPINMAME_ALTSOUND) || defined(VPINMAME_PINSOUND) || defined(LIBPINMAME)
+  int sound_mode; // 0 = pinmame, 1 = altsound, 2 = pinsound, 3 = pinsound + recordings
+#endif
+#ifdef PROC_SUPPORT
+  char *p_roc;                 /* YAML Machine description file */
+  int alpha_on_dmd;            /* Virtual alphanumeric displays on P-ROC DMD */
+  int virtual_dmd;             /* If we have no screen, then we can suppress the DMD */
+#endif /* PROC_SUPPORT */
+  int vgmwrite; // bool
+  int force_mono_to_stereo; // bool
 } tPMoptions;
 extern tPMoptions pmoptions;
 struct pinMachine {
@@ -105,13 +113,13 @@ struct pinMachine {
   int (*m2lamp)(int col, int row);
   struct {
     void (*callback)(int);
-    int  rate;
+    double rate;
   } timers[5];
   void (*init)(void);
   void (*reset)(void);
   void (*stop)(void);
 };
-extern void machine_add_timer(struct InternalMachineDriver *machine, void (*func)(int), int rate);
+extern void machine_add_timer(struct InternalMachineDriver *machine, void (*func)(int), double rate);
 #define DIAGLED_VERTICAL        0x100   /* Flag indicated DIAG LEDS are Vertically Positioned */
 #define MDRV_DIPS(no) \
   machine->pinmame.coreDips = (no);
@@ -329,7 +337,7 @@ extern void machine_add_timer(struct InternalMachineDriver *machine, void (*func
         }                                                                                                                                       \
 
 
-struct MachineCPU *machine_add_cpu(struct InternalMachineDriver *machine, const char *tag, int type, int cpuclock);
+struct MachineCPU *machine_add_cpu(struct InternalMachineDriver *machine, const char *tag, int type, double cpuclock);
 struct MachineCPU *machine_find_cpu(struct InternalMachineDriver *machine, const char *tag);
 void machine_remove_cpu(struct InternalMachineDriver *machine, const char *tag);
 
@@ -354,9 +362,9 @@ void machine_remove_sound(struct InternalMachineDriver *machine, const char *tag
 struct InternalMachineDriver
 {
         struct MachineCPU cpu[MAX_CPU];
-        float frames_per_second;
+        double frames_per_second;
         int vblank_duration;
-        UINT32 cpu_slices_per_frame;
+        double cpu_slices_per_frame;
 
         void (*machine_init)(void);
         void (*machine_stop)(void);
@@ -617,19 +625,7 @@ const struct GameDriver driver_##NAME =         \
 
 ***************************************************************************/
 
-extern const struct GameDriver *drivers[];
+extern struct GameDriver *drivers[];
 extern const struct GameDriver *test_drivers[];
 
-#ifdef PINMAME
-//Include New Stern Game Support if not running VPM or if Test New Stern Game flag found
-#ifdef VPINMAME
-        #ifdef TEST_NEW_STERN
-                #define INCLUDE_NEW_STERN 1
-//              #define INCLUDE_STERN_SAM 1
-        #endif
-#else
-        #define INCLUDE_NEW_STERN 1
-//      #define INCLUDE_STERN_SAM 1
-#endif
-#endif
 #endif

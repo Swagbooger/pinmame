@@ -40,7 +40,7 @@
 #include "arm7core.h"	//include arm7 core
 
 /* Example for showing how Co-Proc functions work */
-#define TEST_COPROC_FUNCS 1
+#define TEST_COPROC_FUNCS 0
 
 /*prototypes*/
 #if TEST_COPROC_FUNCS
@@ -66,6 +66,10 @@ char *Spec_DO( char *pBuf, data32_t opcode, char *pConditionCode, char *pBuf0);
 #define WRITE32(addr,data)	arm7_cpu_write32(addr,data)
 #define PTR_READ32			&arm7_cpu_read32
 #define PTR_WRITE32			&arm7_cpu_write32
+#define PTR_READ16          &arm7_cpu_read16
+#define PTR_WRITE16         &arm7_cpu_write16
+#define PTR_READ8           &arm7_cpu_read8
+#define PTR_WRITE8          &arm7_cpu_write8
 
 /* Macros that need to be defined according to the cpu implementation specific need */
 #define ARMREG(reg)			arm7.sArmRegister[reg]
@@ -246,28 +250,30 @@ void arm7_set_irq_callback(int (*callback)(int irqline))
 {
 }
 
+
+
 static const data8_t arm7_reg_layout[] =
 {
-	-1,
-	ARM732_R0,  ARM732_IR13, -1,
-	ARM732_R1,  ARM732_IR14, -1,
-	ARM732_R2,  ARM732_ISPSR, -1,
-	ARM732_R3,  -1,
-	ARM732_R4,  ARM732_FR8,  -1,
-	ARM732_R5,  ARM732_FR9,  -1,
-	ARM732_R6,  ARM732_FR10, -1,
-	ARM732_R7,  ARM732_FR11, -1,
-	ARM732_R8,  ARM732_FR12, -1,
-	ARM732_R9,  ARM732_FR13, -1,
-	ARM732_R10, ARM732_FR14, -1,
-	ARM732_R11, ARM732_FSPSR, -1,
-	ARM732_R12, -1,
-	ARM732_R13, ARM732_AR13, -1,
-	ARM732_R14, ARM732_AR14, -1,
-	ARM732_R15, ARM732_ASPSR, -1,
-	-1,
-	ARM732_SR13, ARM732_UR13, -1,
-	ARM732_SR14, ARM732_UR14, -1,
+	0xFF,
+	ARM732_R0,  ARM732_IR13, 0xFF,
+	ARM732_R1,  ARM732_IR14, 0xFF,
+	ARM732_R2,  ARM732_ISPSR, 0xFF,
+	ARM732_R3,  0xFF,
+	ARM732_R4,  ARM732_FR8,  0xFF,
+	ARM732_R5,  ARM732_FR9,  0xFF,
+	ARM732_R6,  ARM732_FR10, 0xFF,
+	ARM732_R7,  ARM732_FR11, 0xFF,
+	ARM732_R8,  ARM732_FR12, 0xFF,
+	ARM732_R9,  ARM732_FR13, 0xFF,
+	ARM732_R10, ARM732_FR14, 0xFF,
+	ARM732_R11, ARM732_FSPSR, 0xFF,
+	ARM732_R12, 0xFF,
+	ARM732_R13, ARM732_AR13, 0xFF,
+	ARM732_R14, ARM732_AR14, 0xFF,
+	ARM732_R15, ARM732_ASPSR, 0xFF,
+	0xFF,
+	ARM732_SR13, ARM732_UR13, 0xFF,
+	ARM732_SR14, ARM732_UR14, 0xFF,
 	ARM732_SSPSR, ARM732_USPSR, 0
 };
 
@@ -285,7 +291,7 @@ const char *arm7_info(void *context, int regnum)
 	static char buffer[32][63+1];
 	static int which = 0;
 
-	ARM7_REGS *pRegs = context;
+	ARM7_REGS *pRegs = (ARM7_REGS*)context;
 	if( !context )
 		pRegs = &ARM7;
 
@@ -369,6 +375,9 @@ unsigned arm7_dasm(char *buffer, unsigned int pc)
 
 void arm7_init(void)
 {
+	memset(&ARM7, 0, sizeof(ARM7));
+	ARM7_ICOUNT = 0;
+
 	//must call core 
 	arm7_core_init("arm7");
 
@@ -386,9 +395,12 @@ void arm7_init(void)
 	arm7_dasm_cop_do_callback = Spec_DO;
 #endif
 #endif
-
-	return;
 }
+
+//
+// Include the ARM7 JIT
+//
+#include "../arm7/arm7jit.c"
 
 
 //*TEST COPROC CALLBACK HANDLERS - Used for example on how to implement only *//
@@ -436,4 +448,3 @@ char *Spec_DO( char *pBuf, data32_t opcode, char *pConditionCode, char *pBuf0)
 }
 #endif
 #endif
-

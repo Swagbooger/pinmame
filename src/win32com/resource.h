@@ -25,9 +25,14 @@
 #define IDC_CABINETMODE                 106
 #define IDC_SAMPLERATE                  110
 #define IDC_ANTIALIAS                   111
-#define IDC_SYNCLEVEL                   112
+#define IDC_MONOTOSTEREO                112
 #define IDC_FASTFRAMES                  113
 #define IDC_PINDMD                      114
+#define IDC_WINDMD                      115
+#define IDC_DMDOPACITY                  116
+#define IDC_SOUNDMODE                   117
+#define IDC_RESAMPLEQ                   118
+#define IDC_VGMWRITE                    119
 #define IDC_DMDRED                      120
 #define IDC_DMDGREEN                    121
 #define IDC_DMDBLUE                     122
@@ -60,7 +65,8 @@
 #define IDDIRBUTTONNVRAM                204
 #define IDB_SPLASH5                     204
 #define IDDIRBUTTONSAMPLE               205
-#define IDDIRBUTTONIMG                  206
+#define IDDIRBUTTONMEMCARD              206
+#define IDDIRBUTTONIMG                  207
 #define IDGETCOLOR                      207
 #define IDD_DISCLAIMERDLG               208
 #define IDD_GAMEINFODLG                 209
@@ -81,6 +87,7 @@
 #define IDC_HOMEPAGELINK                240
 #define IDC_COMBO1                      241
 #define IDC_DISPLAYLIST                 241
+#define IDC_MEMCARDDIRS                 242
 #define ID_CTRLCTXMENU_GAMEOPTIONS      32771
 #define ID_CTRLCTXMENU_PATHES           32772
 #define ID_CTRLCTXMENU_DISPLAY_TITLE    32773
@@ -89,14 +96,15 @@
 #define ID_CTRLCTXMENU_INFO             32776
 #define ID_CTRLCTXMENU_STOPEMULATION    32777
 #define ID_CTRLCTXMENU_DISPLAY_RESTORESIZE 32778
+#define ID_CTRLCTXMENU_DISPLAY_RESTOREPOS 32779
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        214
-#define _APS_NEXT_COMMAND_VALUE         32779
-#define _APS_NEXT_CONTROL_VALUE         242
+#define _APS_NEXT_COMMAND_VALUE         32780
+#define _APS_NEXT_CONTROL_VALUE         243
 #define _APS_NEXT_SYMED_VALUE           106
 #endif
 #endif

@@ -25,6 +25,9 @@
 #include <stdarg.h>
 #include <ctype.h>
 #include <time.h>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include "driver.h"
 #include "rc.h"
@@ -54,10 +57,10 @@ struct rc_option pinmame_opts[] = {
 #ifdef VPINMAME
         { "dmd_red",    NULL, rc_int, &pmoptions.dmd_red,   "255", 0, 255, NULL, "DMD color: Red" },
         { "dmd_green",  NULL, rc_int, &pmoptions.dmd_green, "88", 0, 255, NULL, "DMD color: Green" },
-#else
+#else /* VPINMAME */
         { "dmd_red",    NULL, rc_int, &pmoptions.dmd_red,   "225", 0, 255, NULL, "DMD color: Red" },
         { "dmd_green",  NULL, rc_int, &pmoptions.dmd_green, "224", 0, 255, NULL, "DMD color: Green" },
-#endif
+#endif /* VPINMAME */
         { "dmd_blue",   NULL, rc_int, &pmoptions.dmd_blue,   "32", 0, 255, NULL, "DMD color: Blue" },
         { "dmd_perc0",  NULL, rc_int, &pmoptions.dmd_perc0,  "20", 0, 100, NULL, "DMD off intensity [%]" },
         { "dmd_perc33", NULL, rc_int, &pmoptions.dmd_perc33,  "33", 0, 100, NULL, "DMD low intensity [%]" },
@@ -66,22 +69,35 @@ struct rc_option pinmame_opts[] = {
         { "dmd_compact",NULL, rc_bool,&pmoptions.dmd_compact, "0",  0, 0,   NULL, "Show compact display" },
         { "dmd_antialias", NULL, rc_int, &pmoptions.dmd_antialias,  "50", 0, 100, NULL, "DMD antialias intensity [%]" },
         { "dmd_colorize", NULL, rc_bool, &pmoptions.dmd_colorize, "0", 0, 0, NULL, "Use distinct colors for DMD intensities" },
-        { "dmd_red66", NULL, rc_int, &pmoptions.dmd_red66, "225", 0, 0, NULL, "Colorized DMD: 66%: Red" },
-        { "dmd_green66", NULL, rc_int, &pmoptions.dmd_green66, "15", 0, 0, NULL, "Colorized DMD: 66%: Green" },
-        { "dmd_blue66", NULL, rc_int, &pmoptions.dmd_blue66, "193", 0, 0, NULL, "Colorized DMD: 66%: Blue" },
-        { "dmd_red33", NULL, rc_int, &pmoptions.dmd_red33, "6", 0, 0, NULL, "Colorized DMD: 33%: Red" },
-        { "dmd_green33", NULL, rc_int, &pmoptions.dmd_green33, "0", 0, 0, NULL, "Colorized DMD: 33%: Green" },
-        { "dmd_blue33", NULL, rc_int, &pmoptions.dmd_blue33, "214", 0, 0, NULL, "Colorized DMD: 33%: Blue" },
-        { "dmd_red0", NULL, rc_int, &pmoptions.dmd_red0, "0", 0, 0, NULL, "Colorized DMD: 0%: Red" },
-        { "dmd_green0", NULL, rc_int, &pmoptions.dmd_green0, "0", 0, 0, NULL, "Colorized DMD: 0%: Green" },
-        { "dmd_blue0", NULL, rc_int, &pmoptions.dmd_blue0, "0", 0, 0, NULL, "Colorized DMD: 0%: Blue" },
+        { "dmd_red66", NULL, rc_int, &pmoptions.dmd_red66, "225", 0, 255, NULL, "Colorized DMD: 66%: Red" },
+        { "dmd_green66", NULL, rc_int, &pmoptions.dmd_green66, "15", 0, 255, NULL, "Colorized DMD: 66%: Green" },
+        { "dmd_blue66", NULL, rc_int, &pmoptions.dmd_blue66, "193", 0, 255, NULL, "Colorized DMD: 66%: Blue" },
+        { "dmd_red33", NULL, rc_int, &pmoptions.dmd_red33, "6", 0, 255, NULL, "Colorized DMD: 33%: Red" },
+        { "dmd_green33", NULL, rc_int, &pmoptions.dmd_green33, "0", 0, 255, NULL, "Colorized DMD: 33%: Green" },
+        { "dmd_blue33", NULL, rc_int, &pmoptions.dmd_blue33, "214", 0, 255, NULL, "Colorized DMD: 33%: Blue" },
+        { "dmd_red0", NULL, rc_int, &pmoptions.dmd_red0, "0", 0, 255, NULL, "Colorized DMD: 0%: Red" },
+        { "dmd_green0", NULL, rc_int, &pmoptions.dmd_green0, "0", 0, 255, NULL, "Colorized DMD: 0%: Green" },
+        { "dmd_blue0", NULL, rc_int, &pmoptions.dmd_blue0, "0", 0, 255, NULL, "Colorized DMD: 0%: Blue" },
+        { "dmd_opacity", NULL, rc_int, &pmoptions.dmd_opacity, "100", 0, 100, NULL, "DMD opacity" },
+        { "resampling_quality", NULL, rc_int, &pmoptions.resampling_quality, "0", 0, 1, NULL, "Quality of the resampling implementation (0=Fast,1=Normal)" },
+#if defined(VPINMAME_ALTSOUND) || defined(VPINMAME_PINSOUND)
+        { "sound_mode", NULL, rc_int, &pmoptions.sound_mode, "0", 0, 3, NULL, "Sound processing mode (PinMAME, Alternative, PinSound, PinSound + Recordings)" },
+#endif
+#ifdef PROC_SUPPORT
+// TODO/PROC: Correct implementation?
+        { "p-roc", NULL, rc_string, &pmoptions.p_roc, "None",  0, 0, NULL, "YAML Machine description file" },
+        { "alpha_on_dmd", NULL, rc_bool, &pmoptions.alpha_on_dmd, "0",  0, 0, NULL, "Emulate alphanumeric display on DMD" },
+        { "virtual_dmd",  NULL, rc_bool, &pmoptions.virtual_dmd,  "1",  0, 0, NULL, "Enable DMD emulation" },
+#endif /* PROC_SUPPORT */
+        { "vgmwrite", NULL, rc_bool, &pmoptions.vgmwrite, "0", 0, 0, NULL, "Enable to write a VGM of the current session (name is based on romname)" },
+        { "force_stereo", NULL, rc_bool, &pmoptions.force_mono_to_stereo, "0", 0, 0, NULL, "Always force stereo output (e.g. to better support multi channel sound systems)" },
         { NULL, NULL, rc_end, NULL, NULL, 0, 0, NULL, NULL }
 };
 #endif /* PINMAME */
 extern int frontend_help(char *gamename);
 static int config_handle_arg(char *arg);
 
-static FILE *logfile;
+static FILE *logfile = NULL;
 static int maxlogsize;
 static int curlogsize;
 static int errorlog;
@@ -142,11 +158,11 @@ static int video_set_beam(struct rc_option *option, const char *arg, int priorit
 
 static int video_set_flicker(struct rc_option *option, const char *arg, int priority)
 {
-        options.vector_flicker = (int)(f_flicker * 2.55);
-        if (options.vector_flicker < 0)
-                options.vector_flicker = 0;
-        if (options.vector_flicker > 255)
-                options.vector_flicker = 255;
+        options.vector_flicker = f_flicker * 2.55f;
+        if (options.vector_flicker < 0.f)
+                options.vector_flicker = 0.f;
+        if (options.vector_flicker > 255.f)
+                options.vector_flicker = 255.f;
         option->priority = priority;
         return 0;
 }
@@ -179,7 +195,7 @@ static int init_errorlog(struct rc_option *option, const char *arg, int priority
         /* provide errorlog from here on */
         if (errorlog && !logfile)
         {
-                logfile = fopen("error.log","wa");
+                logfile = fopen("error.log","a");
                 curlogsize = 0;
                 if (!logfile)
                 {
@@ -236,11 +252,11 @@ struct rc_option core_opts[] = {
 
         /* sound */
         { "Mame CORE sound options", NULL, rc_seperator, NULL, NULL, 0, 0, NULL, NULL },
-        { "samplerate", "sr", rc_int, &options.samplerate, "44100", 5000, 50000, NULL, "set samplerate" },
+        { "samplerate", "sr", rc_int, &options.samplerate, "48000", 8000, 96000, NULL, "set samplerate" },
         { "samples", NULL, rc_bool, &options.use_samples, "1", 0, 0, NULL, "use samples" },
-        { "resamplefilter", NULL, rc_bool, &options.use_filter, "1", 0, 0, NULL, "resample if samplerate does not match" },
-        { "sound", NULL, rc_bool, &enable_sound, "1", 0, 0, NULL, "enable/disable sound and sound CPUs" },
-        { "volume", "vol", rc_int, &attenuation, "0", -32, 0, NULL, "volume (range [-32,0])" },
+        //{ "resamplefilter", NULL, rc_bool, &options.use_filter, "1", 0, 0, NULL, "resample if samplerate does not match" },
+        { "sound", NULL, rc_bool, &enable_sound, "1", 0, 0, NULL, "enable/disable sound, incl. sound CPUs" },
+        { "volume", "vol", rc_int, &attenuation, "0", -32, 32, NULL, "volume (range [-32,32])" }, // for now only windows allows for >0 values (=gain)
 
         /* misc */
         { "Mame CORE misc options", NULL, rc_seperator, NULL, NULL, 0, 0, NULL, NULL },
@@ -261,6 +277,7 @@ struct rc_option core_opts[] = {
         { "skip_gameinfo", NULL, rc_bool, &options.skip_gameinfo, "0", 0, 0, NULL, "skip displaying the game info screen" },
         { "crconly", NULL, rc_bool, &options.crc_only, "0", 0, 0, NULL, "use only CRC for all integrity checks" },
         { "bios", NULL, rc_string, &options.bios, "default", 0, 14, NULL, "change system bios" },
+        { "at91jit", NULL, rc_int, &options.at91jit, "1", 0, 33554432, NULL, "at91 CPU JIT compiler enabled" },
 
         /* config options */
         { "Configuration options", NULL, rc_seperator, NULL, NULL, 0, 0, NULL, NULL },
@@ -284,7 +301,7 @@ struct rc_option core_opts[] = {
 int penalty_compare (const char *s, const char *l)
 {
         int gaps = 0;
-        int match = 0;
+        int match;
         int last = 1;
 
         for (; *s && *l; l++)
@@ -383,11 +400,11 @@ int parse_config (const char* filename, const struct GameDriver *gamedrv)
                         if (retval)
                                 return retval;
                 }
-                sprintf(buffer, "%s.ini", gamedrv->name);
+                snprintf(buffer, sizeof(buffer), "%s.ini", gamedrv->name);
         }
         else
         {
-                sprintf(buffer, "%s", filename);
+                snprintf(buffer, sizeof(buffer), "%s", filename);
         }
 
         if (verbose)
@@ -474,7 +491,7 @@ int cli_frontend_init (int argc, char **argv)
                 exit(1);
         }
 
-        sprintf (buffer, "%s.ini", cmd_name);
+        snprintf (buffer, sizeof(buffer), "%s.ini", cmd_name);
 
         /* parse mame.ini/mess.ini even if called with another name */
 #ifdef MESS
@@ -509,7 +526,7 @@ int cli_frontend_init (int argc, char **argv)
 
         if (showconfig)
         {
-                sprintf (buffer, " %s running parameters", cmd_name);
+                snprintf (buffer, sizeof(buffer), " %s running parameters", cmd_name);
                 rc_write(rc, stdout, buffer);
                 exit(0);
         }
@@ -592,7 +609,7 @@ int cli_frontend_init (int argc, char **argv)
                         i = 0;
                         while (drivers[i]) i++; /* count available drivers */
 
-                        srand(time(0));
+                        srand((unsigned int)time(0));
                         /* call rand() once to get away from the seed */
                         rand();
                         game_index = rand() % i;
@@ -624,7 +641,7 @@ int cli_frontend_init (int argc, char **argv)
         {
                 const struct GameDriver *tmp_gd;
 
-                sprintf(buffer, "%s", drivers[game_index]->source_file+12);
+                snprintf(buffer, sizeof(buffer), "%s", drivers[game_index]->source_file+12);
                 buffer[strlen(buffer) - 2] = 0;
 
                 tmp_gd = drivers[game_index];
@@ -664,7 +681,11 @@ int cli_frontend_init (int argc, char **argv)
                 INP_HEADER inp_header;
 
                 memset(&inp_header, '\0', sizeof(INP_HEADER));
+#ifndef __MINGW32__
+                strcpy_s(inp_header.name, sizeof(inp_header.name), drivers[game_index]->name);
+#else
                 strcpy(inp_header.name, drivers[game_index]->name);
+#endif
                 /* MAME32 stores the MAME version numbers at bytes 9 - 11
                  * MAME DOS keeps this information in a string, the
                  * Windows code defines them in the Makefile.

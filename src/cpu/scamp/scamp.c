@@ -37,7 +37,7 @@ static SCAMP_Regs I;
 int SCAMP_ICount = 0;
 
 /* Cycles count for all opcodes */
-static int op_cycles[] = {
+static const int op_cycles[] = {
 	8, 7, 5, 5, 6, 6, 5, 6, 5, 1, 1, 1, 1, 1, 1, 1,
 	1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 1, 1, 5, 5, 5, 5,
 	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
@@ -912,7 +912,7 @@ const char *SCAMP_info(void *context, int regnum)
 {
 	static char buffer[12][47+1];
 	static int which = 0;
-	SCAMP_Regs *r = context;
+	SCAMP_Regs *r = (SCAMP_Regs*)context;
 
 	which = (which+1) % 12;
 	buffer[which][0] = '\0';

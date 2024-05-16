@@ -64,6 +64,42 @@
 #define L2E INDENT ")"
 */
 
+/*-------------------------------------------------
+    xml_normalize_string - normalize a string
+    to ensure it doesn't contain embedded tags
+-------------------------------------------------*/
+
+static const char *xml_normalize_string(const int OUTPUT_XML, const char *string)
+{
+	static char buffer[1024];
+	char *d = &buffer[0];
+
+	if(!OUTPUT_XML)
+		return string;
+
+	if (string != NULL)
+	{
+		while (*string)
+		{
+			switch (*string)
+			{
+				case '\"' : d += sprintf(d, "&quot;"); break;
+				case '&'  : d += sprintf(d, "&amp;"); break;
+				case '<'  : d += sprintf(d, "&lt;"); break;
+				case '>'  : d += sprintf(d, "&gt;"); break;
+				default:
+					if (*string >= ' ' && *string <= '~')
+						*d++ = *string;
+					else
+						d += sprintf(d, "&#%d;", (unsigned)(unsigned char)*string);
+			}
+			++string;
+		}
+	}
+	*d++ = 0;
+	return buffer;
+}
+
 /* Print a free format string */
 static void print_free_string(int OUTPUT_XML, FILE* out, const char* s)
 {
@@ -392,9 +428,9 @@ static void print_game_bios(int OUTPUT_XML, FILE* out, const struct GameDriver* 
 		fprintf(out, SELECT(L1P "biosset" L2B, "\t\t<biosset"));
 
 		if (thisbios->_name)
-			fprintf(out, SELECT(L2P "name %s" L2N, " name=\"%s\""), thisbios->_name);
+			fprintf(out, SELECT(L2P "name %s" L2N, " name=\"%s\""), xml_normalize_string(OUTPUT_XML,thisbios->_name));
 		if (thisbios->_description)
-			fprintf(out, SELECT(L2P "description \"%s\"" L2N, " description=\"%s\""), thisbios->_description);
+			fprintf(out, SELECT(L2P "description \"%s\"" L2N, " description=\"%s\""), xml_normalize_string(OUTPUT_XML,thisbios->_description));
 		if (thisbios->value == 0)
 			fprintf(out, SELECT(L2P "default yes" L2N, " default=\"yes\""));
 
@@ -416,7 +452,7 @@ static void print_game_rom(int OUTPUT_XML, FILE* out, const struct GameDriver* g
 	for (region = rom_first_region(game); region; region = rom_next_region(region))
 		for (rom = rom_first_file(region); rom; rom = rom_next_file(rom))
 		{
-			int offset, length, in_parent, is_disk, is_bios, found_bios, i;
+			int offset, length, in_parent, is_disk, is_bios, found_bios;
 			char name[100], bios_name[100];
 
 			strcpy(name,ROM_GETNAME(rom));
@@ -467,17 +503,18 @@ static void print_game_rom(int OUTPUT_XML, FILE* out, const struct GameDriver* g
 				fprintf(out, SELECT(L1P "disk" L2B, "\t\t<disk"));
 
 			if (*name)
-				fprintf(out, SELECT(L2P "name %s" L2N, " name=\"%s\""), name);
+				fprintf(out, SELECT(L2P "name %s" L2N, " name=\"%s\""), xml_normalize_string(OUTPUT_XML,name));
 			if (!is_disk && in_parent)
-				fprintf(out, SELECT(L2P "merge %s" L2N, " merge=\"%s\""), ROM_GETNAME(fprom));
+				fprintf(out, SELECT(L2P "merge %s" L2N, " merge=\"%s\""), xml_normalize_string(OUTPUT_XML,ROM_GETNAME(fprom)));
 			if (!is_disk && found_bios)
-				fprintf(out, SELECT(L2P "bios %s" L2N, " bios=\"%s\""), bios_name);
+				fprintf(out, SELECT(L2P "bios %s" L2N, " bios=\"%s\""), xml_normalize_string(OUTPUT_XML,bios_name));
 			if (!is_disk)
 				fprintf(out, SELECT(L2P "size %d" L2N, " size=\"%d\""), length);
 
 			/* dump checksum information only if there is a known dump */
 			if (!hash_data_has_info(ROM_GETHASHDATA(rom), HASH_INFO_NO_DUMP))
 			{
+				int i;
 				for (i=0;i<HASH_NUM_FUNCTIONS;i++)
 				{
 					int func = 1<<i;
@@ -585,7 +622,7 @@ static void print_game_sampleof(int OUTPUT_XML, FILE* out, const struct GameDriv
 			{
 				/* output sampleof only if different from game name */
 				if (strcmp(samplenames[k] + 1, game->name)!=0)
-					fprintf(out, SELECT(L1P "sampleof %s" L1N, " sampleof=\"%s\""), samplenames[k] + 1);
+					fprintf(out, SELECT(L1P "sampleof %s" L1N, " sampleof=\"%s\""), xml_normalize_string(OUTPUT_XML,samplenames[k] + 1));
 				++k;
 			}
 		}
@@ -620,7 +657,7 @@ static void print_game_sample(int OUTPUT_XML, FILE* out, const struct GameDriver
 					while (l<k && strcmp(samplenames[k],samplenames[l])!=0)
 						++l;
 					if (l==k)
-						fprintf(out, SELECT(L1P "sample %s" L1N, "\t\t<sample name=\"%s\"/>\n"), samplenames[k]);
+						fprintf(out, SELECT(L1P "sample %s" L1N, "\t\t<sample name=\"%s\"/>\n"), xml_normalize_string(OUTPUT_XML,samplenames[k]));
 				}
 				++k;
 			}
@@ -654,12 +691,12 @@ static void print_game_micro(int OUTPUT_XML, FILE* out, const struct GameDriver*
 			print_statement_string(OUTPUT_XML, out, cputype_name(cpu[j].cpu_type));
 			fprintf(out, "%s", SELECT(L2N, "\""));
 
-			fprintf(out, SELECT(L2P "clock %d" L2N, " clock=\"%d\""), cpu[j].cpu_clock);
+			fprintf(out, SELECT(L2P "clock %.2f" L2N, " clock=\"%.2f\""), cpu[j].cpu_clock);
 			fprintf(out, SELECT(L2E L1N, "/>\n"));
 		}
 	}
 
-	for(j=0;j<MAX_SOUND;++j) if (sound[j].sound_type)
+	for(j=0;j<MAX_SOUND;++j)
 	{
 		if (sound[j].sound_type)
 		{
@@ -676,7 +713,7 @@ static void print_game_micro(int OUTPUT_XML, FILE* out, const struct GameDriver*
 				print_statement_string(OUTPUT_XML, out, sound_name(&sound[j]));
 				fprintf(out, "%s", SELECT(L2N, "\""));
 				if (sound_clock(&sound[j]))
-					fprintf(out, SELECT(L2P "clock %d" L2N, " clock=\"%d\""), sound_clock(&sound[j]));
+					fprintf(out, SELECT(L2P "clock %.2f" L2N, " clock=\"%.2f\""), sound_clock(&sound[j]));
 				fprintf(out, SELECT(L2E L1N, "/>\n"));
 			}
 		}
@@ -875,13 +912,13 @@ static void print_game_info(int OUTPUT_XML, FILE* out, const struct GameDriver* 
 
 	fprintf(out, SELECT(XML_TOP L1B, "\t<" XML_TOP));
 
-	fprintf(out, SELECT(L1P "name %s" L1N, " name=\"%s\""), game->name );
+	fprintf(out, SELECT(L1P "name %s" L1N, " name=\"%s\""), xml_normalize_string(OUTPUT_XML,game->name));
 
 	if (game->clone_of && !(game->clone_of->flags & NOT_A_DRIVER))
-		fprintf(out, SELECT(L1P "cloneof %s" L1N, " cloneof=\"%s\""), game->clone_of->name);
+		fprintf(out, SELECT(L1P "cloneof %s" L1N, " cloneof=\"%s\""), xml_normalize_string(OUTPUT_XML,game->clone_of->name));
 
 	if (game->clone_of && game->clone_of != &driver_0)
-		fprintf(out, SELECT(L1P "romof %s" L1N, " romof=\"%s\""), game->clone_of->name);
+		fprintf(out, SELECT(L1P "romof %s" L1N, " romof=\"%s\""), xml_normalize_string(OUTPUT_XML,game->clone_of->name));
 
 	print_game_sampleof(OUTPUT_XML, out, game);
 
@@ -922,7 +959,7 @@ static void print_game_info(int OUTPUT_XML, FILE* out, const struct GameDriver* 
 	fprintf(out, SELECT(L1E, "\t</" XML_TOP ">\n"));
 }
 
-#if !defined(MESS) && !defined(TINY_COMPILE) && !defined(CPSMAME) && !defined(MMSND)
+#if 0
 /* Print the resource info */
 static void print_resource_info(int OUTPUT_XML, FILE* out, const struct GameDriver* game)
 {
@@ -973,27 +1010,6 @@ static void print_mame_data(int OUTPUT_XML, FILE* out, const struct GameDriver* 
 	/* print games */
 	for(j=0;games[j];++j)
 		print_game_info(OUTPUT_XML, out, games[j]);
-
-	/* print the resources (only if linked) */
-#if !defined(MESS) && !defined(TINY_COMPILE) && !defined(CPSMAME) && !defined(MMSND)
-	PRINT_RESOURCE(OUTPUT_XML, neogeo);
-#if !defined(NEOMAME)
-	PRINT_RESOURCE(OUTPUT_XML, cvs);
-	PRINT_RESOURCE(OUTPUT_XML, decocass);
-	PRINT_RESOURCE(OUTPUT_XML, playch10);
-	PRINT_RESOURCE(OUTPUT_XML, pgm);
-	PRINT_RESOURCE(OUTPUT_XML, skns);
-	PRINT_RESOURCE(OUTPUT_XML, stvbios);
-	PRINT_RESOURCE(OUTPUT_XML, konamigx);
-	PRINT_RESOURCE(OUTPUT_XML, nss);
-	PRINT_RESOURCE(OUTPUT_XML, megatech);
-	PRINT_RESOURCE(OUTPUT_XML, megaplay);
-	PRINT_RESOURCE(OUTPUT_XML, cpzn1);
-	PRINT_RESOURCE(OUTPUT_XML, cpzn2);
-	PRINT_RESOURCE(OUTPUT_XML, tps);
-	PRINT_RESOURCE(OUTPUT_XML, taitofx1);
-#endif
-#endif
 }
 
 /* Print the MAME database in XML format */

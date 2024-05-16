@@ -1,7 +1,7 @@
 /* Bally Video/Pinball Combination Hardware Emulation
    by Steve Ellenoff (01/16/2002)
 
-   Games: Baby Pacman (1982)
+   Games: Baby Pac-Man (1982)
           Granny & The Gators (1984)
 
    Hardware:
@@ -9,7 +9,7 @@
    MPU Board: MPU-133 (Equivalent of MPU-35 except for 1 resistor to diode change) - See note below
 
    (BabyPacman Only):
-   VIDIOT Board: Handles Video/Joystick Switchs/Sound Board
+   VIDIOT Board: Handles Video/Joystick Switches/Sound Board
    Chips:       (1 x TMS9928 Video Chip), 6809 CPU (Video), 6803 (Sound), 6821 PIA
 
    (Granny & Gators Only):
@@ -18,7 +18,7 @@
    Cheap Squeak Sound Board
 
    *EMULATION ISSUES*
-   Baby Pac: working fine
+   Baby Pac: working fine, except: mostly glitches if started for a second time, also never works correctly in 64bit
    G & G: Color blending is not accurately emulated, but transparency is simulated
 
    Interesting Tech Note:
@@ -31,9 +31,9 @@
 
         Bally video pins use an AS-2518-133 mpu.
         I believe that some late games such as Grand Slam
-        may have also used the AS-2518-133 mpu.
+        may have also used the AS-2518-133 mpu. // note: the latter is confirmed by Grand Slams manual
 
-        This is the same as an  AS-2518-35  mpu except that
+        This is the same as an  AS-2518-35 mpu except that
         R113 which is fed from J4 by +43v is now CR52 a 1N4148
         diode fed by 6.3vac from General Illumination.
         To use the -133 as a -35 change CR52 to be
@@ -91,8 +91,6 @@
 #define BYVP_PIA1 1
 #define BYVP_PIA2 2
 
-#define BYVP_VBLANKFREQ    60 /* VBLANK frequency */
-
 #define BYVP_IRQFREQ       BY35_IRQFREQ /* IRQ (via PIA) frequency*/
 //#define BYVP_ZCFREQ        BY35_ZCFREQ  /* Zero cross frequency */
 #define BYVP_ZCFREQ        60		/* This is correct based on comparing my real game to the emu SJE 8/23/06 */
@@ -113,8 +111,8 @@ static struct {
   int p0_a, p1_a, p1_b, p0_cb2, p1_cb2, p2_a, p2_b, p2_cb2;
   int lampadr1;
   UINT32 solenoids;
-  int diagnosticLed;
-  int diagnosticLedV;		//Diagnostic LED for Vidiot Board
+  UINT8 diagnosticLed;
+  UINT8 diagnosticLedV; //Diagnostic LED for Vidiot Board
   int vblankCount;
   int phase_a;
   int irqstate; // ??? Is this really a toggle
@@ -196,7 +194,7 @@ static WRITE_HANDLER(pia1b_w) {
   // Momentary Solenoids 1-7
   if (!locals.p1_cb2)
     locals.solenoids |= coreGlobals.pulsedSolState = (1<<(data & 0x07)) & 0x7f;
-  // Continuos solenoids 8-11
+  // Continuous solenoids 8-11
   coreGlobals.pulsedSolState = (coreGlobals.pulsedSolState & 0xfffff87f) | contsols;
   locals.solenoids |= contsols;
 }
@@ -224,7 +222,7 @@ extern void by45_p21_w(UINT8 data);
 static WRITE_HANDLER(pia2b_w) {
 	//printf("pb2_w = %x\n",data);
 	locals.p2_b = data & 0x0f;
-	by45_p21_w(data & 0x02);
+	by45_p21_w(0);
 }
 
 /* PIA2:B Read */
@@ -250,13 +248,13 @@ static INTERRUPT_GEN(byVP_vblank) {
   /*-------------------------------
   /  copy local data to interface
   /--------------------------------*/
-  locals.vblankCount += 1;
+  locals.vblankCount++;
 
   /*-- lamps --*/
   if ((locals.vblankCount % BYVP_LAMPSMOOTH) == 0) {
     memcpy(coreGlobals.lampMatrix, coreGlobals.tmpLampMatrix, sizeof(coreGlobals.tmpLampMatrix));
     memset(coreGlobals.tmpLampMatrix, 0, sizeof(coreGlobals.tmpLampMatrix));
-    coreGlobals.diagnosticLed = (locals.diagnosticLedV<<1)| (locals.diagnosticLed);
+    coreGlobals.diagnosticLed = (locals.diagnosticLedV<<1) | (locals.diagnosticLed);
     locals.diagnosticLed = locals.diagnosticLedV = 0;
   }
 
@@ -275,30 +273,17 @@ static SWITCH_UPDATE(byVP) {
   if (inports) {
     coreGlobals.swMatrix[0] = inports[BYVP_COMINPORT] & 0xff;
     if (core_gameData->hw.display) { // Granny
-      coreGlobals.swMatrix[2] = (coreGlobals.swMatrix[2] & (~0xf3));
-      // Start Player 2
-      coreGlobals.swMatrix[2] |= (inports[BYVP_COMINPORT]>>4) & 0x10;
-      // Start Player 1
-      coreGlobals.swMatrix[2] |= (inports[BYVP_COMINPORT]>>4) & 0x20;
-      // Coin Chute #1 & #2
-      coreGlobals.swMatrix[2] |= (inports[BYVP_COMINPORT]>>10) & 0x03;
-      // Ball Tilt/Slam Tilt
-      coreGlobals.swMatrix[2] |= (inports[BYVP_COMINPORT]>>6) & 0xc0;
+      coreGlobals.swMatrix[2] = (coreGlobals.swMatrix[2] & (~0xf3)) | ((inports[BYVP_COMINPORT]>>6) & 0xc0) | ((inports[BYVP_COMINPORT]>>4) & 0x30) | ((inports[BYVP_COMINPORT]>>10) & 0x03);
       // Power (Does not belong in the matrix, so we start at switch #41, since 40 is last used switch)
-      coreGlobals.swMatrix[6] &= ~(0x1);
-      coreGlobals.swMatrix[6] |= (inports[BYVP_COMINPORT]>>14) & 0x1;
+      coreGlobals.swMatrix[6] = (inports[BYVP_COMINPORT]>>14) & 0x1;
     }
     else { // BabyPac
-      coreGlobals.swMatrix[1] = (coreGlobals.swMatrix[1] & (~0x24));
-      coreGlobals.swMatrix[2] = (coreGlobals.swMatrix[2] & (~0xc3));
-      // Start Player 2
-      coreGlobals.swMatrix[1] |= (inports[BYVP_COMINPORT]>>6) & 0x04;
-      // Start Player 1
-      coreGlobals.swMatrix[1] |= (inports[BYVP_COMINPORT]>>4) & 0x20;
-      // Coin Chute #1 & #2
-      coreGlobals.swMatrix[2] |= (inports[BYVP_COMINPORT]>>10) & 0x03;
-      // Ball Tilt/Slam Tilt
-      coreGlobals.swMatrix[2] |= (inports[BYVP_COMINPORT]>>6) & 0xc0;
+      coreGlobals.swMatrix[1] = (coreGlobals.swMatrix[1] & (~0x24)) | ((inports[BYVP_COMINPORT]>>4) & 0x20) | ((inports[BYVP_COMINPORT]>>6) & 0x04);
+      if (~coreGlobals.swMatrix[2] & (inports[BYVP_COMINPORT]>>6) & 0x80) { // clear latches on slam so game will survive; see MACHINE_RESET(byVP)
+        soundlatch_w(0, 0);
+        soundlatch2_w(0, 0);
+      }
+      coreGlobals.swMatrix[2] = (coreGlobals.swMatrix[2] & (~0xc3)) | ((inports[BYVP_COMINPORT]>>6) & 0xc0) | ((inports[BYVP_COMINPORT]>>10) & 0x03);
     }
   }
   /*-- Diagnostic buttons on CPU board --*/
@@ -414,20 +399,19 @@ static MACHINE_INIT(byVP) {
   pia_config(BYVP_PIA0, PIA_STANDARD_ORDERING, &piaIntf[0]);
   pia_config(BYVP_PIA1, PIA_STANDARD_ORDERING, &piaIntf[1]);
   pia_config(BYVP_PIA2, PIA_STANDARD_ORDERING, &piaIntf[2]);
-  pia_reset();
 }
 
-extern void by45snd_reset(void);
-static void by_vdp_interrupt(int state);
 static MACHINE_RESET(byVP)
 {
-	//printf("reset\n");
-	memset(&locals, 0, sizeof(locals));
-	by45snd_reset();
-	pia_reset();
-	by_vdp_interrupt(0);
-	TMS9928A_reset(0);
-	pia1a_w(0,0);
+  memset(&locals, 0, sizeof(locals));
+  soundlatch_w(0, 0);
+  soundlatch2_w(0, 0);
+  sndbrd_0_init(core_gameData->hw.soundBoard,BYVP_SCPUNO,NULL,NULL,NULL);
+  by45_p21_w(1);
+//	pia_reset();
+//	by_vdp_interrupt(0);
+  TMS9928A_reset(0); if (core_gameData->hw.display) TMS9928A_reset(1);
+//	pia1a_w(0,0);
 }
 static MACHINE_STOP(byVP) { sndbrd_0_exit(); }
 
@@ -482,8 +466,8 @@ static PINMAME_VIDEO_UPDATE(byVP_update) {
 /  Memory map for MAIN CPU board
 /------------------------------------*/
 static MEMORY_READ_START(byVP_readmem)
-  { 0x0000, 0x0080, MRA_RAM }, /* U7 128 Byte Ram*/
-  { 0x0088, 0x008b, pia_r(BYVP_PIA0) }, /* U10 PIA: Switchs + Display + Lamps*/
+  { 0x0000, 0x007f, MRA_RAM }, /* U7 128 Byte Ram*/
+  { 0x0088, 0x008b, pia_r(BYVP_PIA0) }, /* U10 PIA: Switches + Display + Lamps*/
   { 0x0090, 0x0093, pia_r(BYVP_PIA1) }, /* U11 PIA: Solenoids/Sounds + Display Strobe */
   { 0x0200, 0x02ff, MRA_RAM }, /* CMOS Battery Backed*/
   { 0x0300, 0x031c, MRA_RAM }, /* What is this? More CMOS? No 3rd Flash if commented as MWA_RAM */
@@ -493,8 +477,8 @@ static MEMORY_READ_START(byVP_readmem)
 MEMORY_END
 
 static MEMORY_WRITE_START(byVP_writemem)
-  { 0x0000, 0x0080, MWA_RAM }, /* U7 128 Byte Ram*/
-  { 0x0088, 0x008b, pia_w(BYVP_PIA0) }, /* U10 PIA: Switchs + Display + Lamps*/
+  { 0x0000, 0x007f, MWA_RAM }, /* U7 128 Byte Ram*/
+  { 0x0088, 0x008b, pia_w(BYVP_PIA0) }, /* U10 PIA: Switches + Display + Lamps*/
   { 0x0090, 0x0093, pia_w(BYVP_PIA1) }, /* U11 PIA: Solenoids/Sounds + Display Strobe */
   { 0x0200, 0x02ff, MWA_RAM, &byVP_CMOS }, /* CMOS Battery Backed*/
   { 0x0300, 0x031c, MWA_RAM }, /* What is this? More CMOS? No 3rd Flash if commented as MWA_RAM */
@@ -507,20 +491,20 @@ MEMORY_END
 /  Memory map for VIDEO CPU (Located on Vidiot Board)
 /----------------------------------------------------*/
 static MEMORY_READ_START(byVP_video_readmem)
-  { 0x0000, 0x1fff, soundlatch2_r },
+  { 0x0000, 0x0000, soundlatch2_r },
   { 0x2000, 0x2003, pia_r(BYVP_PIA2) }, /* U7 PIA */
   { 0x4000, 0x4000, TMS9928A_vram_0_r },  /* U16 VDP*/
   { 0x4001, 0x4001, TMS9928A_register_0_r },  /* U16 VDP*/
-  { 0x6000, 0x6400, MRA_RAM }, /* U13&U14 1024x4 Byte Ram*/
+  { 0x6000, 0x63ff, MRA_RAM }, /* U13&U14 1024x4 Byte Ram*/
   { 0x8000, 0xffff, MRA_ROM },
 MEMORY_END
 
 static MEMORY_WRITE_START(byVP_video_writemem)
-  { 0x0000, 0x1fff, soundlatch_w },
+  { 0x0000, 0x0000, soundlatch_w },
   { 0x2000, 0x2003, pia_w(BYVP_PIA2) }, /* U7 PIA */
   { 0x4000, 0x4000, TMS9928A_vram_0_w },  /* U16 VDP*/
   { 0x4001, 0x4001, TMS9928A_register_0_w },  /* U16 VDP*/
-  { 0x6000, 0x6400, MWA_RAM }, /* U13&U14 1024x4 Byte Ram*/
+  { 0x6000, 0x63ff, MWA_RAM }, /* U13&U14 1024x4 Byte Ram*/
   { 0x8000, 0xffff, MWA_ROM },
 MEMORY_END
 
@@ -528,20 +512,19 @@ MEMORY_END
 /  Memory map for VIDEO CPU (Located on Vidiot Deluxe Board) - G&G
 /------------------------------------------------------------------*/
 static MEMORY_READ_START(byVPGG_video_readmem)
-  { 0x0000, 0x0001, soundlatch2_r },
+  { 0x0000, 0x0000, soundlatch2_r },
   { 0x0002, 0x0002, TMS9928A_vram_0_r },  /* VDP MASTER */
   { 0x0003, 0x0003, TMS9928A_register_0_r },  /* VDP MASTER */
   { 0x0004, 0x0004, TMS9928A_vram_1_r },  /* VDP SLAVE  */
   { 0x0005, 0x0005, TMS9928A_register_1_r },  /* VDP SLAVE  */
   { 0x0008, 0x000b, pia_r(BYVP_PIA2) }, /* PIA */
-  { 0x0300, 0x031c, MRA_RAM }, /* What is this? More CMOS? No 3rd Flash if commented as MWA_RAM */
   { 0x2000, 0x27ff, MRA_RAM }, /* 2K RAM */
-  { 0x2801, 0x2801, MRA_RAM }, /* ?????? */
+  { 0x2801, 0x2801, MRA_NOP }, /* ?????? */
   { 0x4000, 0xffff, MRA_ROM },
 MEMORY_END
 
 static MEMORY_WRITE_START(byVPGG_video_writemem)
-  { 0x0000, 0x0001, soundlatch_w },
+  { 0x0000, 0x0000, soundlatch_w },
   { 0x0002, 0x0002, TMS9928A_vram_0_w },  /* VDP MASTER */
   { 0x0003, 0x0003, TMS9928A_register_0_w },  /* VDP MASTER */
   { 0x0004, 0x0004, TMS9928A_vram_1_w },  /* VDP SLAVE  */
@@ -549,9 +532,7 @@ static MEMORY_WRITE_START(byVPGG_video_writemem)
   { 0x0006, 0x0006, TMS9928A_vram_01_w },  /* VDP Both  */
   { 0x0007, 0x0007, TMS9928A_register_01_w }, /* VDP Both  */
   { 0x0008, 0x000b, pia_w(BYVP_PIA2) }, /* PIA */
-  { 0x0300, 0x031c, MWA_RAM }, /* What is this? More CMOS? No 3rd Flash if commented as MWA_RAM */
   { 0x2000, 0x27ff, MWA_RAM }, /* 2K RAM*/
-  { 0x2801, 0x2801, MWA_RAM }, /* ????????? */
   { 0x4000, 0xffff, MWA_ROM },
 MEMORY_END
 
@@ -568,12 +549,12 @@ const struct core_dispLayout byVP_dispGranny[] = {
 MACHINE_DRIVER_START(byVP1)
   MDRV_IMPORT_FROM(PinMAME)
 
-  MDRV_CPU_ADD_TAG("mcpu", M6800, 3580000/4)
+  MDRV_CPU_ADD_TAG("mcpu", M6800, 3580000./4.)
   MDRV_CPU_MEMORY(byVP_readmem, byVP_writemem)
   MDRV_CPU_VBLANK_INT(byVP_vblank, 1)
   MDRV_CPU_PERIODIC_INT(byVP_irq, BYVP_IRQFREQ)
 
-  MDRV_CPU_ADD_TAG("vcpu", M6809, 3580000/4)
+  MDRV_CPU_ADD_TAG("vcpu", M6809, 3580000./4.)
   MDRV_CPU_MEMORY(byVP_video_readmem, byVP_video_writemem)
   MDRV_INTERLEAVE(100)
   MDRV_TIMER_ADD(byVP_zeroCross, BYVP_ZCFREQ*2)
@@ -584,8 +565,8 @@ MACHINE_DRIVER_START(byVP1)
   MDRV_NVRAM_HANDLER(byVP)
 
   /* video hardware */
-  MDRV_SCREEN_SIZE(320,256) // To view matrices and solno
-  MDRV_VISIBLE_AREA(0, 319, 0, 255)
+  MDRV_SCREEN_SIZE(256,256) // To view matrices and solno
+  MDRV_VISIBLE_AREA(0, 255, 0, 255)
   MDRV_GFXDECODE(0)
   MDRV_PALETTE_LENGTH(TMS9928A_PALETTE_SIZE)
   MDRV_COLORTABLE_LENGTH(TMS9928A_COLORTABLE_SIZE)
@@ -603,9 +584,6 @@ MACHINE_DRIVER_END
 /*GRANNY & THE GATORS HARDWARE*/
 MACHINE_DRIVER_START(byVP2)
   MDRV_IMPORT_FROM(byVP1)
-  MDRV_CPU_REPLACE("vcpu", M6809, 8000000/4)
+  MDRV_CPU_REPLACE("vcpu", M6809, 8000000/4) // MAME mentions 'needs verification'
   MDRV_CPU_MEMORY(byVPGG_video_readmem, byVPGG_video_writemem)
-  MDRV_SCREEN_SIZE(256,256) // 256x192 + matrices
-  MDRV_VISIBLE_AREA(0, 255, 0, 255)
 MACHINE_DRIVER_END
-

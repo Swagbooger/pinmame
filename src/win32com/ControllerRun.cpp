@@ -1,51 +1,49 @@
 // ControllerRun.cpp : Implementation of the Controller.Run method
-#include "stdafx.h"
+#include "StdAfx.h"
 #include "atlwin.h"
 #include "mmsystem.h"
 
 extern "C" {
 #include "mame.h"
 #include "driver.h"
-#include "./windows/Window.h"
+#include "./windows/window.h"
 }
 
-#include "VPinMAME_h.h"
+#include "VPinMAME.h"
 #include "VPinMAMEAboutDlg.h"
 #include "VPinMAMEConfig.h"
 
 #include "Controller.h"
-#include "ControllerRegKeys.h"
+#include "ControllerRegkeys.h"
 #include "ControllerGameSettings.h"
 #include "ControllerSplashWnd.h"
-#include "Resource.h"
+#include "resource.h"
 
 extern "C" {
 int	g_fHandleKeyboard   = TRUE;		// Signals wpc core to handle the keyboard
 int	g_fHandleMechanics  = FALSE;	// Signals wpc core to handle the mechanics for use
 int g_fMechSamples      = TRUE;		// Signal the common library to load the mech samples
-HANDLE g_hGameRunning	= INVALID_HANDLE_VALUE;
+HANDLE g_hGameRunning   = INVALID_HANDLE_VALUE;
 int volatile g_fPause   = 0;		// referenced in usrintf.c to pause the game
+char g_fShowPinDMD      = FALSE;	// pinDMD not active by default
+int g_fDumpFrames       = FALSE;	// dump frames
 
-char g_fShowPinDMD		= FALSE;	// pinDMD not active by default
-int g_fDumpFrames		= FALSE;	// pinDMD dump frames
+char g_fShowWinDMD      = TRUE;		// DMD active by default
 
-BOOL cabinetMode		= FALSE;
+BOOL cabinetMode        = FALSE;
 
-int    g_iSyncFactor     = 0;
-HANDLE g_hEnterThrottle  = INVALID_HANDLE_VALUE;
-extern int g_iSyncFactor;
+char g_szGameName[256] = "";		// String containing requested game name (may be different from ROM if aliased)
 }
 
 extern int dmd_border;
 extern int dmd_title;
 extern int dmd_pos_x;
 extern int dmd_pos_y;
-extern int dmd_doublesize;
+extern int dmd_scalefactor;
 extern int dmd_width;
 extern int dmd_height;
 
 extern int threadpriority;
-extern int synclevel;
 
 #define VPINMAMEONEVENTMSG	"VPinMAMEOnEventMsg"
 
@@ -138,34 +136,14 @@ DWORD FAR PASCAL CController::RunController(CController* pController)
 
 	g_fPause = 0;
 
-	int iSyncLevel = synclevel;
-	if ( iSyncLevel<0 )
-		iSyncLevel = 0;
-	else if ( iSyncLevel>60 )
-		iSyncLevel = 60;
-
-	if ( iSyncLevel ) {
-		if ( iSyncLevel<=20 )
-			g_iSyncFactor = 1024;
-		else
-			g_iSyncFactor = (int) (1024.0*(iSyncLevel/60.0));
-
-		g_hEnterThrottle = CreateEvent(NULL, false, true, NULL);
-	}
 #ifndef DEBUG
-	else {
-		// just in case
-		g_iSyncFactor = 0;
-		g_hEnterThrottle = INVALID_HANDLE_VALUE;
-
-		switch ( threadpriority ) {
-			case 1:
-				SetThreadPriority(pController->m_hThreadRun, THREAD_PRIORITY_ABOVE_NORMAL);
-				break;
-			case 2:
-				SetThreadPriority(pController->m_hThreadRun, THREAD_PRIORITY_HIGHEST);
-				break;
-		}
+	switch ( threadpriority ) {
+		case 1:
+			SetThreadPriority(pController->m_hThreadRun, THREAD_PRIORITY_ABOVE_NORMAL);
+			break;
+		case 2:
+			SetThreadPriority(pController->m_hThreadRun, THREAD_PRIORITY_HIGHEST);
+			break;
 	}
 #endif
 
@@ -173,14 +151,7 @@ DWORD FAR PASCAL CController::RunController(CController* pController)
 	run_game(pController->m_nGameNo);
 	vpm_game_exit(pController->m_nGameNo);
 
-	if ( iSyncLevel ) {
-		SetEvent(g_hEnterThrottle);
-		CloseHandle(g_hEnterThrottle);
-		g_hEnterThrottle = INVALID_HANDLE_VALUE;
-		g_iSyncFactor = 0;
-	}
-	else
-		SetThreadPriority(pController->m_hThreadRun, THREAD_PRIORITY_NORMAL);
+	SetThreadPriority(pController->m_hThreadRun, THREAD_PRIORITY_NORMAL);
 
 	// fire the OnMachineStopped event
 	OnStateChange(0);
@@ -227,7 +198,7 @@ extern "C" int osd_init(void)
 		maxX = (maxX+40)*2 + 40;
 	int maxY = GetSystemMetrics(cabinetMode ? 79/*SM_CYVIRTUALSCREEN*/ : SM_CYSCREEN) - windowRect.bottom + (cabinetMode ? 40 : 0);
 
-	if ( dmd_pos_x<0 )
+	if ( !cabinetMode && dmd_pos_x<0 )
 		dmd_pos_x = 0;
 	else if ( dmd_pos_x>maxX )
 		dmd_pos_x = maxX;
@@ -235,7 +206,7 @@ extern "C" int osd_init(void)
 	CComVariant vValueX(dmd_pos_x);
 	m_pController->m_pGameSettings->put_Value(CComBSTR("dmd_pos_x"), vValueX);
 
-	if ( dmd_pos_y<0 )
+	if ( !cabinetMode && dmd_pos_y<0 )
 		dmd_pos_y = 0;
 	else if ( dmd_pos_y>maxY )
 		dmd_pos_y = maxY;
@@ -257,9 +228,8 @@ extern "C" void osd_exit(void)
 	osd_set_leds(0);
 }
 
-// event window
-
 static BOOL fEventWindowClassCreated = false;
+
 // event window
 
 LRESULT CALLBACK EventWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -352,7 +322,7 @@ void AdjustWindowPosition(HWND hWnd, CController *pController)
 	xpos = dmd_pos_x;
 	ypos = dmd_pos_y;
 
-	if ( pController->m_fWindowHidden )
+	if ( pController->m_fWindowHidden || !g_fShowWinDMD)
 		SetWindowPos(hWnd, 0, xpos, ypos, 0, 0, SWP_NOSIZE|SWP_HIDEWINDOW);
 	else
 		SetWindowPos(hWnd, HWND_TOPMOST, xpos, ypos, 0, 0, SWP_NOSIZE|SWP_NOACTIVATE);
@@ -376,11 +346,12 @@ void SaveWindowPosition(HWND hWnd, CController *pController)
 	pController->m_pGameSettings->put_Value(CComBSTR("dmd_pos_y"), vValueY);
 
 	GetClientRect(hWnd, &Rect);
-	if ( dmd_doublesize )
-		Rect.right /= 2;
-
-	if ( dmd_doublesize )
-		Rect.bottom /= 2;
+	if (dmd_scalefactor) {
+		if (dmd_scalefactor == 1)
+			dmd_scalefactor = 2;
+		Rect.right /= dmd_scalefactor;
+		Rect.bottom /= dmd_scalefactor;
+	}
 
 	vValueX = Rect.right;
 	pController->m_pGameSettings->put_Value(CComBSTR("dmd_width"), vValueX);
@@ -392,7 +363,7 @@ void SaveWindowPosition(HWND hWnd, CController *pController)
 // set the window style: 0: title (includes border), 1: only border, 2: without border
 void SetWindowStyle(HWND hWnd, int iWindowStyle)
 {
-	long lNewStyle = GetWindowLong(hWnd, GWL_STYLE) & WS_VISIBLE;
+	LONG_PTR lNewStyle = GetWindowLongPtr(hWnd, GWL_STYLE) & WS_VISIBLE;
 
 	if ( IsWindow(GetParent(hWnd)) ) {
 		switch (iWindowStyle) {
@@ -432,7 +403,7 @@ void SetWindowStyle(HWND hWnd, int iWindowStyle)
 	}
 
 	RECT Rect;
-	SetWindowLong(hWnd, GWL_STYLE, lNewStyle);
+	SetWindowLongPtr(hWnd, GWL_STYLE, lNewStyle);
 	GetClientRect(hWnd,  &Rect);
 
 	int iWidth = Machine->uiwidth;
@@ -443,8 +414,10 @@ void SetWindowStyle(HWND hWnd, int iWindowStyle)
 	if ( dmd_height>0 )
 		iHeight = dmd_height;
 
-	Rect.right = iWidth * (dmd_doublesize?2:1);
-	Rect.bottom = iHeight * (dmd_doublesize?2:1);;
+	if (dmd_scalefactor == 1)
+		dmd_scalefactor = 2;
+	Rect.right = iWidth * (dmd_scalefactor ? dmd_scalefactor : 1);
+	Rect.bottom = iHeight * (dmd_scalefactor ? dmd_scalefactor : 1);
 
 	AdjustWindowRect(&Rect, lNewStyle, FALSE);
 
@@ -453,7 +426,7 @@ void SetWindowStyle(HWND hWnd, int iWindowStyle)
 	UpdateWindow(hWnd);
 
 	// is that really necessary?
-	if ( m_pController->m_fWindowHidden )
+	if ( m_pController->m_fWindowHidden || !g_fShowWinDMD)
 		ShowWindow(hWnd, SW_HIDE);
 }
 
@@ -637,6 +610,17 @@ extern "C" LRESULT CALLBACK osd_hook(HWND wnd, UINT message, WPARAM wparam, LPAR
 			}
 			break;
 
+		case ID_CTRLCTXMENU_DISPLAY_RESTOREPOS:
+			{
+				CComVariant vValue((int) 0);
+
+				pController->m_pGameSettings->put_Value(CComBSTR("dmd_pos_x"), vValue);
+				pController->m_pGameSettings->put_Value(CComBSTR("dmd_pos_y"), vValue);
+
+				*pfhandled = TRUE;
+			}
+			break;
+
 		case ID_CTRLCTXMENU_INFO:
 			ShowAboutDlg(wnd);
 
@@ -682,8 +666,17 @@ extern "C" void VPM_ShowVideoWindow()
 	if ( IsWindow(m_pController->m_hParentWnd) )
 		SetForegroundWindow(m_pController->m_hParentWnd);
 
-	if ( !m_pController->m_fWindowHidden )
+	if ( !m_pController->m_fWindowHidden && g_fShowWinDMD)
 		ShowWindow(win_video_window, SW_SHOWNOACTIVATE);
 	else
 		ShowWindow(win_video_window, SW_HIDE);
+}
+
+// special hook for VPM
+extern "C" int get_ShowVideoWindow()
+{
+	if (m_pController == NULL)
+		return 0;
+
+	return !m_pController->m_fWindowHidden && g_fShowWinDMD;
 }

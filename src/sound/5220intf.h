@@ -6,7 +6,7 @@
 
 struct TMS5220interface
 {
-	int baseclock;				/* clock rate = 80 * output sample rate,     */
+	double baseclock;			/* clock rate = 80 * output sample rate,     */
 								/* usually 640000 for 8000 Hz sample rate or */
 								/* usually 800000 for 10000 Hz sample rate.  */
 	int mixing_level;
@@ -29,7 +29,11 @@ double tms5220_time_to_ready(void);
 int tms5220_int_r(void);
 
 void tms5220_reset(void);
-void tms5220_set_frequency(int frequency);
+void tms5220_set_frequency(double frequency);
+
+#ifdef PINMAME
+void tms5220_set_reverb_filter(float delay, float force);
+#endif
 
 #endif
 

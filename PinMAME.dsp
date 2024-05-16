@@ -44,7 +44,7 @@ RSC=rc.exe
 # PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /W3 /GX /O2 /D "WIN32" /D "NDEBUG" /D "_CONSOLE" /D "_MBCS" /YX /FD /c
-# ADD CPP /nologo /MT /W3 /O2 /I "src" /I "src\wpc" /I "src\windows" /I "src\vc" /I "ext\zlib\include" /D "WIN32" /D "NDEBUG" /D "_CONSOLE" /D "_MBCS" /D "LSB_FIRST" /D CLIB_DECL=__cdecl /D DECL_SPEC=__cdecl /D inline=__inline /D __inline__=__inline /D INLINE=__inline /D DIRECTINPUT_VERSION=0x0500 /D DIRECTDRAW_VERSION=0x0300 /D "NONAMELESSUNION" /D "_WINDOWS" /D "ZLIB_DLL" /D MAMEVER=7300 /D "PINMAME" /D "PINMAME_NO_UNUSED" /FD /c
+# ADD CPP /nologo /MT /W3 /O2 /I "src" /I "src\wpc" /I "src\windows" /I "src\vc" /I "ext\zlib" /D "WIN32" /D "NDEBUG" /D "_CONSOLE" /D "_MBCS" /D "LSB_FIRST" /D CLIB_DECL=__cdecl /D DECL_SPEC=__cdecl /D inline=__inline /D __inline__=__inline /D INLINE=__inline /D DIRECTINPUT_VERSION=0x0700 /D DIRECTDRAW_VERSION=0x0300 /D "NONAMELESSUNION" /D "_WINDOWS" /D MAMEVER=7300 /D "PINMAME" /D "PINMAME_NO_UNUSED" /FD /c
 # SUBTRACT CPP /YX /Yc /Yu
 # ADD BASE RSC /l 0x409 /d "NDEBUG"
 # ADD RSC /l 0x409 /d "NDEBUG"
@@ -53,7 +53,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:console /machine:I386
-# ADD LINK32 kernel32.lib user32.lib gdi32.lib shell32.lib zlibstatmt.lib winmm.lib dxguid.lib ddraw.lib dinput.lib dsound.lib /nologo /subsystem:console /machine:I386 /out:".\obj\VC60\PinMAME\Win32\Release\PinMAME_VC60.exe" /libpath:"ext\zlib\lib_vc6"
+# ADD LINK32 kernel32.lib user32.lib gdi32.lib shell32.lib winmm.lib dxguid.lib ddraw.lib dinput.lib dsound.lib /nologo /subsystem:console /machine:I386 /out:".\obj\VC60\PinMAME\Win32\Release\PinMAME_VC60.exe"
 # Begin Custom Build - Copying to root and generating gamelist.txt...
 ProjDir=.
 TargetPath=.\obj\VC60\PinMAME\Win32\Release\PinMAME_VC60.exe
@@ -87,7 +87,7 @@ BuildCmds= \
 # PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /W3 /Gm /GX /ZI /Od /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /YX /FD /GZ /c
-# ADD CPP /nologo /MTd /W3 /Gm /ZI /Od /I "src" /I "src\wpc" /I "src\windows" /I "src\vc" /I "ext\zlib\include" /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /D "LSB_FIRST" /D CLIB_DECL=__cdecl /D DECL_SPEC=__cdecl /D inline=__inline /D __inline__=__inline /D INLINE=__inline /D DIRECTINPUT_VERSION=0x0500 /D DIRECTDRAW_VERSION=0x0300 /D "NONAMELESSUNION" /D "_WINDOWS" /D "ZLIB_DLL" /D MAMEVER=7300 /D "PINMAME" /D "PINMAME_NO_UNUSED" /FD /GZ /c
+# ADD CPP /nologo /MTd /W3 /Gm /ZI /Od /I "src" /I "src\wpc" /I "src\windows" /I "src\vc" /I "ext\zlib" /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /D "LSB_FIRST" /D CLIB_DECL=__cdecl /D DECL_SPEC=__cdecl /D inline=__inline /D __inline__=__inline /D INLINE=__inline /D DIRECTINPUT_VERSION=0x0700 /D DIRECTDRAW_VERSION=0x0300 /D "NONAMELESSUNION" /D "_WINDOWS" /D MAMEVER=7300 /D "PINMAME" /D "PINMAME_NO_UNUSED" /FD /GZ /c
 # SUBTRACT CPP /YX /Yc /Yu
 # ADD BASE RSC /l 0x409 /d "_DEBUG"
 # ADD RSC /l 0x409 /d "_DEBUG"
@@ -96,7 +96,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:console /debug /machine:I386 /pdbtype:sept
-# ADD LINK32 kernel32.lib user32.lib gdi32.lib shell32.lib zlibstatmtd.lib winmm.lib dxguid.lib ddraw.lib dinput.lib dsound.lib /nologo /subsystem:console /debug /machine:I386 /out:".\obj\VC60\PinMAME\Win32\Debug\PinMAME_VC60vcd.exe" /pdbtype:sept /libpath:"ext\zlib\lib_vc6"
+# ADD LINK32 kernel32.lib user32.lib gdi32.lib shell32.lib winmm.lib dxguid.lib ddraw.lib dinput.lib dsound.lib /nologo /subsystem:console /debug /machine:I386 /out:".\obj\VC60\PinMAME\Win32\Debug\PinMAME_VC60vcd.exe" /pdbtype:sept
 # Begin Custom Build - Copying to root...
 ProjDir=.
 TargetDir=.\obj\VC60\PinMAME\Win32\Debug
@@ -131,7 +131,7 @@ BuildCmds= \
 # PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /W3 /GX /O2 /D "WIN32" /D "NDEBUG" /D "_CONSOLE" /D "_MBCS" /YX /FD /c
-# ADD CPP /nologo /MT /W3 /O2 /I "src" /I "src\wpc" /I "src\windows" /I "src\vc" /I "ext\zlib\include" /D "WIN32" /D "NDEBUG" /D "_CONSOLE" /D "_MBCS" /D "LSB_FIRST" /D CLIB_DECL=__cdecl /D DECL_SPEC=__cdecl /D inline=__inline /D __inline__=__inline /D INLINE=__inline /D DIRECTINPUT_VERSION=0x0500 /D DIRECTDRAW_VERSION=0x0300 /D "NONAMELESSUNION" /D "_WINDOWS" /D "ZLIB_DLL" /D MAMEVER=7300 /D "PINMAME" /D "PINMAME_NO_UNUSED" /D "MAME_DEBUG" /FD /c
+# ADD CPP /nologo /MT /W3 /O2 /I "src" /I "src\wpc" /I "src\windows" /I "src\vc" /I "ext\zlib" /D "WIN32" /D "NDEBUG" /D "_CONSOLE" /D "_MBCS" /D "LSB_FIRST" /D CLIB_DECL=__cdecl /D DECL_SPEC=__cdecl /D inline=__inline /D __inline__=__inline /D INLINE=__inline /D DIRECTINPUT_VERSION=0x0700 /D DIRECTDRAW_VERSION=0x0300 /D "NONAMELESSUNION" /D "_WINDOWS" /D MAMEVER=7300 /D "PINMAME" /D "PINMAME_NO_UNUSED" /D "MAME_DEBUG" /FD /c
 # SUBTRACT CPP /YX /Yc /Yu
 # ADD BASE RSC /l 0x409 /d "NDEBUG"
 # ADD RSC /l 0x409 /d "NDEBUG"
@@ -140,7 +140,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:console /machine:I386
-# ADD LINK32 kernel32.lib user32.lib gdi32.lib shell32.lib zlibstatmt.lib winmm.lib dxguid.lib ddraw.lib dinput.lib dsound.lib /nologo /subsystem:console /machine:I386 /out:".\obj\VC60\PinMAME\Win32\ReleaseMD\PinMAME_VC60md.exe" /libpath:"ext\zlib\lib_vc6"
+# ADD LINK32 kernel32.lib user32.lib gdi32.lib shell32.lib winmm.lib dxguid.lib ddraw.lib dinput.lib dsound.lib /nologo /subsystem:console /machine:I386 /out:".\obj\VC60\PinMAME\Win32\ReleaseMD\PinMAME_VC60md.exe"
 # Begin Custom Build - Copying to root...
 ProjDir=.
 TargetPath=.\obj\VC60\PinMAME\Win32\ReleaseMD\PinMAME_VC60md.exe
@@ -167,7 +167,7 @@ SOURCE="$(InputPath)"
 # PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /W3 /Gm /GX /ZI /Od /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /YX /FD /GZ /c
-# ADD CPP /nologo /MTd /W3 /Gm /ZI /Od /I "src" /I "src\wpc" /I "src\windows" /I "src\vc" /I "ext\zlib\include" /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /D "LSB_FIRST" /D CLIB_DECL=__cdecl /D DECL_SPEC=__cdecl /D inline=__inline /D __inline__=__inline /D INLINE=__inline /D DIRECTINPUT_VERSION=0x0500 /D DIRECTDRAW_VERSION=0x0300 /D "NONAMELESSUNION" /D "_WINDOWS" /D "ZLIB_DLL" /D MAMEVER=7300 /D "PINMAME" /D "PINMAME_NO_UNUSED" /D "MAME_DEBUG" /FD /GZ /c
+# ADD CPP /nologo /MTd /W3 /Gm /ZI /Od /I "src" /I "src\wpc" /I "src\windows" /I "src\vc" /I "ext\zlib" /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /D "LSB_FIRST" /D CLIB_DECL=__cdecl /D DECL_SPEC=__cdecl /D inline=__inline /D __inline__=__inline /D INLINE=__inline /D DIRECTINPUT_VERSION=0x0700 /D DIRECTDRAW_VERSION=0x0300 /D "NONAMELESSUNION" /D "_WINDOWS" /D MAMEVER=7300 /D "PINMAME" /D "PINMAME_NO_UNUSED" /D "MAME_DEBUG" /FD /GZ /c
 # SUBTRACT CPP /YX /Yc /Yu
 # ADD BASE RSC /l 0x409 /d "_DEBUG"
 # ADD RSC /l 0x409 /d "_DEBUG"
@@ -176,7 +176,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:console /debug /machine:I386 /pdbtype:sept
-# ADD LINK32 kernel32.lib user32.lib gdi32.lib shell32.lib zlibstatmtd.lib winmm.lib dxguid.lib ddraw.lib dinput.lib dsound.lib /nologo /subsystem:console /debug /machine:I386 /out:".\obj\VC60\PinMAME\Win32\DebugMD\PinMAME_VC60vcmd.exe" /pdbtype:sept /libpath:"ext\zlib\lib_vc6"
+# ADD LINK32 kernel32.lib user32.lib gdi32.lib shell32.lib winmm.lib dxguid.lib ddraw.lib dinput.lib dsound.lib /nologo /subsystem:console /debug /machine:I386 /out:".\obj\VC60\PinMAME\Win32\DebugMD\PinMAME_VC60vcmd.exe" /pdbtype:sept
 # Begin Custom Build - Copying to root...
 ProjDir=.
 TargetDir=.\obj\VC60\PinMAME\Win32\DebugMD
@@ -793,10 +793,6 @@ SOURCE=.\src\cpu\tms9900\9900dasm.c
 # End Source File
 # Begin Source File
 
-SOURCE=.\src\cpu\tms9900\9900stat.h
-# End Source File
-# Begin Source File
-
 SOURCE=.\src\cpu\tms9900\99xxcore.h
 # End Source File
 # Begin Source File
@@ -882,6 +878,14 @@ SOURCE=.\src\machine\eeprom.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\src\machine\i8155.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\src\machine\i8155.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\src\machine\mathbox.c
 # End Source File
 # Begin Source File
@@ -931,6 +935,14 @@ SOURCE=.\src\sound\2203intf.c
 # Begin Source File
 
 SOURCE=.\src\sound\2203intf.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\src\sound\262intf.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\src\sound\262intf.h
 # End Source File
 # Begin Source File
 
@@ -1074,6 +1086,22 @@ SOURCE=.\src\sound\m114s.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\src\sound\mc3417.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\src\sound\mc3417.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\src\sound\mea8000.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\src\sound\mea8000.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\src\sound\mixer.c
 # End Source File
 # Begin Source File
@@ -1090,11 +1118,27 @@ SOURCE=.\src\sound\msm5205.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\src\sound\qsound.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\src\sound\qsound.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\src\sound\s14001a.c
 # End Source File
 # Begin Source File
 
 SOURCE=.\src\sound\s14001a.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\src\sound\saa1099.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\src\sound\saa1099.h
 # End Source File
 # Begin Source File
 
@@ -1207,6 +1251,14 @@ SOURCE=.\src\sound\ymdeltat.c
 # Begin Source File
 
 SOURCE=.\src\sound\ymdeltat.h
+# End Source File
+# End Group
+
+SOURCE=.\src\sound\ymf262.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\src\sound\ymf262.h
 # End Source File
 # End Group
 # Begin Group "VidHrdw"
@@ -1733,6 +1785,18 @@ SOURCE=.\src\windows\input.c
 # End Source File
 # Begin Source File
 
+SOURCE=.\src\windows\jit.c
+# PROP BASE Intermediate_Dir "$(OUTDIR)\Intermediate\Windows"
+# PROP Intermediate_Dir "$(OUTDIR)\Intermediate\Windows"
+# End Source File
+# Begin Source File
+
+SOURCE=.\src\windows\jitemit.c
+# PROP BASE Intermediate_Dir "$(OUTDIR)\Intermediate\Windows"
+# PROP Intermediate_Dir "$(OUTDIR)\Intermediate\Windows"
+# End Source File
+# Begin Source File
+
 SOURCE=.\src\windows\misc.c
 # PROP BASE Intermediate_Dir "$(OUTDIR)\Intermediate\Windows"
 # PROP Intermediate_Dir "$(OUTDIR)\Intermediate\Windows"
@@ -2040,7 +2104,7 @@ SOURCE=.\src\wpc\sims\wpc\prelim\dh.c
 # End Source File
 # Begin Source File
 
-SOURCE=.\src\wpc\sims\wpc\prelim\dm.c
+SOURCE=.\src\wpc\sims\wpc\full\dm.c
 # End Source File
 # Begin Source File
 
@@ -2191,7 +2255,15 @@ SOURCE=.\src\wpc\atarisnd.c
 # End Source File
 # Begin Source File
 
+SOURCE=.\src\wpc\barni.c
+# End Source File
+# Begin Source File
+
 SOURCE=.\src\wpc\bingo.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\src\wpc\boomerang.c
 # End Source File
 # Begin Source File
 
@@ -2300,6 +2372,14 @@ SOURCE=.\src\wpc\desound.h
 # Begin Source File
 
 SOURCE=.\src\wpc\driver.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\src\wpc\efo.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\src\wpc\efosnd.c
 # End Source File
 # Begin Source File
 
@@ -2415,7 +2495,15 @@ SOURCE=.\src\wpc\indergames.c
 # End Source File
 # Begin Source File
 
+SOURCE=.\src\wpc\inderp.c
+# End Source File
+# Begin Source File
+
 SOURCE=.\src\wpc\jeutel.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\src\wpc\joctronic.c
 # End Source File
 # Begin Source File
 
@@ -2439,6 +2527,10 @@ SOURCE=.\src\wpc\kissproto.c
 # End Source File
 # Begin Source File
 
+SOURCE=.\src\wpc\lancelot.c
+# End Source File
+# Begin Source File
+
 SOURCE=.\src\wpc\ltd.c
 # End Source File
 # Begin Source File
@@ -2448,6 +2540,10 @@ SOURCE=.\src\wpc\ltd.h
 # Begin Source File
 
 SOURCE=.\src\wpc\ltdgames.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\src\wpc\luckydraw.c
 # End Source File
 # Begin Source File
 
@@ -2520,6 +2616,10 @@ SOURCE=.\src\wpc\playgames.c
 # Begin Source File
 
 SOURCE=.\src\wpc\playsnd.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\src\wpc\regama.c
 # End Source File
 # Begin Source File
 
@@ -2603,6 +2703,10 @@ SOURCE=.\src\wpc\sim.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\src\wpc\slalom.c
+# End Source File
+# Begin Source File
+
 SOURCE=.\src\wpc\sleic.c
 # End Source File
 # Begin Source File
@@ -2644,6 +2748,14 @@ SOURCE=.\src\wpc\spinb.h
 # Begin Source File
 
 SOURCE=.\src\wpc\spinbgames.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\src\wpc\spiritof76.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\src\wpc\stargame.c
 # End Source File
 # Begin Source File
 
@@ -2773,16 +2885,82 @@ SOURCE=.\src\vc\unistd.h
 # Begin Group "external"
 
 # PROP Default_Filter ""
+# Begin Group "vgm"
+
+# PROP Default_Filter ""
+# Begin Source File
+
+SOURCE=.\ext\vgm\vgmwrite.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\ext\vgm\vgmwrite.c
+# End Source File
+# End Group
+
+# PROP Default_Filter ""
 # Begin Group "zlib"
 
 # PROP Default_Filter ""
 # Begin Source File
 
-SOURCE=.\ext\zlib\include\zconf.h
+SOURCE=.\ext\zlib\adler32.c
 # End Source File
 # Begin Source File
 
-SOURCE=.\ext\zlib\include\zlib.h
+SOURCE=.\ext\zlib\compress.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\ext\zlib\crc32.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\ext\zlib\deflate.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\ext\zlib\gzclose.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\ext\zlib\gzlib.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\ext\zlib\gzread.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\ext\zlib\gzwrite.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\ext\zlib\infback.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\ext\zlib\inffast.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\ext\zlib\inflate.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\ext\zlib\inftrees.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\ext\zlib\trees.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\ext\zlib\uncompr.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\ext\zlib\zutil.c
 # End Source File
 # End Group
 # End Group

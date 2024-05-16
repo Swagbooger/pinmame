@@ -10,6 +10,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "driver.h"
+#include "timer.h"
 #include "6532riot.h"
 
 #define VERBOSE 0
@@ -53,7 +54,7 @@ struct riot6532
 	UINT8 irq_state;
 	UINT8 irq;
 
-	void *t;
+	mame_timer *t;
 	double time;
 
 	double cycles_to_sec;
@@ -61,7 +62,7 @@ struct riot6532
 };
 
 #define V_CYCLES_TO_TIME(c) ((double)(c) * p->cycles_to_sec)
-#define V_TIME_TO_CYCLES(t) ((int)((t) * p->sec_to_cycles))
+#define V_TIME_TO_CYCLES(t) ((int)((t) * p->sec_to_cycles + 0.5)) // round
 
 
 /******************* convenince macros and defines *******************/
@@ -87,8 +88,6 @@ struct riot6532
 #define C2_STROBE_MODE(c)		(!(c & 0x10))
 #define C2_OUTPUT(c)			(c & 0x20)
 #define C2_INPUT(c)				(!(c & 0x20))
-
-#define IFR_DELAY 3
 
 /******************* static variables *******************/
 
@@ -116,7 +115,7 @@ void riot6532_unconfig(void)
 
 /******************* configuration *******************/
 
-void riot6532_set_clock(int which, int clock)
+void riot6532_set_clock(int which, double clock)
 {
 	riot[which].sec_to_cycles = clock;
 	riot[which].cycles_to_sec = 1.0 / riot[which].sec_to_cycles;
@@ -126,7 +125,7 @@ void riot6532_config(int which, const struct riot6532_interface *intf)
 {
 	if (which >= MAX_RIOT_6532) return;
 
-	memset(&riot[which], 0x00, sizeof riot[which]);
+	memset(&riot[which], 0x00, sizeof(riot[which]));
 	riot[which].inUse = 0x01;
 
 	riot[which].intf = intf;
@@ -149,7 +148,7 @@ void riot6532_reset(void)
 	/* zap each structure, preserving the interface and swizzle */
 	for (i = 0; i < MAX_RIOT_6532; i++)
 	{
-		riot[i].timer_divider = 1;
+		riot[i].timer_divider = 1024;
 		riot[i].timer_start   = 0x00;
 		riot[i].timer_irq_enabled = 0;
 
@@ -157,7 +156,7 @@ void riot6532_reset(void)
 
 		if ( riot[i].inUse ) {
 			riot[i].t = timer_alloc(riot_timeout);
-			timer_adjust(riot[i].t,IFR_DELAY*riot[i].cycles_to_sec, i, 0);
+			timer_adjust(riot[i].t,256ul*(UINT32)riot[i].timer_divider*riot[i].cycles_to_sec, i, 0);
 		}
 	}
 }
@@ -229,7 +228,7 @@ static void riot_timeout(int which)
 	}
 	else {
 		LOG(("RIOT%d: Timer IRQ reached.\n", which));
-		timer_reset(p->t, V_CYCLES_TO_TIME(255));
+		timer_reset(p->t, V_CYCLES_TO_TIME(256));
 		p->time = timer_get_time();
 
 		p->irq_state |= RIOT_TIMERIRQ;
@@ -243,7 +242,6 @@ int riot6532_read(int which, int offset)
 {
 	struct riot6532 *p = riot + which;
 	int val = 0;
-	int old_timer_enabled = 0;
 
 	/* adjust offset for 16-bit */
 	offset &= 0x1f;
@@ -272,28 +270,34 @@ int riot6532_read(int which, int offset)
 			/* combine input and output values */
 			val = (p->out_b & p->ddr_b) + (p->in_b & ~p->ddr_b);
 
-			// LOG(("RIOT%d read port B = %02X\n", which, val));
+			//LOG(("RIOT%d read port B = %02X\n", which, val));
 			break;
 
 		case RIOT6532_DDRB:
 			val = p->ddr_b;
-			//  LOG(("RIOT%d read DDR B = %02X\n", which, val));
+			//LOG(("RIOT%d read DDR B = %02X\n", which, val));
 			break;
 		}
 	}
 	else {
 		switch ( offset & 0x01 ) {
-		case RIOT6532_TIMER:
-			old_timer_enabled = timer_enable(p->t, 0);
+		case RIOT6532_TIMER: {
+			int old_timer_enabled = timer_enable(p->t, 0);
 			if ( old_timer_enabled ) // was timer enabled? re-enable it
 				timer_enable(p->t, 1);
 
 			if ( old_timer_enabled ) {
+				const int ttc = V_TIME_TO_CYCLES(timer_get_time() - p->time);
 				if ( p->irq_state & RIOT_TIMERIRQ ) {
-					val = 255 - V_TIME_TO_CYCLES(timer_get_time() - p->time);
+					val = 255 - ttc;
 				}
-				else
-					val = p->timer_start - V_TIME_TO_CYCLES(timer_get_time() - p->time) / p->timer_divider;
+				else {
+					const int diff = (ttc + (p->timer_divider - 1)) / p->timer_divider;
+					val = p->timer_start - diff;
+				}
+
+				if (val < 0)
+					val = 0;
 			}
 			else
 				val = 0x00;
@@ -304,6 +308,7 @@ int riot6532_read(int which, int offset)
 
 			LOG(("RIOT%d read timer = %02X %02X\n", which, val, offset&0x08));
 			break;
+			}
 
 		case RIOT6532_IRF:
 			val = p->irq_state;
@@ -409,7 +414,7 @@ void riot6532_write(int which, int offset, int data)
 			p->irq_state &= ~RIOT_TIMERIRQ;
 			update_6532_interrupts(p);
 
-			timer_reset(p->t, V_CYCLES_TO_TIME(p->timer_divider * p->timer_start + IFR_DELAY));
+			timer_reset(p->t, V_CYCLES_TO_TIME(p->timer_divider * p->timer_start + 1));
 			p->time = timer_get_time();
 
 			LOG(("RIOT%d write timer = %02X * %04X, %04X\n", which, data, p->timer_divider, offset&0x08));

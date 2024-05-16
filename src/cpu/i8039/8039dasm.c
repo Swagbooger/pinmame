@@ -30,7 +30,7 @@ typedef unsigned char byte;
 #define FMT(a,b) a, b
 #define PTRS_PER_FORMAT 2
 
-const char *Formats[] = {
+static const char *const Formats[] = {
 	FMT("00000011dddddddd", "add  a,#$%X"),
 	FMT("01101rrr", "add  a,%R"),
 	FMT("0110000r", "add  a,@%R"),
@@ -57,10 +57,10 @@ const char *Formats[] = {
 	FMT("00000111", "dec  a"),
 	FMT("11001rrr", "dec  %R"),
 	FMT("00010101", "dis  i"),
-	FMT("00110101", "dis  tcnti"),
+	FMT("00110101", "dis  tcnt1"),
 	FMT("11101rrraaaaaaaa", "djnz %R,%J"),
 	FMT("00000101", "en   i"),
-	FMT("00100101", "en   tcnti"),
+	FMT("00100101", "en   tcnt1"),
 	FMT("01110101", "ent0 clk"),
 	FMT("00001001", "in   a,p1"),
 	FMT("00001010", "in   a,p2"),
@@ -148,15 +148,13 @@ static int OpInizialized = 0;
 
 static void InitDasm8039(void)
 {
-	const char *p, **ops;
-	byte mask, bits;
-	int bit;
+	const char * const *ops;
 	int i;
 
 	ops = Formats; i = 0;
 	while (*ops) {
-	p = *ops;
-	mask = 0; bits = 0; bit = 7;
+	const char *p = *ops;
+	byte mask = 0; byte bits = 0; int bit = 7;
 	while (*p && bit >= 0) {
 		switch (*p++) {
 			case '1': mask |= 1<<bit; bits |= 1<<bit; bit--; break;
@@ -270,7 +268,7 @@ int Dasm8039(char *buffer, unsigned pc)
 				case 'D': sprintf(num,"%d",d); break;
 				case 'X': sprintf(num,"%X",d); break;
 				case 'R': sprintf(num,"r%d",r); break;
-				case 'P': sprintf(num,"p%d",p); break;
+				case 'P': sprintf(num,"p%d",p+4); break;
 				default:
 					printf("illegal escape character in format '%s'\n",Op[op].fmt);
 					exit(1);

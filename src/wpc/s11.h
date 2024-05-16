@@ -1,7 +1,13 @@
+// license:BSD-3-Clause
+
 #ifndef INC_S11
 #define INC_S11
 #if !defined(__GNUC__) || (__GNUC__ == 3 && __GNUC_MINOR__ >= 4) || (__GNUC__ >= 4)	// GCC supports "pragma once" correctly since 3.4
 #pragma once
+#endif
+
+#ifdef PROC_SUPPORT
+int s11_m2sw(int col, int row);
 #endif
 
 /*-- Common Inports for S11Games --*/
@@ -199,6 +205,7 @@ extern MACHINE_DRIVER_EXTERN(de_a);
 extern MACHINE_DRIVER_EXTERN(de_a1S);
 extern MACHINE_DRIVER_EXTERN(de_dmd161S);
 extern MACHINE_DRIVER_EXTERN(de_dmd162aS);
+extern MACHINE_DRIVER_EXTERN(de_dmd322aS_hack);
 extern MACHINE_DRIVER_EXTERN(de_dmd322aS);
 extern MACHINE_DRIVER_EXTERN(de_dmd642aS);
 
@@ -215,6 +222,7 @@ extern MACHINE_DRIVER_EXTERN(de_dmd642aS);
 #define de_mDEAS1        de_a1S
 #define de_mDEDMD16S1    de_dmd161S
 #define de_mDEDMD16S2A   de_dmd162aS
+#define de_mDEDMD32S2A_hack de_dmd322aS_hack
 #define de_mDEDMD32S2A   de_dmd322aS
 #define de_mDEDMD64S2A   de_dmd642aS
 

@@ -1,22 +1,44 @@
 /*****************************************************************************
  *
- *	 8085dasm.c
- *	 Portable I8085A disassembler
+ *   8085dasm.c
+ *   Portable I8085A disassembler
  *
- *	 Copyright (c) 1999 Juergen Buchmueller, all rights reserved.
- *	 Partially based on information out of Z80Em by Marcel De Kogel
+ *   Copyright (C) 1998,1999,2000 Juergen Buchmueller, all rights reserved.
+ *   You can contact me at juergen@mame.net or pullmoll@stop1984.com
  *
- *	 - This source code is released as freeware for non-commercial purposes.
- *	 - You are free to use and redistribute this code in modified or
- *	   unmodified form, provided you list me in the credits.
- *	 - If you modify this source code, you must add a notice to each modified
- *	   source file that it has been changed.  If you're a nice person, you
- *	   will clearly mark each change too.  :)
- *	 - If you wish to use this for commercial purposes, please contact me at
- *	   pullmoll@t-online.de
- *	 - The author of this copywritten work reserves the right to change the
- *     terms of its usage and license at any time, including retroactively
- *   - This entire notice must remain in the source code.
+ *   - This source code is released as freeware for non-commercial purposes
+ *     as part of the M.A.M.E. (Multiple Arcade Machine Emulator) project.
+ *     The licensing terms of MAME apply to this piece of code for the MAME
+ *     project and derviative works, as defined by the MAME license. You
+ *     may opt to make modifications, improvements or derivative works under
+ *     that same conditions, and the MAME project may opt to keep
+ *     modifications, improvements or derivatives under their terms exclusively.
+ *
+ *   - Alternatively you can choose to apply the terms of the "GPL" (see
+ *     below) to this - and only this - piece of code or your derivative works.
+ *     Note that in no case your choice can have any impact on any other
+ *     source code of the MAME project, or binary, or executable, be it closely
+ *     or losely related to this piece of code.
+ *
+ *  -  At your choice you are also free to remove either licensing terms from
+ *     this file and continue to use it under only one of the two licenses. Do this
+ *     if you think that licenses are not compatible (enough) for you, or if you
+ *     consider either license 'too restrictive' or 'too free'.
+ *
+ *  -  GPL (GNU General Public License)
+ *     This program is free software; you can redistribute it and/or
+ *     modify it under the terms of the GNU General Public License
+ *     as published by the Free Software Foundation; either version 2
+ *     of the License, or (at your option) any later version.
+ *
+ *     This program is distributed in the hope that it will be useful,
+ *     but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *     GNU General Public License for more details.
+ *
+ *     You should have received a copy of the GNU General Public License
+ *     along with this program; if not, write to the Free Software
+ *     Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
  *
  *****************************************************************************/
 
@@ -35,9 +57,9 @@
 
 unsigned Dasm8085(char *buff, unsigned pc)
 {
-	UINT8 op;
+	//UINT8 op;
 	unsigned PC = pc;
-	switch (op = OP(pc++))
+	switch (/*op =*/ OP(pc++))
 	{
 #ifdef  Z80_MNEMONICS
 		case 0x00: sprintf (buff,"nop");                             break;
@@ -313,7 +335,7 @@ unsigned Dasm8085(char *buff, unsigned pc)
 		case 0x0d: sprintf (buff,"dcr  c");                          break;
 		case 0x0e: sprintf (buff,"mvi  c,$%02x", ARG(pc)); pc++;     break;
 		case 0x0f: sprintf (buff,"rrc");                             break;
-		case 0x10: sprintf (buff,"asrh (*)");                        break;
+		case 0x10: sprintf (buff,"arhl (*)");                        break;
 		case 0x11: sprintf (buff,"lxi  d,$%04x", ARGW(pc)); pc+=2;   break;
 		case 0x12: sprintf (buff,"stax d");                          break;
 		case 0x13: sprintf (buff,"inx  d");                          break;
@@ -321,7 +343,7 @@ unsigned Dasm8085(char *buff, unsigned pc)
 		case 0x15: sprintf (buff,"dcr  d");                          break;
 		case 0x16: sprintf (buff,"mvi  d,$%02x", ARG(pc)); pc++;     break;
 		case 0x17: sprintf (buff,"ral");                             break;
-		case 0x18: sprintf (buff,"rlde (*)");                        break;
+		case 0x18: sprintf (buff,"rdel (*)");                        break;
 		case 0x19: sprintf (buff,"dad  d");                          break;
 		case 0x1a: sprintf (buff,"ldax d");                          break;
 		case 0x1b: sprintf (buff,"dcx  d");                          break;
@@ -337,7 +359,7 @@ unsigned Dasm8085(char *buff, unsigned pc)
 		case 0x25: sprintf (buff,"dcr  h");                          break;
 		case 0x26: sprintf (buff,"mvi  h,$%02x", ARG(pc)); pc++;     break;
 		case 0x27: sprintf (buff,"daa");                             break;
-		case 0x28: sprintf (buff,"ldeh $%02x (*)", ARG(pc)); pc++;   break;
+		case 0x28: sprintf (buff,"ldhi $%02x (*)", ARG(pc)); pc++;   break;
 		case 0x29: sprintf (buff,"dad  h");                          break;
 		case 0x2a: sprintf (buff,"lhld $%04x", ARGW(pc)); pc+=2;     break;
 		case 0x2b: sprintf (buff,"dcx  h");                          break;
@@ -353,7 +375,7 @@ unsigned Dasm8085(char *buff, unsigned pc)
 		case 0x35: sprintf (buff,"dcr  m");                          break;
 		case 0x36: sprintf (buff,"mvi  m,$%02x", ARG(pc)); pc++;     break;
 		case 0x37: sprintf (buff,"stc");                             break;
-		case 0x28: sprintf (buff,"ldes $%02x", ARG(pc)); pc++;       break;
+		case 0x38: sprintf (buff,"ldsi $%02x", ARG(pc)); pc++;       break;
 		case 0x39: sprintf (buff,"dad sp");                          break;
 		case 0x3a: sprintf (buff,"ldax $%04x", ARGW(pc)); pc+=2;     break;
 		case 0x3b: sprintf (buff,"dcx  sp");                         break;
@@ -518,22 +540,22 @@ unsigned Dasm8085(char *buff, unsigned pc)
 		case 0xda: sprintf (buff,"jc   $%04x", ARGW(pc)); pc+=2;     break;
 		case 0xdb: sprintf (buff,"in   $%02x", ARG(pc)); pc++;       break;
 		case 0xdc: sprintf (buff,"cc   $%04x", ARGW(pc)); pc+=2;     break;
-		case 0xdd: sprintf (buff,"jnx  $%04x (*)", ARGW(pc)); pc+=2; break;
+		case 0xdd: sprintf (buff,"jnx5 $%04x (*)", ARGW(pc)); pc+=2; break;
 		case 0xde: sprintf (buff,"sbi  $%02x", ARG(pc)); pc++;       break;
 		case 0xdf: sprintf (buff,"rst  3");                          break;
-		case 0xe0: sprintf (buff,"rpe");                             break;
+		case 0xe0: sprintf (buff,"rpo");                             break;
 		case 0xe1: sprintf (buff,"pop  h");                          break;
 		case 0xe2: sprintf (buff,"jpo  $%04x", ARGW(pc)); pc+=2;     break;
 		case 0xe3: sprintf (buff,"xthl");                            break;
-		case 0xe4: sprintf (buff,"cpe  $%04x", ARGW(pc)); pc+=2;     break;
+		case 0xe4: sprintf (buff,"cpo  $%04x", ARGW(pc)); pc+=2;     break;
 		case 0xe5: sprintf (buff,"push h");                          break;
 		case 0xe6: sprintf (buff,"ani  $%02x", ARG(pc)); pc++;       break;
 		case 0xe7: sprintf (buff,"rst  4");                          break;
-		case 0xe8: sprintf (buff,"rpo");                             break;
+		case 0xe8: sprintf (buff,"rpe");                             break;
 		case 0xe9: sprintf (buff,"pchl");                            break;
 		case 0xea: sprintf (buff,"jpe  $%04x", ARGW(pc)); pc+=2;     break;
 		case 0xeb: sprintf (buff,"xchg");                            break;
-		case 0xec: sprintf (buff,"cpo  $%04x", ARGW(pc)); pc+=2;     break;
+		case 0xec: sprintf (buff,"cpe  $%04x", ARGW(pc)); pc+=2;     break;
 		case 0xed: sprintf (buff,"lhlx d (*)");                      break;
 		case 0xee: sprintf (buff,"xri  $%02x", ARG(pc)); pc++;       break;
 		case 0xef: sprintf (buff,"rst  5");                          break;
@@ -550,7 +572,7 @@ unsigned Dasm8085(char *buff, unsigned pc)
 		case 0xfa: sprintf (buff,"jm   $%04x", ARGW(pc)); pc+=2;     break;
 		case 0xfb: sprintf (buff,"ei");                              break;
 		case 0xfc: sprintf (buff,"cm   $%04x", ARGW(pc)); pc+=2;     break;
-		case 0xfd: sprintf (buff,"jx   $%04x (*)", ARGW(pc)); pc+=2; break;
+		case 0xfd: sprintf (buff,"jx5  $%04x (*)", ARGW(pc)); pc+=2; break;
 		case 0xfe: sprintf (buff,"cpi  $%02x", ARG(pc)); pc++;       break;
 		case 0xff: sprintf (buff,"rst  7");                          break;
 #endif

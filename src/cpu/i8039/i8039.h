@@ -14,25 +14,29 @@
 #endif
 
 #ifndef INLINE
+#ifdef PX_ZEN
+#define INLINE static
+#else
 #define INLINE static inline
+#endif
 #endif
 
 #include "osd_cpu.h"
 
 
 /**************************************************************************
-	Internal Clock divisor
+    Internal Clock divisor
 
-	External Clock is divided internally by 3 to produce the machine state
-	generator. This is then divided by 5 for the instruction cycle times.
-	(Each instruction cycle passes through 5 machine states).
+    External Clock is divided internally by 3 to produce the machine state
+    generator. This is then divided by 5 for the instruction cycle times.
+    (Each instruction cycle passes through 5 machine states).
 */
 
 #define I8039_CLOCK_DIVIDER		(3*5)
 
 
 
-enum { I8039_PC=1, I8039_SP, I8039_PSW, I8039_A,  I8039_IRQ_STATE, I8039_TC,
+enum { I8039_PC=1, I8039_SP, I8039_PSW, I8039_A,  I8039_TC,
 	   I8039_P1,   I8039_P2, I8039_R0,  I8039_R1, I8039_R2,
 	   I8039_R3,   I8039_R4, I8039_R5,  I8039_R6, I8039_R7
 };
@@ -78,7 +82,6 @@ extern READ_HANDLER(i8039_internal_r);
 #define I8035_SP				I8039_SP
 #define I8035_PSW				I8039_PSW
 #define I8035_A 				I8039_A
-#define I8035_IRQ_STATE 		I8039_IRQ_STATE
 #define I8035_TC				I8039_TC
 #define I8035_P1				I8039_P1
 #define I8035_P2				I8039_P2
@@ -119,7 +122,6 @@ extern READ_HANDLER(i8035_internal_r);
 #define I8048_SP				I8039_SP
 #define I8048_PSW				I8039_PSW
 #define I8048_A 				I8039_A
-#define I8048_IRQ_STATE 		I8039_IRQ_STATE
 #define I8048_TC				I8039_TC
 #define I8048_P1				I8039_P1
 #define I8048_P2				I8039_P2
@@ -160,7 +162,6 @@ extern READ_HANDLER(i8048_internal_r);
 #define N7751_SP				I8039_SP
 #define N7751_PSW				I8039_PSW
 #define N7751_A 				I8039_A
-#define N7751_IRQ_STATE 		I8039_IRQ_STATE
 #define N7751_TC				I8039_TC
 #define N7751_P1				I8039_P1
 #define N7751_P2				I8039_P2
@@ -196,25 +197,25 @@ extern READ_HANDLER(n7751_internal_r);
 #include "memory.h"
 
 /*
- *	 Input a UINT8 from given I/O port
+ *   Input a UINT8 from given I/O port
  */
 #define I8039_In(Port) ((UINT8)cpu_readport16(Port))
 
 
 /*
- *	 Output a UINT8 to given I/O port
+ *   Output a UINT8 to given I/O port
  */
 #define I8039_Out(Port,Value) (cpu_writeport16(Port,Value))
 
 
 /*
- *	 Read a UINT8 from given memory location
+ *   Read a UINT8 from given memory location
  */
 #define I8039_RDMEM(A) ((unsigned)cpu_readmem16(A))
 
 
 /*
- *	 Write a UINT8 to given memory location
+ *   Write a UINT8 to given memory location
  */
 #define I8039_WRMEM(A,V) (cpu_writemem16(A,V))
 

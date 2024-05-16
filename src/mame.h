@@ -37,18 +37,8 @@ typedef void genf(void);
 #define MAX_GFX_ELEMENTS 32
 #define MAX_MEMORY_REGIONS 32
 
-#ifndef MESS
-#define APPNAME					"MAME"
-#define APPLONGNAME				"M.A.M.E."
-#else
-#define APPNAME					"MESS"
-#define APPLONGNAME				"M.E.S.S."
-#endif
-
 #ifdef PINMAME
-#undef APPNAME
-#undef APPLONGNAME
-#define APPNAME					"PINMAME"
+#define APPNAME					"PinMAME"
 #define APPLONGNAME				"Pinball M.A.M.E."
 #endif
 
@@ -95,7 +85,7 @@ struct RunningMachine
 	struct rectangle		absolute_visible_area;
 
 	/* remapped palette pen numbers. When you write directly to a bitmap in a
-	   non-paletteized mode, use this array to look up the pen number. For example,
+	   non-palettized mode, use this array to look up the pen number. For example,
 	   if you want to use color #6 in the palette, use pens[6] instead of just 6. */
 	pen_t *					pens;
 
@@ -115,7 +105,7 @@ struct RunningMachine
 	/* ----- audio-related information ----- */
 
 	/* the digital audio sample rate; 0 if sound is disabled. */
-	int						sample_rate;
+	double					sample_rate;
 
 	/* samples loaded from disk */
 	struct GameSamples *	samples;
@@ -205,7 +195,7 @@ struct GameOptions
 
 	int		samplerate;		/* sound sample playback rate, in Hz */
 	int		use_samples;	/* 1 to enable external .wav samples */
-	int		use_filter;		/* 1 to enable FIR filter on final mixer output */
+	//int		use_filter;		/* 1 to enable FIR filter on final mixer output */
 
 	float	brightness;		/* brightness of the display */
 	float	pause_bright;		/* additional brightness when in pause */
@@ -232,6 +222,9 @@ struct GameOptions
 	int		debug_width;	/* requested width of debugger bitmap */
 	int		debug_height;	/* requested height of debugger bitmap */
 	int		debug_depth;	/* requested depth of debugger bitmap */
+
+	int		at91jit;
+	int		usemodsol; 
 
 	#ifdef MESS
 	UINT32 ram;

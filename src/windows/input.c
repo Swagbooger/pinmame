@@ -185,6 +185,9 @@ struct rc_option ctrlr_input_opts2[] =
 static void updatekeyboard(void);
 static void init_keylist(void);
 static void init_joylist(void);
+#if defined(PINMAME) && defined(PROC_SUPPORT)
+static void init_proclist(void);
+#endif /* PINMAME && PROC_SUPPORT */
 
 
 
@@ -252,6 +255,7 @@ static int key_trans_table[][4] =
 	{ KEYCODE_COLON, 		DIK_SEMICOLON,		0xba,			';' },
 	{ KEYCODE_QUOTE, 		DIK_APOSTROPHE,		0xde,			'\'' },
 	{ KEYCODE_TILDE, 		DIK_GRAVE, 			0xc0,			'`' },
+	{ KEYCODE_YEN, 			DIK_YEN , 			'\\'	,		'\\' },
 	{ KEYCODE_LSHIFT, 		DIK_LSHIFT, 		VK_SHIFT, 		0 },
 	{ KEYCODE_BACKSLASH,	DIK_BACKSLASH, 		0xdc,			'\\' },
 	{ KEYCODE_Z, 			DIK_Z,				'Z',			'Z' },
@@ -581,7 +585,7 @@ out_of_mice:
 static BOOL CALLBACK enum_joystick_callback(LPCDIDEVICEINSTANCE instance, LPVOID ref)
 {
 	DIPROPDWORD value;
-	HRESULT result = DI_OK;
+	HRESULT result;
 	DWORD flags;
 
 	// if we're not out of mice, log this one
@@ -697,9 +701,14 @@ int win_init_input(void)
 	// init the joystick list
 	init_joylist();
 
+#if defined(PINMAME) && defined(PROC_SUPPORT)
+	// init the p-roc list
+	init_proclist();
+#endif /* PINMAME && PROC_SUPPORT */
+
 	// print the results
 	if (verbose)
-		fprintf(stderr, "Keyboards=%d  Mice=%d  Joysticks=%d Lightguns=%d\n", keyboard_count, mouse_count, joystick_count, lightgun_count);
+		fprintf(stderr, "Keyboards=%d Mice=%d Joysticks=%d Lightguns=%d\n", keyboard_count, mouse_count, joystick_count, lightgun_count);
 	return 0;
 
 cant_init_joystick:
@@ -1075,7 +1084,7 @@ static void init_keylist(void)
 					if (temp)
 					{
 						// point to the new buffer and increase the size indicator
-						osd_input_keywords =  temp;
+						osd_input_keywords = temp;
 						size_osd_ik += 16;
 					}
 				}
@@ -1161,7 +1170,7 @@ static void add_joylist_entry(const char *name, int code, int *joycount)
 			if (temp)
 			{
 				// point to the new buffer and increase the size indicator
-				osd_input_keywords =  temp;
+				osd_input_keywords = temp;
 				size_osd_ik += 16;
 			}
 		}
@@ -1220,14 +1229,22 @@ static void init_joylist(void)
 
 			// attempt to get the object info
 			instance.dwSize = STRUCTSIZE(DIDEVICEOBJECTINSTANCE);
-			result = IDirectInputDevice_GetObjectInfo(mouse_device[mouse], &instance, offsetof(DIMOUSESTATE, rgbButtons[button]), DIPH_BYOFFSET);
+			result = IDirectInputDevice_GetObjectInfo(mouse_device[mouse], &instance, (DWORD)offsetof(DIMOUSESTATE, rgbButtons[button]), DIPH_BYOFFSET);
 			if (result == DI_OK)
 			{
 				// add mouse number to the name
 				if (mouse_count > 1)
-					sprintf(tempname, "Mouse %d %s", mouse + 1, instance.tszName);
+#ifdef sprintf_s
+					sprintf_s(tempname, sizeof(tempname), "Mouse %d %s", mouse + 1, instance.tszName);
+#else
+					snprintf(tempname, sizeof(tempname), "Mouse %d %s", mouse + 1, instance.tszName);
+#endif
 				else
-					sprintf(tempname, "Mouse %s", instance.tszName);
+#ifdef sprintf_s
+					sprintf_s(tempname, sizeof(tempname), "Mouse %s", instance.tszName);
+#else
+					snprintf(tempname, sizeof(tempname), "Mouse %s", instance.tszName);
+#endif
 				add_joylist_entry(tempname, JOYCODE(mouse, JOYTYPE_MOUSEBUTTON, button), &joycount);
 			}
 		}
@@ -1247,11 +1264,11 @@ static void init_joylist(void)
 			if (result == DI_OK)
 			{
 				// add negative value
-				sprintf(tempname, "J%d %s -", stick + 1, instance.tszName);
+				snprintf(tempname, sizeof(tempname), "J%d %s -", stick + 1, instance.tszName);
 				add_joylist_entry(tempname, JOYCODE(stick, JOYTYPE_AXIS_NEG, axis), &joycount);
 
 				// add positive value
-				sprintf(tempname, "J%d %s +", stick + 1, instance.tszName);
+				snprintf(tempname, sizeof(tempname), "J%d %s +", stick + 1, instance.tszName);
 				add_joylist_entry(tempname, JOYCODE(stick, JOYTYPE_AXIS_POS, axis), &joycount);
 
 				// get the axis range while we're here
@@ -1271,11 +1288,11 @@ static void init_joylist(void)
 
 			// attempt to get the object info
 			instance.dwSize = STRUCTSIZE(DIDEVICEOBJECTINSTANCE);
-			result = IDirectInputDevice_GetObjectInfo(joystick_device[stick], &instance, offsetof(DIJOYSTATE, rgbButtons[button]), DIPH_BYOFFSET);
+			result = IDirectInputDevice_GetObjectInfo(joystick_device[stick], &instance, (DWORD)offsetof(DIJOYSTATE, rgbButtons[button]), DIPH_BYOFFSET);
 			if (result == DI_OK)
 			{
 				// make the name for this item
-				sprintf(tempname, "J%d %s", stick + 1, instance.tszName);
+				snprintf(tempname, sizeof(tempname), "J%d %s", stick + 1, instance.tszName);
 				add_joylist_entry(tempname, JOYCODE(stick, JOYTYPE_BUTTON, button), &joycount);
 			}
 		}
@@ -1288,23 +1305,23 @@ static void init_joylist(void)
 
 			// attempt to get the object info
 			instance.dwSize = STRUCTSIZE(DIDEVICEOBJECTINSTANCE);
-			result = IDirectInputDevice_GetObjectInfo(joystick_device[stick], &instance, offsetof(DIJOYSTATE, rgdwPOV[pov]), DIPH_BYOFFSET);
+			result = IDirectInputDevice_GetObjectInfo(joystick_device[stick], &instance, (DWORD)offsetof(DIJOYSTATE, rgdwPOV[pov]), DIPH_BYOFFSET);
 			if (result == DI_OK)
 			{
 				// add up direction
-				sprintf(tempname, "J%d %s U", stick + 1, instance.tszName);
+				snprintf(tempname, sizeof(tempname), "J%d %s U", stick + 1, instance.tszName);
 				add_joylist_entry(tempname, JOYCODE(stick, JOYTYPE_POV_UP, pov), &joycount);
 
 				// add down direction
-				sprintf(tempname, "J%d %s D", stick + 1, instance.tszName);
+				snprintf(tempname, sizeof(tempname), "J%d %s D", stick + 1, instance.tszName);
 				add_joylist_entry(tempname, JOYCODE(stick, JOYTYPE_POV_DOWN, pov), &joycount);
 
 				// add left direction
-				sprintf(tempname, "J%d %s L", stick + 1, instance.tszName);
+				snprintf(tempname, sizeof(tempname), "J%d %s L", stick + 1, instance.tszName);
 				add_joylist_entry(tempname, JOYCODE(stick, JOYTYPE_POV_LEFT, pov), &joycount);
 
 				// add right direction
-				sprintf(tempname, "J%d %s R", stick + 1, instance.tszName);
+				snprintf(tempname, sizeof(tempname), "J%d %s R", stick + 1, instance.tszName);
 				add_joylist_entry(tempname, JOYCODE(stick, JOYTYPE_POV_RIGHT, pov), &joycount);
 			}
 		}
@@ -1452,7 +1469,6 @@ int osd_is_joystick_axis_code(int joycode)
 	}
 	return 0;
 }
-
 
 //============================================================
 //	osd_lightgun_read
@@ -1613,11 +1629,9 @@ void process_ctrlr_file(struct rc_struct *iptrc, const char *ctype, const char *
 					fprintf (stderr, "problem parsing ctrlr file %s.ini\n", filename);
 			}
 		}
-	}
 
-	// close the file
-	if (f)
 		mame_fclose (f);
+	}
 }
 
 void process_ctrlr_game(struct rc_struct *iptrc, const char *ctype, const struct GameDriver *drv)
@@ -1637,7 +1651,7 @@ void process_ctrlr_system(struct rc_struct *iptrc, const char *ctype, const stru
 	char buffer[128];
 	const struct GameDriver *tmp_gd;
 
-	sprintf(buffer, "%s", drv->source_file+12);
+	snprintf(buffer, sizeof(buffer), "%s", drv->source_file+12);
 	buffer[strlen(buffer) - 2] = 0;
 
 	tmp_gd = drv;
@@ -1698,7 +1712,7 @@ static int ipdef_custom_rc_func(struct rc_option *option, const char *arg, int p
 
 		// if an input definition was re-defined
 		else if (pinput_keywords->type == IKT_IPT ||
-                 pinput_keywords->type == IKT_IPT_EXT)
+			pinput_keywords->type == IKT_IPT_EXT)
 		{
 			// loop through all definitions
 			while (idef->type != IPT_END)
@@ -1706,8 +1720,8 @@ static int ipdef_custom_rc_func(struct rc_option *option, const char *arg, int p
 				// if the definition matches
 				if (idef->type == pinput_keywords->val)
 				{
-                    if (pinput_keywords->type == IKT_IPT_EXT)
-                        idef++;
+					if (pinput_keywords->type == IKT_IPT_EXT)
+						idef++;
 					seq_set_string(&idef->seq, arg);
 					// and abort (there shouldn't be duplicate definitions)
 					break;
@@ -1809,12 +1823,12 @@ void osd_customize_inputport_defaults(struct ipd *defaults)
 	{
 		if (i < num_ik)
 		{
-	   		ctrlr_input_opts[i].name = input_keywords[i].name;
+			ctrlr_input_opts[i].name = input_keywords[i].name;
 			ctrlr_input_opts[i].dest = (void *)&input_keywords[i];
 		}
 		else
 		{
-	   		ctrlr_input_opts[i].name = osd_input_keywords[i-num_ik].name;
+			ctrlr_input_opts[i].name = osd_input_keywords[i-num_ik].name;
 			ctrlr_input_opts[i].dest = (void *)&osd_input_keywords[i-num_ik];
 		}
 		ctrlr_input_opts[i].shortname = NULL;
@@ -1940,7 +1954,7 @@ void osd_customize_inputport_defaults(struct ipd *defaults)
 
 		fprintf(stderr, "Mouse support %sabled\n",use_mouse ? "en" : "dis");
 		fprintf(stderr, "Joystick support %sabled\n",use_joystick ? "en" : "dis");
-		fprintf(stderr, "Keyboards=%d  Mice=%d  Joysticks=%d\n",
+		fprintf(stderr, "Keyboards=%d Mice=%d Joysticks=%d\n",
 			keyboard_count,
 			use_mouse ? mouse_count : 0,
 			use_joystick ? joystick_count : 0);
@@ -1975,7 +1989,7 @@ int osd_get_leds(void)
 	}
 	else // WinNT/2K/XP, use DeviceIoControl
 	{
-		KEYBOARD_INDICATOR_PARAMETERS OutputBuffer;	  // Output buffer for DeviceIoControl
+		KEYBOARD_INDICATOR_PARAMETERS OutputBuffer;  // Output buffer for DeviceIoControl
 		ULONG				DataLength = sizeof(KEYBOARD_INDICATOR_PARAMETERS);
 		ULONG				ReturnedLength; // Number of bytes returned in output buffer
 
@@ -2025,7 +2039,7 @@ void osd_set_leds(int state)
 	}
 	else // WinNT/2K/XP, use DeviceIoControl
 	{
-		KEYBOARD_INDICATOR_PARAMETERS InputBuffer;	  // Input buffer for DeviceIoControl
+		KEYBOARD_INDICATOR_PARAMETERS InputBuffer;  // Input buffer for DeviceIoControl
 		ULONG				DataLength = sizeof(KEYBOARD_INDICATOR_PARAMETERS);
 		ULONG				ReturnedLength; // Number of bytes returned in output buffer
 		UINT				LedFlags=0;
@@ -2059,7 +2073,7 @@ void start_led(void)
 	if (!use_keyboard_leds)
 		return;
 
-	// retrive windows version
+	// retrieve windows version
 	GetVersionEx(&osinfo);
 
 	// nt/2k/xp
@@ -2088,8 +2102,6 @@ void start_led(void)
 
 	// remember the initial LED states
 	original_leds = osd_get_leds();
-
-	return;
 }
 
 
@@ -2100,7 +2112,7 @@ void start_led(void)
 
 void stop_led(void)
 {
-	int error_number = 0;
+	int error_number;
 
 	if (!use_keyboard_leds)
 		return;
@@ -2125,6 +2137,136 @@ void stop_led(void)
 			return;
 		}
 	}
-
-	return;
 }
+
+#if defined(PINMAME) && defined(PROC_SUPPORT)
+//#define PROCCODE(group, type, index)	((index) | ((type) << 8) | ((group) << 8))
+#define MAX_PROC_INPUTS 256
+#define MAX_INPUT_NAME_LENGTH 64
+#define ELEMENTS(x)			(sizeof(x) / sizeof((x)[0]))
+static struct PROCInfo procInputList[MAX_PROC_INPUTS];
+
+// master translation table
+static int proc_trans_table[][2] =
+{
+	// internal code	MAME code
+	{ 0,			PROC_FLIPPER_L },
+	{ 1,			PROC_FLIPPER_R },
+	{ 2,			PROC_START },
+	{ 3,			PROC_ESC_SEQ },
+};
+
+
+//============================================================
+//	add_procInputList_entry
+//============================================================
+
+static void add_procInputList_entry(const char *name, int code, int *proccount)
+{
+	int standardcode = PROCCODE_OTHER;
+	struct ik *temp;
+
+	// copy the name
+	char *namecopy = (char *)(malloc(strlen(name) + 1));
+	if (namecopy)
+	{
+		int entry;
+
+		// find the table entry, if there is one
+		for (entry = 0; entry < ELEMENTS(proc_trans_table); entry++)
+			if (proc_trans_table[entry][0] == code)
+				break;
+
+		// fill in the p-roc description
+		procInputList[*proccount].name = strcpy(namecopy, name);
+		procInputList[*proccount].code = code;
+		if (entry < ELEMENTS(proc_trans_table))
+			standardcode = proc_trans_table[entry][1];
+		procInputList[*proccount].standardcode = standardcode;
+		*proccount += 1;
+
+		// make sure we have enough room for the new entry and the terminator (2 more)
+		if ((num_osd_ik + 2) > size_osd_ik)
+		{
+			// attempt to allocate 16 more
+			temp = realloc (osd_input_keywords, (size_osd_ik + 16)*sizeof (struct ik));
+
+			// if the realloc was successful
+			if (temp)
+			{
+				// point to the new buffer and increase the size indicator
+				osd_input_keywords = temp;
+				size_osd_ik += 16;
+			}
+		}
+
+		// if we have enough room for the new entry and the terminator
+		if ((num_osd_ik + 2) <= size_osd_ik)
+		{
+			const char *src;
+			char *dst;
+
+			osd_input_keywords[num_osd_ik].name = malloc (strlen(name) + 1);
+
+			src = name;
+			dst = (char *)osd_input_keywords[num_osd_ik].name;
+
+			// copy name converting all spaces to underscores
+			while (*src != 0)
+			{
+				if (*src == ' ')
+					*dst++ = '_';
+				else
+					*dst++ = *src;
+				src++;
+			}
+			*dst = 0;
+
+			osd_input_keywords[num_osd_ik].type = IKT_OSD_PROC;
+			osd_input_keywords[num_osd_ik].val = code;
+
+			num_osd_ik++;
+
+			// indicate end of list
+			osd_input_keywords[num_osd_ik].name = 0;
+		}
+	}
+}
+
+//============================================================
+//	init_proc_input for Mame's OSD
+//============================================================
+
+static void init_proclist(void)
+{
+	int procInputCount=0;
+	char tempname[MAX_INPUT_NAME_LENGTH];
+
+	snprintf(tempname, sizeof(tempname), "Left Flipper");
+	add_procInputList_entry(tempname, 0, &procInputCount);
+
+	snprintf(tempname, sizeof(tempname), "Right Flipper");
+	add_procInputList_entry(tempname, 1, &procInputCount);
+
+	snprintf(tempname, sizeof(tempname), "Start Button");
+	add_procInputList_entry(tempname, 2, &procInputCount);
+
+	snprintf(tempname, sizeof(tempname), "Quit");
+	add_procInputList_entry(tempname, 3, &procInputCount);
+
+	// terminate array
+	memset(&procInputList[procInputCount], 0, sizeof(procInputList[procInputCount]));
+}
+
+
+
+//============================================================
+//	osd_get_proc_list
+//============================================================
+
+const struct PROCInfo *osd_get_proc_list(void)
+{
+	return procInputList;
+}
+
+#endif /* PINMAME && PROC_SUPPORT */

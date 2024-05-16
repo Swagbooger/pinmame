@@ -14,8 +14,8 @@
 // Lamp matrix:   (ST0-ST15)*10 + L3-L0
 // Solenoids:     1-6 (first column), 7-12 (second column)
 //                17: mux relay, 18: game play relay
-//			      7-12 are automatically activated by sol 17
-//				  flip sols as usual: right 45-46, left 47-48, active if sol 18 is on
+//                7-12 are automatically activated by sol 17
+//                flip sols as usual: right 45-46, left 47-48, active if sol 18 is on
 //
 // Many thanks to Alexandre Souza and Newton Pessoa
 
@@ -40,7 +40,7 @@ static struct {
 static NVRAM_HANDLER(taito);
 static NVRAM_HANDLER(taito_old);
 
-static int segMap[] = {
+static const int segMap[] = {
 	4,0,-4,4,0,-4,4,0,-4,4,0,-4,0,0
 };
 
@@ -48,7 +48,7 @@ static INTERRUPT_GEN(taito_vblank) {
 	//-------------------------------
 	//  copy local data to interface
 	//-------------------------------
-	TAITOlocals.vblankCount += 1;
+	TAITOlocals.vblankCount++;
 
 	// -- solenoids --
 	if ((TAITOlocals.vblankCount % TAITO_SOLSMOOTH) == 0) {
@@ -56,11 +56,11 @@ static INTERRUPT_GEN(taito_vblank) {
 	}
 
 	// -- lamps --
- 	if ((TAITOlocals.vblankCount % TAITO_LAMPSMOOTH) == 0) {
- 		memcpy(coreGlobals.lampMatrix, TAITOlocals.lampMatrix, sizeof(coreGlobals.lampMatrix));
- 	}
+	if ((TAITOlocals.vblankCount % TAITO_LAMPSMOOTH) == 0) {
+		memcpy(coreGlobals.lampMatrix, TAITOlocals.lampMatrix, sizeof(coreGlobals.lampMatrix));
+	}
 
-    // -- display --
+	// -- display --
 	if ((TAITOlocals.vblankCount % TAITO_DISPLAYSMOOTH) == 0) {
 		memcpy(coreGlobals.segments, TAITOlocals.segments, sizeof coreGlobals.segments);
 	}
@@ -70,12 +70,12 @@ static INTERRUPT_GEN(taito_vblank) {
 }
 
 static SWITCH_UPDATE(taito) {
-	if (inports) {
+  if (inports) {
     CORE_SETKEYSW(inports[TAITO_COMINPORT]>>8, 0x80, 0);
     CORE_SETKEYSW(inports[TAITO_COMINPORT],    0xff, 1);
     CORE_SETKEYSW(inports[TAITO_COMINPORT]>>8, 0x1f, 8);
     if (inports[TAITO_COMINPORT] & 0x8000) sndbrd_0_diag(1);
-	}
+  }
 }
 
 static INTERRUPT_GEN(taito_irq) {
@@ -133,7 +133,7 @@ static WRITE_HANDLER(taito_sndCmd_w) {
 }
 
 static READ_HANDLER(switches_r) {
-	if ( offset==6 )
+	if (offset == 6)
 		return core_getDip(0)^0xff;
 	if (offset == 8) offset = 6;
 	return coreGlobals.swMatrix[offset+1]^0xff;
@@ -231,7 +231,7 @@ static WRITE_HANDLER(dma_commands)
 		int col = (offset<8)?0:4;
 		int rowBit  = (1 << (offset%8));
 		int rowMask = rowBit^0xff;
-		int i = 0;
+		int i;
 
 		for (i=0;i<4;i++) {
 			TAITOlocals.lampMatrix[col] = (TAITOlocals.lampMatrix[col]&rowMask) | ((data&0x08)?rowBit:0);
@@ -304,7 +304,7 @@ MEMORY_END
 MACHINE_DRIVER_START(taito)
   MDRV_IMPORT_FROM(PinMAME)
   MDRV_CORE_INIT_RESET_STOP(taito,NULL,taito)
-  MDRV_CPU_ADD_TAG("mcpu", 8080, 17000000/9)
+  MDRV_CPU_ADD_TAG("mcpu", 8080, 17000000./9.)
   MDRV_CPU_MEMORY(taito_readmem, taito_writemem)
   MDRV_CPU_VBLANK_INT(taito_vblank, 1)
   MDRV_NVRAM_HANDLER(taito)
@@ -323,10 +323,26 @@ MACHINE_DRIVER_START(taito_sintetizador)
   MDRV_SOUND_CMDHEADING("taito")
 MACHINE_DRIVER_END
 
+MACHINE_DRIVER_START(taito_sintetizador_nmi)
+  MDRV_IMPORT_FROM(taito)
+
+  MDRV_IMPORT_FROM(taitos_sintetizador_nmi)
+  MDRV_SOUND_CMD(taito_sndCmd_w)
+  MDRV_SOUND_CMDHEADING("taito")
+MACHINE_DRIVER_END
+
 MACHINE_DRIVER_START(taito_sintetizadorpp)
   MDRV_IMPORT_FROM(taito)
 
   MDRV_IMPORT_FROM(taitos_sintetizadorpp)
+  MDRV_SOUND_CMD(taito_sndCmd_w)
+  MDRV_SOUND_CMDHEADING("taito")
+MACHINE_DRIVER_END
+
+MACHINE_DRIVER_START(taito_sintetizadorpp_nmi)
+  MDRV_IMPORT_FROM(taito)
+
+  MDRV_IMPORT_FROM(taitos_sintetizadorpp_nmi)
   MDRV_SOUND_CMD(taito_sndCmd_w)
   MDRV_SOUND_CMDHEADING("taito")
 MACHINE_DRIVER_END
@@ -351,7 +367,7 @@ MACHINE_DRIVER_START(taito_old)
   MDRV_IMPORT_FROM(taito_sintetizador)
 
   MDRV_CORE_INIT_RESET_STOP(taito_old,NULL,taito)
-  MDRV_CPU_REPLACE("mcpu", 8080, 19000000/9)
+  MDRV_CPU_REPLACE("mcpu", 8080, 19000000./9.) //!! ??
   MDRV_CPU_MEMORY(taito_readmem_old, taito_writemem_old)
   MDRV_NVRAM_HANDLER(taito_old)
 MACHINE_DRIVER_END
@@ -479,7 +495,9 @@ MACHINE_DRIVER_START(taitoz80)
   MDRV_NVRAM_HANDLER(generic_0fill)
   MDRV_SWITCH_UPDATE(taitoz80)
 
-  MDRV_IMPORT_FROM(taitos_sintetizadorpp)
+  MDRV_IMPORT_FROM(taitos_sintetizadorpp_nmi)
+  MDRV_SOUND_CMD(taito_sndCmd_w)
+  MDRV_SOUND_CMDHEADING("taito")
 MACHINE_DRIVER_END
 
 static core_tLCDLayout disp[] = {
@@ -499,9 +517,9 @@ TAITO_ROMSTART2222(mrblkz80, "mb01z80.dat", CRC(7f883a70) SHA1(848783123b55ade76
                              "mb02z80.dat", CRC(68de8f50) SHA1(7076297060e927da1aefae8bf75c8cda18031660),
                              "mb03z80.dat", CRC(5a8e55e8) SHA1(b93102254004d258998bd6ab7d7b333361b37830),
                              "mb04z80.dat", CRC(ecf30c2f) SHA1(404c891bc420cfe540e829a1cd05ced10ea5a09c))
-TAITO_SOUNDROMS444("mrb_s1.bin", CRC(ff28b2b9) SHA1(3106811740e0206ad4ba7845e204e721b0da70e2),
-                   "mrb_s2.bin", CRC(34d52449) SHA1(bdd5db5e58ca997d413d18f291928ad1a45c194e),
-                   "mrb_s3.bin", CRC(276fb897) SHA1(b1a4323a4d921e3ae4beefaa04cd95e18cc33b9d))
+TAITO_SOUNDROMS444("mrbz80s1.bin", NO_DUMP,
+                   "mrbz80s2.bin", NO_DUMP,
+                   "mrbz80s3.bin", NO_DUMP)
 TAITO_ROMEND
 
 INPUT_PORTS_START(mrblkz80)
@@ -518,4 +536,4 @@ INPUT_PORTS_START(mrblkz80)
     COREPORT_BIT(   0x0040, "Statistics",   KEYCODE_9)
 INPUT_PORTS_END
 
-CORE_CLONEDEFNV(mrblkz80, mrblack, "Mr. Black (Z-80 CPU)", 198?, "Taito", taitoz80, GAME_IMPERFECT_SOUND)
+CORE_CLONEDEFNV(mrblkz80, mrblack, "Mr. Black (Z-80 CPU)", 198?, "Taito", taitoz80, 0)

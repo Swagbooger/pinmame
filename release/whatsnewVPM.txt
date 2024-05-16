@@ -1,5 +1,212 @@
 What's new in Visual PinMAME:
 -----------------------------
+(see whatsnew.txt for the PinMAME core changes!)
+
+
+Version 3.6 (XX XXth, 2024) - "Sounds good III / Looks good"
+------------------------------------------------------------------------------
+- Add 'ModOutputType' to COM-API for new PWM support (see whatsnew.txt and https://github.com/vpinball/pinmame/pull/89 for details and usage)
+
+- Add new 'Extend Mono sound to Stereo' option, to help multi channel (e.g. 5.1 or 7.1 speaker setup) sound system users
+
+- RawDmdPixels can now also feature alpha-segments, if running a non-DMD based machine
+
+- Remove the SyncLevel option from the options, nowadays this should be counter-productive
+
+Version 3.5 (October 23rd, 2022) - "Trick or Treat"
+------------------------------------------------------------------------------
+- Do not use UPX to compress the dll anymore (for now), as it leads to problems on Windows 7 setups
+
+- The double size DMD setting was replaced by a more general scaling factor (for legacy reasons the value '1' also means 2x though, so use '0' to disable the scale)
+
+- Add 'ROMName' to COM-API to get the internal game name if an alias is used
+
+- update BASS library to 2.4.17
+
+Version 3.4 (December 24th, 2021) - "Still delivering your christmas present"
+------------------------------------------------------------------------------
+- Fix the additional .raw/non-averaged file output dumping of Alvin G. DMDs
+
+- Remove some of the marked-as-deprecated functions (only some very very few VP8/VP9 tables actually used a few of these):
+  BorderSizeX/Y, WindowPosX/Y, InstallDir, RomDirs, CfgDir, NVRamDir, SamplesDir, ImgDir, UseSamples, SampleRate, Antialias
+
+- update BASS library to 2.4.16
+
+Version 3.3 (December 24th, 2020) - "20 years already?"
+------------------------------------------------------------------------------
+- New logos by tictox
+
+- If you create a VPMAlias.txt file in the VPinMAME folder, it will alias an input rom name to the specified (real) rom. Format example:
+   mytallica,mtl_180hc
+   myacdc,acd_170hc
+  This can be used to allow to use different PUP or DOF profiles per game (for reskins and such).
+
+- Fix the additional .raw/non-averaged file output dumping of GTS3 DMDs
+
+- Add Data East alphanumeric support to the builtin alternate sound file support (Sound Mode 1)
+  (only briefly tested though, please report non-working machines)
+
+Version 3.2 (October 6th, 2019) - "Sounds good II"
+------------------------------------------------------------------------------
+- Change the default of the 'ddraw' option to 0, which means that the faster (but less compatible nowadays) Direct Draw implementation of the window display is by default disabled
+
+- Extend builtin alternate sound file support (Sound Mode 1) with a new CSV file-format
+
+  Currently specified 8 fields/columns should have a standard order. But in order to be extensible, the first row must always contain all column names:
+   "ID","CHANNEL","DUCK","GAIN","LOOP","STOP","NAME","FNAME"
+  (So put this definition above as-is into the first line of the CSV)
+  Possible future extensions could be:
+   "GROUP","SHAKER","SERIAL"
+
+  Then for each sound/line:
+   ID: hexadecimal integer (as string) representing the soundboard command (format e.g. "0x10e"), technical ID as it comes from the MPU.
+   CHANNEL: use specified channel for the sample. If something is already playing on that channel it will be stopped. Typical channel assignment should be 0: background music, 1: short music snippets, that interrupt or end the background music, everything else (2..15): arbitrary channels. If field is empty, any free channel (2..15) is used.
+   DUCK: reduce volume of the background music when playing the sample. Range 0-100 (i.e. percentage).
+   GAIN: increase or reduce volume of the sample. Range 0-100. 50 leaves the sample volume as-is (it's recommended to not go over 50 to avoid sample clamping/distortion).
+   LOOP: loop the sample this many times. Range 0-100, where 100 represents endless looping of the sample.
+   STOP: stop playback of background music. Can be 0 or 1.
+   NAME: string, descriptive/internal name of the sample.
+   FNAME: string, actual filepath/filename of the sample. Can contain any path prefixes if one likes to organize sound files in directories.
+  The only fields that need to be specified are id, name and fname, the rest can optionally be left empty and will be filled in with defaults.
+
+  If the table contains more than one record for a certain ID, the sound engine will pick one of these randomly. These same IDs must be grouped together one after another in a sequence.
+
+  Note that the old folder based structure is still fully supported for backwards compatibility
+
+- Add Whitestar support to the builtin alternate sound file support (Sound Mode 1)
+
+- New (backwards compatible) parameter to allow for mech configuration/specifying an initial position, instead of always loading it from NVRAM
+  Add special "handlemech" modes to Bride of Pinbot (bop_l7)
+  -1: Reset Bride of Pinbot's face to 0 for consistent startup behavior, but then disable internal mech
+  -2: Reset face and continue using internal mech
+
+- Allow window position (x,y) to be less than 0 in cabinet mode, so primary monitor can be put "below" the DMD monitor
+
+- Add additional .raw/non-averaged file output if dumping DMD frames from GTS3 and WPC machines
+- Improve timing precision of DMD frame dumps
+
+- Fix for external dmddevice(64).dll: map GEN_GTS80B to _2x20Alpha layout
+- Also introduce a new function to the dmddevice interface: void Render_PM_Alphanumeric_Dim_Frame(layout_t layout, const UINT16 *const seg_data, const char *const seg_dim, const UINT16 *const seg_data2); which includes dimming of segments
+- Also (optionally) extend dmddevice interface (with noOfRawFrames and rawbuffer):
+   void Render_16_Shades_with_Raw(UINT16 width, UINT16 height, UINT8 *currbuffer, UINT32 noOfRawFrames, UINT8 *rawbuffer);
+   void Render_4_Shades_with_Raw (UINT16 width, UINT16 height, UINT8 *currbuffer, UINT32 noOfRawFrames, UINT8 *rawbuffer);
+
+- In addition add support for a secondary external DMD device dll with (for now) the same interface as dmddevice(64).dll: dmdscreen(64).dll (i.e. used to drive PUP at the moment)
+
+- update BASS library to 2.4.14
+
+Version 3.1 (July 29th, 2018) - "Flippin' fast"
+------------------------------------------------------------------------------
+- Switch to VS2015 for the release builds (tested in the wild and seemingly faster, thanks to CarnyPriest)
+
+- RawDmdPixels and RawDmdColoredPixels will now work correctly for Strikes N' Spares
+
+Version 3.0 (December 24th, 2017) - "11 years in the making"
+------------------------------------------------------------------------------
+- Extend and update some parts of the .txt documentation files
+
+- New method for the Controller object:
+	HRESULT SoundMode([out, retval] int *pVal); - Get sound processing mode, e.g. 0 = standard builtin PinMAME emulation, 1 = builtin alternate sound file support, 2 = external pinsound, 3 = external pinsound + psrec sound recording
+	HRESULT SoundMode([in] int newVal); - Set sound processing mode, e.g. 0 = standard builtin PinMAME emulation, 1 = builtin alternate sound file support, 2 = external pinsound, 3 = external pinsound + psrec sound recording
+
+Version 2.9 (June 11th, 2017) - "Attack of the clones"
+------------------------------------------------------------------------------
+- No interface changes, refer to whatsnew.txt for PinMAME changes
+
+Version 2.8b (December 29th, 2016)
+------------------------------------------------------------------------------
+- Expose new option in UI: Resampling Quality, to choose between fast performance/low quality (0) and normal (1)
+
+Version 2.8 (December 24th, 2016) - "Sounds good"
+------------------------------------------------------------------------------
+- To enable the new modulated/multi-level flasher support (see whatsnew.txt), set SolMask to 2
+
+- New, generalized external DMD handling via a separate dmddevice.dll instead of the define hell
+  This also allows to drive any kind of virtual or real DMD via this new interface (see ext\dmddevice\dmddevice.h)
+  For now, Visual PinMAME ships with four different dll packages for PinDMD1/2/3 and Pin2DMD, so pick the one that you need
+  NOTE: In case you experience problems on Windows 7 ("No DMD device driver found"), try installing: http://go.microsoft.com/fwlink/p/?linkid=217865
+
+Version 2.7 (June 08th, 2016) - "Alive and kicking"
+------------------------------------------------------------------------------
+- New option for the DMD window: DMD opacity
+
+- New option for the sound processing: Sound Mode, where:
+  0 = standard builtin PinMAME emulation
+  1 = builtin alternate sound file support
+      (store the alternate sound files in a PinSound-like directory structure (incl. textfiles for ducking and gain),
+       within a new PinMAME directory subfolder 'altsound' and there within the machines shortname subfolder,
+       e.g. for ij_l7: 'C:\PinMAME\altsound\ij_l7\'
+       or for an example alternate sound file for tz_94h: 'C:\PinMAME\altsound\tz_94h\jingle\000064-load_gumball_pt_1\load_gum__LEGACY.ogg')
+  2 = external pinsound, 3 = external pinsound + psrec sound recording
+      (must have PinSound Studio 0.7 or newer running at the same time:
+       make sure that the windows permissions match between PinSound Studio and Visual PinMAME/Pinball, e.g.
+       if one is using admin permissions when running, then both need to be started with that (or the other way round))
+  (needs VPINMAME_ALTSOUND (also requires bass.lib/.dll) and/or VPINMAME_PINSOUND defined when compiling)
+
+- New methods for the Controller object:
+	HRESULT NVRAM(/*[out, retval]*/ VARIANT *pVal); - Get the full NVRAM of the emulation (e.g. high scores, settings, etc. as a binary blob of 8bit values) 
+	HRESULT ChangedNVRAM(/*[out, retval]*/ VARIANT *pVal); - Get only the NVRAM parts that have changed since last call (similar to ChangedLamps), first dimension has the location, second the new value (only 8 bits are valid), third the previous value (only 8 bits are valid)
+  (See for example https://github.com/tomlogic/pinmame-nvram-maps for some machines NVRAM mappings)
+
+- Add 'Restore window position' to menu
+
+- PinDMD 3 handling
+  (see pindmd.h to change defines when compiling, also requires pindmd.lib/.dll)
+
+Version 2.6 (December 24, 2015) - "The team awakens"
+------------------------------------------------------------------------------
+- New specialized options for Cabinet support, PinDMD 2 handling (for PinDMD 1 Support, see below) and 4-Color support for DMDs,
+  so please setup the default options again after installation!
+
+- Improved support for PinDMD over the last 'official' PinDMD build by russdx:
+  better 192x64 rescale, support for 256x64 and better support for AlvinG.
+
+- 'F6' can now be used to dump DMD frames to a text file
+
+- New methods for the Controller object:
+	HRESULT DmdWidth([out, retval] int *pVal); - Get Width of Window (as rendered by VPM)
+	HRESULT DmdHeight([out, retval] int *pVal); - Get Height of Window (as rendered by VPM)
+	HRESULT DmdPixel([in] int x, [in] int y, [out, retval] int *pVal); - Get Pixel at Position (x,y) (as rendered by VPM)
+	HRESULT updateDmdPixels([in] int **buf, [in] int width, [in] int height, [out, retval] int *pVal); - Get all Pixels (as rendered by VPM) (user-allocated)
+
+	HRESULT RawDmdWidth([out, retval] int *pVal); - Get Width of Window (Raw, equal to the original DMD resolution)
+	HRESULT RawDmdHeight([out, retval] int *pVal); - Get Height of Window (Raw, equal to the original DMD resolution)
+	HRESULT RawDmdPixels([out, retval] VARIANT *pVal); - Get all Pixels (Raw, equal to the original DMD resolution, brightness 0..100%) (NOT user-allocated)
+	HRESULT RawDmdColoredPixels([out, retval] VARIANT *pVal); - Get all Pixels (Raw, equal to the original DMD resolution, RGB levels 0..255) (NOT user-allocated)
+
+	HRESULT ChangedLampsState([in] int **buf, [out, retval] int *pVal); - Copy all changed lamps (user-allocated)
+	HRESULT LampsState([in] int **buf, [out, retval] int *pVal); - Copy all lamps (user-allocated)
+
+	HRESULT ChangedSolenoidsState([in] int **buf, [out, retval] int *pVal); - Copy all changed solenoids (user-allocated)
+	HRESULT SolenoidsState([in] int **buf, [out, retval] int *pVal); - Copy all solenoids (user-allocated)
+
+	HRESULT ChangedGIsState([in] int **buf, [out, retval] int *pVal); - Copy all changed GI lamps (user-allocated)
+
+	HRESULT ChangedLEDsState([in] int nHigh, [in] int nLow, [in] int nnHigh, [in] int nnLow, [in] int **buf, [out, retval] int *pVal); - Copy all changed LEDs (user-allocated)
+
+	HRESULT MasterVolume([out, retval] int *pVal); - Get Master Volume
+	HRESULT MasterVolume([in] int newVal); - Set Master Volume
+	HRESULT EnumAudioDevices([out, retval] int *pVal); - Enumerate audio devices using DirectSound and return the number of found devices
+	HRESULT AudioDevicesCount([out, retval] int *pVal); - Return the number of found devices (by previous call to EnumAudioDevices)
+	HRESULT AudioDeviceDescription([in] int num,[out, retval] BSTR *pVal); - Return the audio device description (null char ended string) of "num" device
+	HRESULT AudioDeviceModule([in] int num,[out, retval] BSTR *pVal); - Return the audio device module (null char ended string) of "num" device
+	HRESULT CurrentAudioDevice([out, retval] int *pVal); - Get the current audio device number
+	HRESULT CurrentAudioDevice([in] int newVal); - Set the current audio device number
+
+- New methods for Game.Settings:
+	- PinDMD 2 Support (for PinDMD 1 Support, comment out "#define PINDMD2" in pinddrv.c, as it pulls in an external library and needs the ext\ftdi\i386\ftd2xx.dll during runtime)
+	HRESULT ShowPinDMD([out, retval] VARIANT_BOOL *pVal); - Get state of PinDMD display
+	HRESULT ShowPinDMD([in] VARIANT_BOOL newVal); - En/Disable PinDMD display
+
+	- Enhanced Cabinet Support
+	HRESULT ShowWinDMD([out, retval] VARIANT_BOOL *pVal); - Get state of DMD display
+	HRESULT ShowWinDMD([in] VARIANT_BOOL newVal); - En/Disable DMD display
+	HRESULT FastFrames([out, retval] int *pVal); - Get Number of Display Frames that are initially rendered as fast as possible (e.g. loading and initialize) 
+	HRESULT FastFrames([in] int newVal); - Set Number of Display Frames that are initially rendered as fast as possible (e.g. loading and initialize)
+	HRESULT IgnoreRomCrc([out, retval] VARIANT_BOOL  *pVal); - Get Flag Ignore wrong CRCs of Romsets
+	HRESULT IgnoreRomCrc([in] VARIANT_BOOL  newVal); - Set Flag Ignore wrong CRCs of Romsets
+	HRESULT CabinetMode([out, retval] VARIANT_BOOL  *pVal); - Get Flag Special Cabinet Mode that disables splash screen, window on main monitor check, etc
+	HRESULT CabinetMode([in] VARIANT_BOOL  newVal); - Set Flag Special Cabinet Mode that disables splash screen, window on main monitor check, etc
 
 Version 2.5 (June 5, 2012)
 -----------------------------

@@ -151,24 +151,24 @@ typedef struct
 	const char* name;           // human-readable name
 	char code;                  // single-char code used within the hash string
 	unsigned int size;          // checksum size in bytes
-	
+
 	// Functions used to calculate the hash of a memory block
 	void (*calculate_begin)(void);
-	void (*calculate_buffer)(const void* mem, unsigned long len);
+	void (*calculate_buffer)(const void* mem, unsigned int len);
 	void (*calculate_end)(UINT8* bin_chksum);
 
 } hash_function_desc;
 
 static void h_crc_begin(void);
-static void h_crc_buffer(const void* mem, unsigned long len);
+static void h_crc_buffer(const void* mem, unsigned int len);
 static void h_crc_end(UINT8* chksum);
 
 static void h_sha1_begin(void);
-static void h_sha1_buffer(const void* mem, unsigned long len);
+static void h_sha1_buffer(const void* mem, unsigned int len);
 static void h_sha1_end(UINT8* chksum);
 
 static void h_md5_begin(void);
-static void h_md5_buffer(const void* mem, unsigned long len);
+static void h_md5_buffer(const void* mem, unsigned int len);
 static void h_md5_end(UINT8* chksum);
 
 static hash_function_desc hash_descs[HASH_NUM_FUNCTIONS] =
@@ -248,7 +248,7 @@ int hash_data_has_checksum(const char* data, unsigned int function)
 		return 0;
 
 	// Return the offset within the string where the checksum begins
-	return (res - data + 2);
+	return (int)(res - data + 2);
 }
 
 static int hash_data_add_binary_checksum(char* d, unsigned int function, UINT8* checksum)
@@ -271,20 +271,19 @@ static int hash_data_add_binary_checksum(char* d, unsigned int function, UINT8* 
 	*d++ = '#';
 
 	// Return the number of written bytes
-	return (d - start);
+	return (int)(d - start);
 }
 
 
 static int hash_compare_checksum(const char* chk1, const char* chk2, int length)
 {
-	char c1, c2;
-
 	// The printable format is twice as longer
 	length *= 2;
 
 	// This is basically a case-insensitive string compare
 	while (length--)
 	{
+		char c1, c2;
 		c1 = *chk1++;
 		c2 = *chk2++;
 
@@ -524,7 +523,7 @@ int hash_data_insert_binary_checksum(char* d, unsigned int function, UINT8* chec
 	}
 }
 
-void hash_compute(char* dst, const unsigned char* data, unsigned long length, unsigned int functions)
+void hash_compute(char* dst, const unsigned char* data, unsigned int length, unsigned int functions)
 {
 	int i;
 
@@ -629,7 +628,7 @@ int hash_verify_string(const char *hash)
 			len = hash_descs[i].size * 2;
 			hash += 2;
 			
-			for (i = 0; (hash[i] != '#') && (i < len); i++)
+			for (i = 0; (i < len) && (hash[i] != '#'); i++)
 			{
 				if (!isxdigit(hash[i]))
 					return FALSE;
@@ -656,7 +655,7 @@ static void h_crc_begin(void)
 	crc = 0;
 }
 
-static void h_crc_buffer(const void* mem, unsigned long len)
+static void h_crc_buffer(const void* mem, unsigned int len)
 {
 	crc = crc32(crc, (UINT8*)mem, len);
 }
@@ -677,7 +676,7 @@ static void h_sha1_begin(void)
 	sha1_init(&sha1ctx);
 }
 
-static void h_sha1_buffer(const void* mem, unsigned long len)
+static void h_sha1_buffer(const void* mem, unsigned int len)
 {
 	sha1_update(&sha1ctx, len, (UINT8*)mem);
 }
@@ -693,10 +692,10 @@ static struct MD5Context md5_ctx;
 
 static void h_md5_begin(void)
 {
-	MD5Init(&md5_ctx);		
+	MD5Init(&md5_ctx);
 }
 
-static void h_md5_buffer(const void* mem, unsigned long len)
+static void h_md5_buffer(const void* mem, unsigned int len)
 {
 	MD5Update(&md5_ctx, (md5byte*)mem, len);
 }

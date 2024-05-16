@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 #include "driver.h"
 #include "gen.h"
 #include "sim.h"
@@ -8,7 +10,7 @@
 
 #define INITGAME(name, disptype, balls) \
 	JP_INPUT_PORTS_START(name, balls) JP_INPUT_PORTS_END \
-	static core_tGameData name##GameData = {GEN_JP,disptype,{FLIP_SW(FLIP_L), 0,12,0, SNDBRD_SPINB}}; \
+	static core_tGameData name##GameData = {GEN_JP,disptype,{FLIP_SW(FLIP_L),0,12}}; \
 	static void init_##name(void) { \
 		core_gameData = &name##GameData; \
 	}
@@ -119,12 +121,17 @@ JP_ROMEND
 CORE_GAMEDEFNV(petaco,"Petaco",1984,"Juegos Populares",gl_mJP2,0)
 
 /*-------------------------------------------------------------------
-/ Unknown game (#1102, using 6 digit displays)
+/ Petaco (using the new hardware, probably #1102)
 /-------------------------------------------------------------------*/
-INITGAME(jpgame, jpDisp6a, 1)
-JP_ROMSTART1(jpgame,	"jpgame.dat", CRC(81502083) SHA1(c67a095fb5e868467577e7a86de5d51c59b3a68e))
+INITGAME(petacon, jpDisp6a, 1)
+JP_ROMSTART1(petacon,	"petaco-n.dat", CRC(9e4d6944) SHA1(54b39e28152d481bd485433b4a7bf46174a78dbb))
 JP_ROMEND
-CORE_GAMEDEFNV(jpgame,"Unknown game",1985,"Juegos Populares",gl_mJP1,0)
+CORE_GAMEDEFNV(petacon,"Petaco (new hardware)",1985,"Juegos Populares",gl_mJP1,0)
+
+INITGAME(petacona, jpDisp6a, 1)
+JP_ROMSTART1(petacona, "petacona.bin", CRC(81502083) SHA1(c67a095fb5e868467577e7a86de5d51c59b3a68e))
+JP_ROMEND
+CORE_CLONEDEFNV(petacona,petacon,"Petaco (new hardware, alternate set)",1985,"Juegos Populares",gl_mJP1,0)
 
 /*-------------------------------------------------------------------
 / Faeton (#1103)
@@ -132,21 +139,26 @@ CORE_GAMEDEFNV(jpgame,"Unknown game",1985,"Juegos Populares",gl_mJP1,0)
 INITGAME(faeton, jpDisp7, 1)
 JP_ROMSTART1(faeton,	"faeton.cpu", CRC(ef7e6915) SHA1(5d3d86549606b3d9134bb3f6d3026d6f3e07d4cd))
 JP_ROMEND
-CORE_GAMEDEFNV(faeton,"Faeton",1985,"Juegos Populares",gl_mJP,0)
+CORE_GAMEDEFNV(faeton,"Faeton (7 digits)",1985,"Juegos Populares",gl_mJP,0)
+
+INITGAME(faeton6d, jpDisp6a, 1)
+JP_ROMSTART1(faeton6d, "faeton6d.bin", CRC(e7c45ba4) SHA1(c0f82271ef44841c599f0e7b9a1ed9cd16f0580a))
+JP_ROMEND
+CORE_CLONEDEFNV(faeton6d,faeton,"Faeton (6 digits)",1985,"Juegos Populares",gl_mJP1,0)
 
 /*-------------------------------------------------------------------
 / Halley Comet (#1104)
 /-------------------------------------------------------------------*/
 INITGAME(halley, jpDisp7, 1)
 JP_ROMSTART1(halley,	"halley.cpu", CRC(b158a0d7) SHA1(ad071ac3d06a99a8fbd4df461071fe03dc1e1a26))
-JP_SNDROM17("hc_sh", CRC(8af15ded) SHA1(2abc199b612df6180dc116f56ec0027dacf30e77),
-			"hc_s1", CRC(3146b12f) SHA1(9d3974c267e1b2f8d0a8edc78f4013823e4d5e9b),
-			"hc_s2", CRC(8b525f15) SHA1(3ba78a730b11d32fb6ebbcfc52672b9bb5ca5250),
-			"hc_s3", CRC(59a7c53d) SHA1(b1d27f06ff8bd44aa5a4c8fd3b405b67684ae644),
-			"hc_s4", CRC(14149419) SHA1(e39ba211e8784c8f46d89b7ce8a046443ab87f3a),
-			"hc_s5", CRC(9ab8f478) SHA1(116efd8c5524ab8a6a26d4b8187f6559f1940340),
-			"hc_s6", CRC(0fd00c1e) SHA1(1b143bf87541be68a37e133ff5dab5d5cff006b5),
-			"hc_s7", CRC(731b9b5d) SHA1(153cd93d99e386f1b52be5360d4789b53b112e34),
+JP_SNDROM17("hc_sh",  CRC(8af15ded) SHA1(2abc199b612df6180dc116f56ec0027dacf30e77),
+			"hc_s1",  CRC(3146b12f) SHA1(9d3974c267e1b2f8d0a8edc78f4013823e4d5e9b),
+			"hc_s2",  CRC(8b525f15) SHA1(3ba78a730b11d32fb6ebbcfc52672b9bb5ca5250),
+			"hc_s3",  CRC(59a7c53d) SHA1(b1d27f06ff8bd44aa5a4c8fd3b405b67684ae644),
+			"hc_s4",  CRC(14149419) SHA1(e39ba211e8784c8f46d89b7ce8a046443ab87f3a),
+			"hc_s5",  CRC(9ab8f478) SHA1(116efd8c5524ab8a6a26d4b8187f6559f1940340),
+			"hc_s6",  CRC(0fd00c1e) SHA1(1b143bf87541be68a37e133ff5dab5d5cff006b5),
+			"hc_s7",  CRC(731b9b5d) SHA1(153cd93d99e386f1b52be5360d4789b53b112e34),
 			"hc_da0", CRC(5172993b) SHA1(4ae8adc59c95efefc48fcf7524b3da6e7d65e9c7),
 			"hc_da1", CRC(e9ddc966) SHA1(9fa2bdbafed8b1c1e190f1f99af54ea1d9c81d26),
 			"hc_da2", CRC(2e1a89a6) SHA1(adf34ce979b254b19abaf824ff656f647df601db),
@@ -161,14 +173,14 @@ CORE_GAMEDEFNV(halley,"Halley Comet",1986,"Juegos Populares",gl_mJPS,0)
 
 INITGAME(halleya, jpDisp7, 1)
 JP_ROMSTART1(halleya,	"hc_pgm", CRC(dc5eaa8f) SHA1(2f3af60ba5439f67e9c69de543167ac31abc09f1))
-JP_SNDROM17("hc_sh", CRC(8af15ded) SHA1(2abc199b612df6180dc116f56ec0027dacf30e77),
-			"hc_s1", CRC(3146b12f) SHA1(9d3974c267e1b2f8d0a8edc78f4013823e4d5e9b),
-			"hc_s2", CRC(8b525f15) SHA1(3ba78a730b11d32fb6ebbcfc52672b9bb5ca5250),
-			"hc_s3", CRC(59a7c53d) SHA1(b1d27f06ff8bd44aa5a4c8fd3b405b67684ae644),
-			"hc_s4", CRC(14149419) SHA1(e39ba211e8784c8f46d89b7ce8a046443ab87f3a),
-			"hc_s5", CRC(9ab8f478) SHA1(116efd8c5524ab8a6a26d4b8187f6559f1940340),
-			"hc_s6", CRC(0fd00c1e) SHA1(1b143bf87541be68a37e133ff5dab5d5cff006b5),
-			"hc_s7", CRC(731b9b5d) SHA1(153cd93d99e386f1b52be5360d4789b53b112e34),
+JP_SNDROM17("hc_sh",  CRC(8af15ded) SHA1(2abc199b612df6180dc116f56ec0027dacf30e77),
+			"hc_s1",  CRC(3146b12f) SHA1(9d3974c267e1b2f8d0a8edc78f4013823e4d5e9b),
+			"hc_s2",  CRC(8b525f15) SHA1(3ba78a730b11d32fb6ebbcfc52672b9bb5ca5250),
+			"hc_s3",  CRC(59a7c53d) SHA1(b1d27f06ff8bd44aa5a4c8fd3b405b67684ae644),
+			"hc_s4",  CRC(14149419) SHA1(e39ba211e8784c8f46d89b7ce8a046443ab87f3a),
+			"hc_s5",  CRC(9ab8f478) SHA1(116efd8c5524ab8a6a26d4b8187f6559f1940340),
+			"hc_s6",  CRC(0fd00c1e) SHA1(1b143bf87541be68a37e133ff5dab5d5cff006b5),
+			"hc_s7",  CRC(731b9b5d) SHA1(153cd93d99e386f1b52be5360d4789b53b112e34),
 			"hc_da0", CRC(5172993b) SHA1(4ae8adc59c95efefc48fcf7524b3da6e7d65e9c7),
 			"hc_da1", CRC(e9ddc966) SHA1(9fa2bdbafed8b1c1e190f1f99af54ea1d9c81d26),
 			"hc_da2", CRC(2e1a89a6) SHA1(adf34ce979b254b19abaf824ff656f647df601db),
@@ -179,7 +191,29 @@ JP_SNDROM17("hc_sh", CRC(8af15ded) SHA1(2abc199b612df6180dc116f56ec0027dacf30e77
 			"hc_da7", CRC(28249d52) SHA1(43cebbe555cae3a49e91deb3cfe715f743507e4a),
 			"hc_da8", CRC(3f2e81ee) SHA1(648e2b97fa2d6c4dcd16fef5d8c4b9baeee2f290))
 JP_ROMEND
-CORE_CLONEDEFNV(halleya, halley,"Halley Comet (alternate version)",1986,"Juegos Populares",gl_mJPS,0)
+CORE_CLONEDEFNV(halleya,halley,"Halley Comet (alternate set)",1986,"Juegos Populares",gl_mJPS,0)
+
+INITGAME(halleyb, jpDisp7, 1)
+JP_ROMSTART1(halleyb,	"halley_alt_cpu.bin", CRC(2ceac07d) SHA1(1b59ebd134f130f0fc88368ab67d4e6d426d97ee)) // This version seems to be the shortest one in size, so presumably it's an earlier revision
+JP_SNDROM17("hc_sh",  CRC(8af15ded) SHA1(2abc199b612df6180dc116f56ec0027dacf30e77),
+			"hc_s1",  CRC(3146b12f) SHA1(9d3974c267e1b2f8d0a8edc78f4013823e4d5e9b),
+			"hc_s2",  CRC(8b525f15) SHA1(3ba78a730b11d32fb6ebbcfc52672b9bb5ca5250),
+			"hc_s3",  CRC(59a7c53d) SHA1(b1d27f06ff8bd44aa5a4c8fd3b405b67684ae644),
+			"hc_s4",  CRC(14149419) SHA1(e39ba211e8784c8f46d89b7ce8a046443ab87f3a),
+			"hc_s5",  CRC(9ab8f478) SHA1(116efd8c5524ab8a6a26d4b8187f6559f1940340),
+			"hc_s6",  CRC(0fd00c1e) SHA1(1b143bf87541be68a37e133ff5dab5d5cff006b5),
+			"hc_s7",  CRC(731b9b5d) SHA1(153cd93d99e386f1b52be5360d4789b53b112e34),
+			"hc_da0", CRC(5172993b) SHA1(4ae8adc59c95efefc48fcf7524b3da6e7d65e9c7),
+			"hc_da1", CRC(e9ddc966) SHA1(9fa2bdbafed8b1c1e190f1f99af54ea1d9c81d26),
+			"hc_da2", CRC(2e1a89a6) SHA1(adf34ce979b254b19abaf824ff656f647df601db),
+			"hc_da3", CRC(00bbabb0) SHA1(2d584c53e32fce1a105bb86aaa91c427bf741f2d),
+			"hc_da4", CRC(402358e8) SHA1(8513b0c0bf40363af323577175dfe569bd6b8686),
+			"hc_da5", CRC(a6bd8ccd) SHA1(128acc73ba2009ffa29f65fd570917ad0dec4142),
+			"hc_da6", CRC(9eba3c37) SHA1(a435cdbeb43f5216f58d6e90522e5a25b3bccaef),
+			"hc_da7", CRC(28249d52) SHA1(43cebbe555cae3a49e91deb3cfe715f743507e4a),
+			"hc_da8", CRC(3f2e81ee) SHA1(648e2b97fa2d6c4dcd16fef5d8c4b9baeee2f290))
+JP_ROMEND
+CORE_CLONEDEFNV(halleyb,halley,"Halley Comet (alternate set 2)",1986,"Juegos Populares",gl_mJPS,0)
 
 /*-------------------------------------------------------------------
 / Aqualand (#1105)
@@ -203,6 +237,26 @@ JP_SNDROM15( "jpaqsds", CRC(ff1e0cd2) SHA1(ef58d2b59929c7250dd30c413a3ba31ebfd7e
 			"jpaq14sd", CRC(0bdcbbbd) SHA1(555d8ed846079894cfc60041fb724deeaddc4e89))
 JP_ROMEND
 CORE_GAMEDEFNV(aqualand,"Aqualand",1986,"Juegos Populares",gl_mJPS,0)
+
+INITGAME(aqualana, jpDisp7, 1)
+JP_ROMSTART1(aqualana, "aqualand_cpu_a.bin", CRC(55caa233) SHA1(84dde0bf865f3bfc9a620510a9a816f4792a6610)) // maybe newer, at least features a bit more code
+JP_SNDROM15( "jpaqsds", CRC(ff1e0cd2) SHA1(ef58d2b59929c7250dd30c413a3ba31ebfd7e09d),
+			"jpaq-1sd", CRC(7cdf2f7a) SHA1(e00482a6accd11e96fd0d444b3167b7d36332f7b),
+			"jpaq-2sd", CRC(db05c774) SHA1(2d40410b70de6ab0de57e94c6d8ada6e8a4a2050),
+			"jpaq-3sd", CRC(df38304e) SHA1(ec6f0c99764e3c3fe7e1de09b2d9b59d85d168d5),
+			"jpaq-4sd", CRC(8065c03e) SHA1(0731cb76d3be117a82c4ad5b7e23b53e05b3a95a),
+			"jpaq-5sd", CRC(a387a1a6) SHA1(20abee033a33e388a5f2ed3896a650766b62cfa2),
+			"jpaq-6sd", CRC(55076afb) SHA1(68b86e6855b2a80e37d2fb172bb0c4fa107d4aba),
+			"jpaq-7sd", CRC(67675b5b) SHA1(52b7cb310ddeff0bde7f0dfd37f61ab09964a75d),
+			"jpaq-8sd", CRC(c9d2d30e) SHA1(ee504b0e2aa69f541c3f4d245cc6525a7c920fa7),
+			"jpaq-9sd", CRC(3bc45f9f) SHA1(6d838b1ba94087f9a29af016b68125400dcf1fe5),
+			"jpaq10sd", CRC(239cb7f3) SHA1(1abc59bc73cf84ee3b73d500bf57a2a202291fcb),
+			"jpaq11sd", CRC(e5b9e70f) SHA1(7db0a13166120fe20bb76072475b092e942629cf),
+			"jpaq12sd", CRC(9aa37260) SHA1(6eec14f0d7152bf0cfadabe5b3017b9b6b7aa2d3),
+			"jpaq13sd", CRC(5599792e) SHA1(9d844d9f155f299bbe2d512f8ed84410e7a9cfb3),
+			"jpaq14sd", CRC(0bdcbbbd) SHA1(555d8ed846079894cfc60041fb724deeaddc4e89))
+JP_ROMEND
+CORE_CLONEDEFNV(aqualana,aqualand,"Aqualand (alternate set)",1986,"Juegos Populares",gl_mJPS,0)
 
 /*-------------------------------------------------------------------
 / Petaco 2 (#1106?)
@@ -243,7 +297,7 @@ INITGAME(olympus, jpDisp7, 1)
 JP_ROMSTART1(olympus,	"olympus.dat", CRC(08b021e8) SHA1(9662d37ccef94b6e6bc3c8c81dea0c0a34c8052d))
 JP_SNDROM8( "cs.128", CRC(39b9107a) SHA1(8a11fa0c1558d0b1d309446b8a6f97e761b6559d),
 			"c1.256", CRC(93ceefbf) SHA1(be50b3d4485d4e8291047a52ca60656b55729555),
-			"c2.256", NO_DUMP,
+			"c2.256", CRC(8d404cf7) SHA1(e521ff1cf999496bada5348b7f845c468f053f0f),
 			"c3.256", CRC(266eb5dd) SHA1(0eb7c098ddb7f257daf625e5209a54c306d365bf),
 			"c4.256", CRC(082a052d) SHA1(f316fbe6ff63433861a8856e297c953ce29a8901),
 			"c5.256", CRC(402a3fb2) SHA1(1c078ca519271bf2bcbe0bc10e33078861085fcf),
@@ -258,7 +312,7 @@ CORE_GAMEDEFNV(olympus,"Olympus",1986,"Juegos Populares",gl_mJPS,0)
 / Lortium (#1110)
 /-------------------------------------------------------------------*/
 INITGAME(lortium, jpDisp7, 1)
-JP_ROMSTART2(lortium,	"cpulort1.dat", NO_DUMP,
+JP_ROMSTART2(lortium,	"cpulort1.dat", CRC(4943e31f) SHA1(2cbc0a1feb711b5540e9288b9b59527cc85361fc),
 						"cpulort2.dat", CRC(71eebb26) SHA1(9d49c1012555bda24ac7287499bcb93828cbb57f))
 JP_ROMEND
 CORE_GAMEDEFNV(lortium,"Lortium",1987,"Juegos Populares",gl_mJP,0)

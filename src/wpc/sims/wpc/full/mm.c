@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /*******************************************************************************
  Medieval Madness (Williams, 1997) Pinball Simulator
 
@@ -417,6 +419,7 @@ static void mm_drawStatic(BMTYPE **line) {
   }
 
 /* Solenoid-to-sample handling */
+#ifdef ENABLE_MECHANICAL_SAMPLES
 static wpc_tSamSolMap mm_samsolmap[] = {
  /*Channel #0*/
  {sKnocker,0,SAM_KNOCKER}, {sTrough,0,SAM_BALLREL},
@@ -444,6 +447,7 @@ static wpc_tSamSolMap mm_samsolmap[] = {
  {sRightGate,5,SAM_SOLENOID_ON}, {sRightGate,5,SAM_SOLENOID_OFF,WPCSAM_F_ONOFF},
  {sDBMotor,5,SAM_MOTOR_1,WPCSAM_F_CONT},{-1}
 };
+#endif
 
 /*-----------------
 /  ROM definitions
@@ -456,10 +460,11 @@ DCS_SOUNDROM5xm("mm_s2.1_0",  CRC(c55c3b71) SHA1(95febbf16645dd897bdd459ccad9501
                 "mm_sav6.rom",CRC(439d55f2) SHA1(d80e7268223157d864674261d140322634fb3bc2))
 
 WPC_ROMSTART(mm,109, "mm_1_09.bin", 0x100000,CRC(9bac4d0c) SHA1(92cbe21802e1a77feff77b78f4dbbdbffb7b14bc)) MM_SOUND WPC_ROMEND
-WPC_ROMSTART(mm,109b,"mm_109b.bin",0x100000,CRC(4eaab86a) SHA1(694cbb1154e7374275becfbe4f743fb8d31df8fb)) MM_SOUND WPC_ROMEND
+WPC_ROMSTART(mm,109b,"mm_109b.bin", 0x100000,CRC(4eaab86a) SHA1(694cbb1154e7374275becfbe4f743fb8d31df8fb)) MM_SOUND WPC_ROMEND
 WPC_ROMSTART(mm,109c,"mm_1_09c.bin",0x100000,CRC(d9e5189f) SHA1(fc01855c139d408559605fe9932236250cd566a8)) MM_SOUND WPC_ROMEND
 WPC_ROMSTART(mm,10,  "mm_g11.1_0",  0x080000,CRC(6bd735c6) SHA1(3922df00e785610837230d5d9c24b9e082aa6fb6)) MM_SOUND WPC_ROMEND
-WPC_ROMSTART(mm,10u,  "mmu_g11.1_0",  0x080000,CRC(265e6192) SHA1(bd9606df5fb85b2048a07db0927e4a856c344276)) MM_SOUND WPC_ROMEND
+WPC_ROMSTART(mm,10u, "mmu_g11.1_0", 0x080000,CRC(265e6192) SHA1(bd9606df5fb85b2048a07db0927e4a856c344276)) MM_SOUND WPC_ROMEND
+WPC_ROMSTART(mm,10pfx,"mmpfx_g11.1_0",0x080000,CRC(4b3ab8d4) SHA1(f6841be6fde8ab1888c07bb2dbf90be8439cbd56)) MM_SOUND WPC_ROMEND
 
 WPC_ROMSTART(mm,05, "g11-050.rom", 0x080000,CRC(d211ad16) SHA1(539fb0c4ca6fe19ac6140f5792c5b7cd51f737ce))
 DCS_SOUNDROM5xm("s2-020.rom",  CRC(ee009ce4) SHA1(36843b2f1a07cf1e23bdff9b7347ceeca7e915bc),
@@ -473,23 +478,25 @@ WPC_ROMEND
 /  Game drivers
 /---------------*/
 CORE_GAMEDEF (mm,10,   "Medieval Madness (1.0)",1997,"Williams",wpc_m95S,0)
-CORE_CLONEDEF(mm,10u,10,"Medieval Madness (1.0 Ultrapin)", 1999,"Williams",wpc_m95S,0)
-CORE_CLONEDEF(mm,109,10,"Medieval Madness (1.09)", 1999,"Williams",wpc_m95S,0)
-CORE_CLONEDEF(mm,109b,10,"Medieval Madness (1.09B)", 1999,"Williams",wpc_m95S,0)
-CORE_CLONEDEF(mm,109c,10,"Medieval Madness (1.09C, Profanity)", 1999,"Williams",wpc_m95S,0)
-CORE_CLONEDEF(mm,05,10,"Medieval Madness (0.50)", 1997,"Williams",wpc_m95S,0)
+CORE_CLONEDEF(mm,10u,10,"Medieval Madness (1.0 Ultrapin)",2006,"Global VR",wpc_m95S,0) // modded text (child/cow taken, website, phone, etc)
+CORE_CLONEDEF(mm,10pfx,10,"Medieval Madness (1.0 Pinball FX)",2018,"Zen Studios",wpc_m95S,0) // modded text (child/cow taken)
+CORE_CLONEDEF(mm,109,10,"Medieval Madness (1.09)",1999,"Williams",wpc_m95S,0) // Home version
+CORE_CLONEDEF(mm,109b,10,"Medieval Madness (1.09B)",1999,"Williams",wpc_m95S,0) // Home version Coin Play
+CORE_CLONEDEF(mm,109c,10,"Medieval Madness (1.09C Profanity)",1999,"Williams",wpc_m95S,0) // Home version w/ profanity speech
+// 0.99 Prototype also exists (15 'home machine' prototypes for the designers, etc)
+CORE_CLONEDEF(mm,05,10,"Medieval Madness (0.50 Prototype)",1997,"Williams",wpc_m95S,0)
 
 /*-----------------------
 / Simulation Definitions
 /-----------------------*/
 static sim_tSimData mmSimData = {
-  2,    			/* 2 game specific input ports */
-  mm_stateDef,			/* Definition of all states */
-  mm_inportData,		/* Keyboard Entries */
+  2,				/* 2 game specific input ports */
+  mm_stateDef,		/* Definition of all states */
+  mm_inportData,	/* Keyboard Entries */
   { stTrough1, stTrough2, stTrough3, stTrough4, stDrain, stDrain, stDrain },	/*Position where balls start.. Max 7 Balls Allowed*/
-  mm_initSim, 			/* no init */
-  mm_handleBallState,	/*Function to handle ball state changes*/
-  mm_drawStatic,		/*Function to handle mechanical state changes*/
+  mm_initSim,		/* no init */
+  mm_handleBallState,/*Function to handle ball state changes*/
+  mm_drawStatic,	/*Function to handle mechanical state changes*/
   FALSE, 			/* Simulate manual shooter? */
   NULL  			/* Custom key conditions? */
 };
@@ -503,7 +510,10 @@ static core_tGameData mmGameData = {
     FLIP_SW(FLIP_L | FLIP_U) | FLIP_SOL(FLIP_L),
     0,0,0,0,0,1,0,
     NULL, mm_handleMech, mm_getMech, mm_drawMech,
-    &mm_lampPos, mm_samsolmap
+    &mm_lampPos
+#ifdef ENABLE_MECHANICAL_SAMPLES
+    , mm_samsolmap
+#endif
   },
   &mmSimData,
   {
@@ -520,12 +530,13 @@ static core_tGameData mmGameData = {
 /----------------*/
 static void init_mm(void) {
   core_gameData = &mmGameData;
+  wpc_set_fastflip_addr(0x81);
 }
 
 static void mm_handleMech(int mech) {
   /* Handle the DrawBridge - Thanx Tom! */
   if (mech & 0x01) {
-    if (core_getSol(sDBMotor) > 0)
+    if (core_getPulsedSol(sDBMotor) > 0)
       locals.drawbridgePos = (locals.drawbridgePos+MM_DRAWBRIDGETICK) % 500;
     core_setSw(swDBUp, (locals.drawbridgePos>=490) || (locals.drawbridgePos<=10));
     core_setSw(swDBDown, (locals.drawbridgePos>=240) && (locals.drawbridgePos<=260));

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /************************************************************************************************
  IDSA (Spain)
  ------------
@@ -14,8 +16,6 @@
 #include "driver.h"
 #include "core.h"
 #include "cpu/z80/z80.h"
-#include "sound/ay8910.h"
-#include "sound/sp0256.h"
 
 #define IDSA_CPUFREQ 4000000 /* CPU clock frequency */
 
@@ -23,19 +23,16 @@
 /  Local variables
 /-----------------*/
 static struct {
-  UINT16 dispData[4];
+  UINT8 dispData[4];
   int dispCol;
   int dispRow;
   core_tSeg segments;
-  int isV1;
+  UINT8 isV1, lrq; // bools
+  mame_timer* timer;
 } locals;
 
 static INTERRUPT_GEN(IDSA_irq) {
   cpu_set_irq_line(0, 0, PULSE_LINE);
-}
-
-static void IDSA_nmi(int data) {
-  cpu_set_nmi_line(0, PULSE_LINE);
 }
 
 /*-------------------------------
@@ -44,7 +41,7 @@ static void IDSA_nmi(int data) {
 static INTERRUPT_GEN(IDSA_vblank) {
   memcpy(coreGlobals.segments, locals.segments, sizeof(coreGlobals.segments));
 //  memset(locals.segments, 0, sizeof(locals.segments));
-  core_updateSw(core_getSol(locals.isV1 ? 2 : 10));
+  core_updateSw(core_getSol(10));
 }
 
 static SWITCH_UPDATE(IDSA) {
@@ -86,16 +83,20 @@ static UINT16 idsa2seg7(UINT8 data) {
 }
 
 static WRITE_HANDLER(ay8910_0_portA_w) {
-  coreGlobals.solenoids = (coreGlobals.solenoids & 0xffffff00) | (data ^ 0xff);
-  if (locals.isV1) coreGlobals.lampMatrix[0] = ~data;
+  if (locals.isV1) {
+    coreGlobals.solenoids = (coreGlobals.solenoids & 0xfffffcff) | ((~data & 3) << 8);
+    coreGlobals.lampMatrix[0] = ~data;
+  } else
+    coreGlobals.solenoids = (coreGlobals.solenoids & 0xffffff00) | (data ^ 0xff);
 }
 static WRITE_HANDLER(ay8910_0_portB_w) {
-  coreGlobals.solenoids = (coreGlobals.solenoids & 0xff00ffff) | ((data ^ 0xff) << 16);
-  if (locals.isV1) coreGlobals.lampMatrix[2] = ~data;
+  if (locals.isV1)
+    coreGlobals.solenoids = (coreGlobals.solenoids & 0xffffff00) | (data ^ 0xff);
+  else
+    coreGlobals.solenoids = (coreGlobals.solenoids & 0xff00ffff) | ((data ^ 0xff) << 16);
 }
 static WRITE_HANDLER(ay8910_1_portA_w) {
   if (locals.isV1) {
-    coreGlobals.solenoids = (coreGlobals.solenoids & 0x00ffffff) | ((data ^ 0xff) << 24);
     coreGlobals.lampMatrix[3] = ~data;
     return;
   }
@@ -112,8 +113,10 @@ static WRITE_HANDLER(ay8910_1_portA_w) {
   coreGlobals.solenoids = (coreGlobals.solenoids & 0x00ffffff) | (((data & 0x0f) ^ 0x0f) << 24);
 }
 static WRITE_HANDLER(ay8910_1_portB_w) {
-  coreGlobals.solenoids = (coreGlobals.solenoids & 0xffff00ff) | ((data ^ 0xff) << 8);
-  if (locals.isV1) coreGlobals.lampMatrix[1] = ~data;
+  if (locals.isV1)
+    coreGlobals.lampMatrix[1] = ~data;
+  else
+    coreGlobals.solenoids = (coreGlobals.solenoids & 0xffff00ff) | ((data ^ 0xff) << 8);
 }
 struct AY8910interface IDSA_ay8910Int = {
 	2,					/* 2 chips */
@@ -125,14 +128,19 @@ struct AY8910interface IDSA_ay8910Int = {
 	{ ay8910_0_portB_w, ay8910_1_portB_w },	/* Output Port B callback */
 };
 
-static READ_HANDLER(sp0256_r) {
-  UINT16 data = spb640_r(offset / 2, 0);
-  return offset % 2 ? (UINT8)(data >> 8) : (UINT8)(data & 0xff);
+static READ_HANDLER(snd_status_r) {
+  switch (offset) {
+    case 1: return locals.lrq ? 0xff : 0;
+    default: return 0;
+  }
+}
+static void lrq_callback(int state) {
+	locals.lrq = !state;
 }
 struct sp0256_interface IDSA_sp0256Int = {
-  MIXER(30,MIXER_PAN_RIGHT), /* volume */
+  100, /* volume */
   3120000, /* clock */
-  NULL,
+  lrq_callback,
   NULL,
   REGION_SOUND1
 };
@@ -166,12 +174,34 @@ static NVRAM_HANDLER(IDSA) {
   core_nvram(file, read_or_write, IDSA_CMOS, 0x800, 0x00);
 }
 static WRITE_HANDLER(IDSA_CMOS_w) {
+  UINT16 val16;
   IDSA_CMOS[offset] = data;
   if (locals.isV1) {
     if (offset > 0x0c && offset < 0x27)
       locals.segments[0x26 - offset].w = core_bcd2seg7e[data & 0x0f];
-    else if (offset > 0x81 && offset < 0x86)
-      locals.segments[6 * (3-(offset - 0x82)) + 7].w = core_bcd2seg7e[data & 0x0f];
+    else if (offset == 0x2e) { // lottery / space ship lamps
+      val16 = 1 << (data & 0x0f);
+      coreGlobals.lampMatrix[8] = val16 & 0xff;
+      coreGlobals.lampMatrix[9] = val16 >> 8;
+      val16 = 1 << (data >> 4);
+      coreGlobals.lampMatrix[10] = val16 & 0xff;
+      coreGlobals.lampMatrix[11] = val16 >> 8;
+    } else if (offset == 0x2f) // ball in play / game over lamp!
+      coreGlobals.lampMatrix[2] = data & 0xe0 ? data & 0xe0 : 1 << (data & 7);
+    else if (offset == 0x30) { // bonus lamps
+      val16 = 1 << (data & 0x0f);
+      coreGlobals.lampMatrix[4] = val16 & 0xff;
+      coreGlobals.lampMatrix[5] = val16 >> 8;
+      val16 = 1 << (data >> 4);
+      coreGlobals.lampMatrix[6] = val16 & 0xff;
+      coreGlobals.lampMatrix[7] = val16 >> 8;
+    } else if (offset > 0x81 && offset < 0x86) { // player up
+      if (locals.segments[6 * (3-(offset - 0x82)) + 6].w)
+        locals.segments[6 * (3-(offset - 0x82)) + 7].w = core_bcd2seg7e[data & 0x0f];
+    } else if (offset == 0x107) { // game over does not update after game over
+      if (data & 0xe0)
+        coreGlobals.lampMatrix[2] = data & 0xe0;
+    }
   } else if (offset > 0xa7 && offset < 0xb2)
     coreGlobals.lampMatrix[offset - 0xa8] = data;
 }
@@ -192,7 +222,7 @@ MEMORY_END
 static PORT_READ_START(IDSA_readport)
   {0x00,0x50, sw_r},
   {0x60,0x70, dip_r},
-  {0xb0,0xb3, sp0256_r},
+  {0xb0,0xb3, snd_status_r},
   {0xbd,0xbd, port_bd_r},
 MEMORY_END
 
@@ -207,9 +237,14 @@ static PORT_WRITE_START(IDSA_writeport)
 MEMORY_END
 
 static void reset_common(void) {
+  static int inverted = 0;
+  if (locals.timer) timer_remove(locals.timer);
   memset(&locals, 0, sizeof locals);
   sp0256_reset();
-//  sp0256_bitrevbuff(memory_region(REGION_SOUND1), 0, 0x10000);
+  if (!inverted) {
+    sp0256_bitrevbuff(memory_region(REGION_SOUND1), 0, 0x10000);
+    inverted = 1;
+  }
 }
 
 static MACHINE_RESET(IDSA) {
@@ -222,8 +257,7 @@ MACHINE_DRIVER_START(idsa)
   MDRV_CPU_MEMORY(IDSA_readmem, IDSA_writemem)
   MDRV_CPU_PORTS(IDSA_readport, IDSA_writeport)
   MDRV_CPU_VBLANK_INT(IDSA_vblank, 1)
-  MDRV_CPU_PERIODIC_INT(IDSA_irq, IDSA_CPUFREQ / 4096)
-  MDRV_TIMER_ADD(IDSA_nmi, 0)
+  MDRV_CPU_PERIODIC_INT(IDSA_irq, IDSA_CPUFREQ / 4096.)
   MDRV_CORE_INIT_RESET_STOP(NULL,IDSA,NULL)
   MDRV_NVRAM_HANDLER(IDSA)
   MDRV_DIPS(16)
@@ -233,15 +267,28 @@ MACHINE_DRIVER_START(idsa)
   MDRV_SOUND_ATTRIBUTES(SOUND_SUPPORTS_STEREO)
 MACHINE_DRIVER_END
 
+// we need to "reset" the CPU manually as game reset calls the NMI routine and halts the CPU
+static void v1_reset_timer(int dummy) {
+  cpunum_set_reg(0, Z80_R, 0);
+  cpunum_set_reg(0, Z80_HALT, 0);
+  cpunum_set_reg(0, Z80_AF, 0x0040);
+  cpunum_set_reg(0, Z80_SP, 0);
+  cpunum_set_reg(0, Z80_PC, 0);
+}
+
 static MACHINE_RESET(v1) {
   reset_common();
   locals.isV1 = 1;
+  // NMI routine saves the credits to NVRAM (called upon power down on real machine)
+  cpu_set_nmi_line(0, PULSE_LINE);
+  locals.timer = timer_alloc(v1_reset_timer);
+  timer_adjust(locals.timer, TIME_IN_MSEC(1), 0, TIME_NEVER);
 }
 
 MACHINE_DRIVER_START(v1)
   MDRV_IMPORT_FROM(idsa)
   MDRV_CPU_MODIFY("mcpu")
-  MDRV_CPU_PERIODIC_INT(IDSA_irq, IDSA_CPUFREQ / 8192)
+  MDRV_CPU_PERIODIC_INT(IDSA_irq, IDSA_CPUFREQ / 8192.)
   MDRV_CORE_INIT_RESET_STOP(NULL,v1,NULL)
 MACHINE_DRIVER_END
 
@@ -313,7 +360,42 @@ core_tLCDLayout v1_disp[] = {
   {0}
 };
 
-static core_tGameData v1GameData = {0,v1_disp,{FLIP_SW(FLIP_L),0,0}};
+#define SP0256_ROM \
+  NORMALREGION(0x10000, REGION_SOUND1) \
+  ROM_LOAD("sp0256-al2.bin", 0x0000, 0x0800, CRC(b504ac15) SHA1(e60fcb5fa16ff3f3b69d36c7a6e955744d3feafc) BAD_DUMP) \
+  ROM_RELOAD(0x0800, 0x0800) \
+  ROM_RELOAD(0x1000, 0x0800) \
+  ROM_RELOAD(0x1800, 0x0800) \
+  ROM_RELOAD(0x2000, 0x0800) \
+  ROM_RELOAD(0x2800, 0x0800) \
+  ROM_RELOAD(0x3000, 0x0800) \
+  ROM_RELOAD(0x3800, 0x0800) \
+  ROM_RELOAD(0x4000, 0x0800) \
+  ROM_RELOAD(0x4800, 0x0800) \
+  ROM_RELOAD(0x5000, 0x0800) \
+  ROM_RELOAD(0x5800, 0x0800) \
+  ROM_RELOAD(0x6000, 0x0800) \
+  ROM_RELOAD(0x6800, 0x0800) \
+  ROM_RELOAD(0x7000, 0x0800) \
+  ROM_RELOAD(0x7800, 0x0800) \
+  ROM_RELOAD(0x8000, 0x0800) \
+  ROM_RELOAD(0x8800, 0x0800) \
+  ROM_RELOAD(0x9000, 0x0800) \
+  ROM_RELOAD(0x9800, 0x0800) \
+  ROM_RELOAD(0xa000, 0x0800) \
+  ROM_RELOAD(0xa800, 0x0800) \
+  ROM_RELOAD(0xb000, 0x0800) \
+  ROM_RELOAD(0xb800, 0x0800) \
+  ROM_RELOAD(0xc000, 0x0800) \
+  ROM_RELOAD(0xc800, 0x0800) \
+  ROM_RELOAD(0xd000, 0x0800) \
+  ROM_RELOAD(0xd800, 0x0800) \
+  ROM_RELOAD(0xe000, 0x0800) \
+  ROM_RELOAD(0xe800, 0x0800) \
+  ROM_RELOAD(0xf000, 0x0800) \
+  ROM_RELOAD(0xf800, 0x0800)
+
+static core_tGameData v1GameData = {0,v1_disp,{FLIP_SW(FLIP_L),0,4}};
 static void init_v1(void) {
   core_gameData = &v1GameData;
 }
@@ -321,13 +403,9 @@ static void init_v1(void) {
 ROM_START(v1)
   NORMALREGION(0x10000, REGION_CPU1)
   ROM_LOAD("v1.128", 0x0000, 0x4000, CRC(4e08f7bc) SHA1(eb6ef00e489888dd9c53010c525840de06bcd0f3))
-  NORMALREGION(0x10000, REGION_SOUND1)
-  ROM_LOAD("v1.128", 0x0000, 0x4000, CRC(4e08f7bc) SHA1(eb6ef00e489888dd9c53010c525840de06bcd0f3))
-  ROM_RELOAD(0x4000, 0x4000)
-  ROM_RELOAD(0x8000, 0x4000)
-  ROM_RELOAD(0xc000, 0x4000)
+  SP0256_ROM
 ROM_END
-CORE_GAMEDEFNV(v1, "V.1", 198?, "IDSA (Spain)", v1, GAME_NOT_WORKING)
+CORE_GAMEDEFNV(v1, "V.1", 1985, "IDSA (Spain)", v1, 0)
 
 core_tLCDLayout idsa_disp[] = {
   {0, 0, 0, 7, CORE_SEG7}, {0,16, 7, 7, CORE_SEG7},
@@ -345,8 +423,6 @@ static void init_bsktball(void) {
 ROM_START(bsktball)
   NORMALREGION(0x10000, REGION_CPU1)
   ROM_LOAD("bsktball.256", 0x0000, 0x8000, CRC(d474e29b) SHA1(750cbacef34dde0b3dcb6c1e4679db78a73643fd))
-  NORMALREGION(0x10000, REGION_SOUND1)
-  ROM_LOAD("bsktball.256", 0x0000, 0x8000, CRC(d474e29b) SHA1(750cbacef34dde0b3dcb6c1e4679db78a73643fd))
-  ROM_RELOAD(0x8000, 0x8000)
+  SP0256_ROM
 ROM_END
-CORE_GAMEDEFNV(bsktball, "Basket Ball", 1987, "IDSA (Spain)", idsa, GAME_IMPERFECT_SOUND)
+CORE_GAMEDEFNV(bsktball, "Basketball", 1987, "IDSA (Spain)", idsa, 0)

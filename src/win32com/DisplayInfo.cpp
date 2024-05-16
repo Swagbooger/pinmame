@@ -1,10 +1,10 @@
 #include "StdAfx.h"
-#include ".\displayinfo.h"
+#include ".\DisplayInfo.h"
 
 #include <Windows.h>
 
 // Helper methods
-void CopyString(char** dest, char* src)
+void CopyString(char** dest, const char* src)
 {
 	if (src == NULL)
 	{
@@ -119,7 +119,7 @@ void CDisplayInfo::InitData()
 	mDriverName = NULL;
 	mFriendlyName = NULL;
 	mID = GUID(GUID_NULL);
-	BOOL mIsDefault = TRUE;
+	mIsDefault = TRUE;
 }
 
 /************************************************

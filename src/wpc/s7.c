@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 #include "driver.h"
 #include "cpu/m6800/m6800.h"
 #include "machine/6821pia.h"
@@ -6,8 +8,13 @@
 #include "wmssnd.h"
 #include "s7.h"
 
-#define S7_VBLANKFREQ    60 /* VBLANK frequency */
-#define S7_IRQFREQ     1000
+#if defined(PINMAME) && defined(LISY_SUPPORT)
+ #include "lisy/lisy_w.h"
+#endif /* PINMAME && LISY_SUPPORT */
+
+
+#define S7_IRQFREQ         (3579545.0/4.0/(0x380+32))
+
 #define S7_PIA0  0
 #define S7_PIA1  1
 #define S7_PIA2  2
@@ -16,7 +23,7 @@
 #define S7_PIA5  5
 #define S7_BANK0 1
 
-#define S7_SOLSMOOTH       2 /* Smooth the Solenoids over this numer of VBLANKS */
+#define S7_SOLSMOOTH       2 /* Smooth the Solenoids over this number of VBLANKS */
 #define S7_LAMPSMOOTH      2 /* Smooth the lamps over this number of VBLANKS */
 #define S7_DISPLAYSMOOTH   2 /* Smooth the display over this number of VBLANKS */
 
@@ -71,10 +78,13 @@ static INTERRUPT_GEN(s7_vblank) {
   /*-------------------------------
   /  copy local data to interface
   /--------------------------------*/
-  s7locals.vblankCount += 1;
+  s7locals.vblankCount++;
   /*-- lamps --*/
   if ((s7locals.vblankCount % S7_LAMPSMOOTH) == 0) {
     memcpy(coreGlobals.lampMatrix, coreGlobals.tmpLampMatrix, sizeof(coreGlobals.tmpLampMatrix));
+#if defined(LISY_SUPPORT)
+    lisy_w_lamp_handler( );
+#endif
     memset(coreGlobals.tmpLampMatrix, 0, sizeof(coreGlobals.tmpLampMatrix));
   }
   /*-- solenoids --*/
@@ -82,21 +92,31 @@ static INTERRUPT_GEN(s7_vblank) {
     int ii;
     s7locals.solenoids |= CORE_SOLBIT(S7_GAMEONSOL);
     /*-- special solenoids updated based on switches --*/
+    /*-- but only when no LISY, otherwise special solenoids -- */
+    /*-- lock on when controlled by direct switches          -- */
+#ifndef LISY_SUPPORT
     for (ii = 0; ii < 8; ii++) {
       if (core_gameData->sxx.ssSw[ii] && core_getSw(core_gameData->sxx.ssSw[ii]))
         s7locals.solenoids |= CORE_SOLBIT(CORE_FIRSTSSSOL+ii);
     }
+#endif
   }
   s7locals.solsmooth[s7locals.vblankCount % S7_SOLSMOOTH] = s7locals.solenoids;
 #if S7_SOLSMOOTH != 2
 #  error "Need to update smooth formula"
 #endif
   coreGlobals.solenoids = s7locals.solsmooth[0] | s7locals.solsmooth[1];
+#if defined(LISY_SUPPORT)
+  lisy_w_solenoid_handler( );
+#endif
   s7locals.solenoids = coreGlobals.pulsedSolState;
 
   /*-- display --*/
   if ((s7locals.vblankCount % S7_DISPLAYSMOOTH) == 0) {
     memcpy(coreGlobals.segments, s7locals.segments, sizeof(coreGlobals.segments));
+#if defined(LISY_SUPPORT)
+    lisy_w_display_handler( );
+#endif
     memset(s7locals.segments,0,sizeof(s7locals.segments));
     coreGlobals.diagnosticLed = s7locals.diagnosticLed;
   }
@@ -220,9 +240,8 @@ static WRITE_HANDLER(pia1b_w) {
     s7locals.solBits2 = data;
     updsol();
   }
-  if (s7locals.s6sound) {
-    sndbrd_0_data_w(0, ~data); data &= 0xe0; /* mask of sound command bits */
-  }
+  if (s7locals.s6sound)
+    sndbrd_0_data_w(0, ~data);
 }
 
 static WRITE_HANDLER(pia1a_w) {
@@ -271,8 +290,20 @@ static READ_HANDLER(s7_dips_r) {
 /*---------------
 / Switch reading
 /----------------*/
-static WRITE_HANDLER(pia4b_w) { s7locals.swCol = data; }
-static READ_HANDLER(pia4a_r)  { return core_getSwCol(s7locals.swCol); }
+static WRITE_HANDLER(pia4b_w) {
+  s7locals.swCol = data;
+#if defined(LISY_SUPPORT)
+  lisy_w_throttle();
+#endif
+}
+
+static READ_HANDLER(pia4a_r) {
+#if defined(LISY_SUPPORT)
+  //get the switches from LISY_mini
+  lisy_w_switch_handler();
+#endif
+  return core_getSwCol(s7locals.swCol);
+}
 
 /*---------------
 /  Sound command
@@ -344,10 +375,14 @@ static struct pia6821_interface s7_pia[] = {
 }};
 
 static SWITCH_UPDATE(s7) {
+
+#ifndef LISY_SUPPORT
+//if we have LISY, all switches come from LISY (Matrix[0] has e.g. ADVANCE Button!)
   if (inports) {
     coreGlobals.swMatrix[0] = (inports[S7_COMINPORT] & 0x7f00)>>8;
     coreGlobals.swMatrix[1] = inports[S7_COMINPORT];
   }
+#endif
 
   /*-- Generate interupts for diganostic keys --*/
   cpu_set_nmi_line(0,core_getSw(S7_SWCPUDIAG) ? ASSERT_LINE : CLEAR_LINE);
@@ -431,7 +466,7 @@ MEMORY_END
 MACHINE_DRIVER_START(s7)
   MDRV_IMPORT_FROM(PinMAME)
   MDRV_CORE_INIT_RESET_STOP(s7,s7,s7)
-  MDRV_CPU_ADD_TAG("mcpu", M6808, 3580000/4)
+  MDRV_CPU_ADD_TAG("mcpu", M6808, 3579545./4.) // MAME: 3580000
   MDRV_CPU_MEMORY(s7_readmem, s7_writemem)
   MDRV_CPU_VBLANK_INT(s7_vblank, 1)
   MDRV_CPU_PERIODIC_INT(s7_irq, S7_IRQFREQ)
@@ -515,7 +550,7 @@ static MACHINE_INIT(rr) {
   pia_config(S7_PIA4, PIA_STANDARD_ORDERING, &s7_pia[4]);
   sndbrd_0_init(SNDBRD_S9S, 1, NULL, NULL, NULL);
   MDRV_SOUND_CMD(sndbrd_0_data_w)
-  s7locals.ssEn= 1;
+  s7locals.ssEn = 1;
   s7locals.rr = 1;
 }
 

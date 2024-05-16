@@ -1,0 +1,20 @@
+YAML-CPP
+========
+Library version: 0.6.3
+Library type: static
+Source: https://github.com/tomlogic/yaml-cpp/tree/enable-MSVC_RUNTIME_LIBRARY-target-property
+Commit: b86dc961c86c2a8d6ca9111cb08fa0c78d5ecf00
+
+Homepage: https://github.com/jbeder/yaml-cpp
+
+Reason: P-ROC configuration via YAML files (like pypinproc)
+
+
+Visual C++:
+-----------
+Build with: Visual Studio 2019
+Runtime: /MT
+
+MinGW
+-----
+libyaml-cpp.a build with Mingw-W64/i686 (32-bit)

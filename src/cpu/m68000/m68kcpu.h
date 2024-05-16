@@ -62,10 +62,10 @@
 
 #define sint8  signed   char			/* ASG: changed from char to signed char */
 #define sint16 signed   short
-#define sint32 signed   long
+#define sint32 signed   int
 #define uint8  unsigned char
 #define uint16 unsigned short
-#define uint32 unsigned long
+#define uint32 unsigned int
 
 /* signed and unsigned int must be at least 32 bits wide */
 #define sint   signed   int
@@ -85,46 +85,19 @@
 /* Allow for architectures that don't have 8-bit sizes */
 #if UCHAR_MAX == 0xff
 	#define MAKE_INT_8(A) (sint8)(A)
-#else
-	#undef  sint8
-	#define sint8  signed   int
-	#undef  uint8
-	#define uint8  unsigned int
-	INLINE sint MAKE_INT_8(uint value)
-	{
-		return (value & 0x80) ? value | ~0xff : value & 0xff;
-	}
 #endif /* UCHAR_MAX == 0xff */
 
 
 /* Allow for architectures that don't have 16-bit sizes */
 #if USHRT_MAX == 0xffff
 	#define MAKE_INT_16(A) (sint16)(A)
-#else
-	#undef  sint16
-	#define sint16 signed   int
-	#undef  uint16
-	#define uint16 unsigned int
-	INLINE sint MAKE_INT_16(uint value)
-	{
-		return (value & 0x8000) ? value | ~0xffff : value & 0xffff;
-	}
 #endif /* USHRT_MAX == 0xffff */
 
 
 /* Allow for architectures that don't have 32-bit sizes */
-#if ULONG_MAX == 0xffffffff
+#if UINT_MAX == 0xffffffff
 	#define MAKE_INT_32(A) (sint32)(A)
-#else
-	#undef  sint32
-	#define sint32  signed   int
-	#undef  uint32
-	#define uint32  unsigned int
-	INLINE sint MAKE_INT_32(uint value)
-	{
-		return (value & 0x80000000) ? value | ~0xffffffff : value & 0xffffffff;
-	}
-#endif /* ULONG_MAX == 0xffffffff */
+#endif /* UINT_MAX == 0xffffffff */
 
 
 
@@ -635,17 +608,17 @@
 	#define CFLAG_ADD_32(S, D, R) ((R)>>24)
 	#define CFLAG_SUB_32(S, D, R) ((R)>>24)
 #else
-	#define CFLAG_ADD_32(S, D, R) (((S & D) | (~R & (S | D)))>>23)
-	#define CFLAG_SUB_32(S, D, R) (((S & R) | (~D & (S | R)))>>23)
+	#define CFLAG_ADD_32(S, D, R) ((((S) & (D)) | (~(R) & ((S) | (D))))>>23)
+	#define CFLAG_SUB_32(S, D, R) ((((S) & (R)) | (~(D) & ((S) | (R))))>>23)
 #endif /* M68K_INT_GT_32_BIT */
 
-#define VFLAG_ADD_8(S, D, R) ((S^R) & (D^R))
-#define VFLAG_ADD_16(S, D, R) (((S^R) & (D^R))>>8)
-#define VFLAG_ADD_32(S, D, R) (((S^R) & (D^R))>>24)
+#define VFLAG_ADD_8(S, D, R) (((S)^(R)) & ((D)^(R)))
+#define VFLAG_ADD_16(S, D, R) ((((S)^(R)) & ((D)^(R)))>>8)
+#define VFLAG_ADD_32(S, D, R) ((((S)^(R)) & ((D)^(R)))>>24)
 
-#define VFLAG_SUB_8(S, D, R) ((S^D) & (R^D))
-#define VFLAG_SUB_16(S, D, R) (((S^D) & (R^D))>>8)
-#define VFLAG_SUB_32(S, D, R) (((S^D) & (R^D))>>24)
+#define VFLAG_SUB_8(S, D, R) (((S)^(D)) & ((R)^(D)))
+#define VFLAG_SUB_16(S, D, R) ((((S)^(D)) & ((R)^(D)))>>8)
+#define VFLAG_SUB_32(S, D, R) ((((S)^(D)) & ((R)^(D)))>>24)
 
 #define NFLAG_8(A) (A)
 #define NFLAG_16(A) ((A)>>8)
@@ -1539,7 +1512,7 @@ INLINE void m68ki_stack_frame_buserr(uint sr)
 /* Format 8 stack frame (68010).
  * 68010 only.  This is the 29 word bus/address error frame.
  */
-void m68ki_stack_frame_1000(uint pc, uint sr, uint vector)
+static void m68ki_stack_frame_1000(uint pc, uint sr, uint vector)
 {
 	/* VERSION
 	 * NUMBER
@@ -1593,7 +1566,7 @@ void m68ki_stack_frame_1000(uint pc, uint sr, uint vector)
  * if the error happens at an instruction boundary.
  * PC stacked is address of next instruction.
  */
-void m68ki_stack_frame_1010(uint sr, uint vector, uint pc)
+static void m68ki_stack_frame_1010(uint sr, uint vector, uint pc)
 {
 	/* INTERNAL REGISTER */
 	m68ki_push_16(0);
@@ -1640,7 +1613,7 @@ void m68ki_stack_frame_1010(uint sr, uint vector, uint pc)
  * if the error happens during instruction execution.
  * PC stacked is address of instruction in progress.
  */
-void m68ki_stack_frame_1011(uint sr, uint vector, uint pc)
+static void m68ki_stack_frame_1011(uint sr, uint vector, uint pc)
 {
 	/* INTERNAL REGISTERS (18 words) */
 	m68ki_push_32(0);
@@ -1884,7 +1857,7 @@ m68k_read_memory_8(0x00ffff01);
 
 
 /* Service an interrupt request and start exception processing */
-void m68ki_exception_interrupt(uint int_level)
+static void m68ki_exception_interrupt(uint int_level)
 {
 	uint vector;
 	uint sr;

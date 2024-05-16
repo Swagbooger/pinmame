@@ -11,13 +11,15 @@ static struct {
   core_tSeg segments;
   int vblankCount;
   int ramBank;
+
+  UINT8 irq;
 } locals;
 
 static INTERRUPT_GEN(by8035_vblank) {
   /*-------------------------------
   /  copy local data to interface
   /--------------------------------*/
-  locals.vblankCount += 1;
+  locals.vblankCount++;
 
   /*-- lamps --*/
   if ((locals.vblankCount % 1) == 0) {
@@ -41,8 +43,7 @@ static INTERRUPT_GEN(by8035_vblank) {
 }
 
 static INTERRUPT_GEN(by8035_irq) {
-  static int irq;
-  cpu_set_irq_line(0, 0, (irq = !irq) ? ASSERT_LINE : CLEAR_LINE);
+  cpu_set_irq_line(0, 0, (locals.irq = !locals.irq) ? ASSERT_LINE : CLEAR_LINE);
 }
 
 static READ_HANDLER(by8035_ram_r) {
@@ -68,8 +69,11 @@ static WRITE_HANDLER(by8035_ram_w) {
 }
 
 static WRITE_HANDLER(by8035_port_w) {
-  if (offset == 2) cpu_setbank(1, memory_region(REGION_CPU1) + 0x1000 + 0x100 * (data & 0x30));
-  if (offset == 2) locals.ramBank = data & 0x0f;
+  if (offset == 2) 
+  {
+    cpu_setbank(1, memory_region(REGION_CPU1) + 0x1000 + 0x100 * (data & 0x30));
+    locals.ramBank = data & 0x0f;
+  }
   logerror("%04x: 8035 port %d write = %02x\n", activecpu_get_previouspc(), offset, data);
 }
 
@@ -126,7 +130,7 @@ static MACHINE_INIT(by8035) {
 
 MACHINE_DRIVER_START(by8035)
   MDRV_IMPORT_FROM(PinMAME)
-  MDRV_CPU_ADD_TAG("mcpu", I8035, 6000000/15)
+  MDRV_CPU_ADD_TAG("mcpu", I8035, 6000000./15.)
   MDRV_CPU_MEMORY(by8035_readmem, by8035_writemem)
   MDRV_CPU_PORTS(by8035_readport, by8035_writeport)
   MDRV_CORE_INIT_RESET_STOP(by8035,NULL,NULL)
@@ -167,7 +171,7 @@ BY8035_ROMSTART(kissp,"kiss8755.bin",CRC(894c1052) SHA1(579ce3c8ec374f2cd17928ab
                       "kissprot.u6", CRC(bcdfaf1d) SHA1(d21bebbf702b400eb71f8c88be50a180a5ac260a),
                       "kissprot.u7", CRC(d97da1d3) SHA1(da771a08969a12105c7adc9f9e3cbd1677971e79))
 ROM_END
-CORE_GAMEDEFNV(kissp,"Kiss (prototype)",1979,"Bally",by8035,GAME_NOT_WORKING)
+CORE_CLONEDEFNV(kissp,kiss,"Kiss (Prototype)",1979,"Bally",by8035,GAME_NOT_WORKING)
 
 INITGAMEP0(kissp2,FLIP_SW(FLIP_L),0)
 BY8035_ROMSTART(kissp2,"8755u8.dat", CRC(d2d04100) SHA1(fe81f3667cb5802c9780761a359660bad83862c2),
@@ -175,4 +179,4 @@ BY8035_ROMSTART(kissp2,"8755u8.dat", CRC(d2d04100) SHA1(fe81f3667cb5802c9780761a
                       "kissprot.u6", CRC(bcdfaf1d) SHA1(d21bebbf702b400eb71f8c88be50a180a5ac260a),
                       "u7.dat",      CRC(e224a9b0) SHA1(2a0e3afad8c566432ebe690ff1ce6fa92b68816f))
 ROM_END
-CORE_CLONEDEFNV(kissp2,kissp,"Kiss (prototype v.2)",1979,"Bally",by8035,GAME_NOT_WORKING)
+CORE_CLONEDEFNV(kissp2,kiss,"Kiss (Prototype v.2)",1979,"Bally",by8035,GAME_NOT_WORKING)

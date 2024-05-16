@@ -24,7 +24,7 @@
 #include <sys/stat.h>
 #include <assert.h>
 
-#include "screenshot.h"
+#include "Screenshot.h"
 #include "MAME32.h"
 #include "Directories.h"
 #include "resource.h"
@@ -190,7 +190,7 @@ static BOOL DirInfo_Modified(tDirInfo *pInfo, int nType)
 /* lop off trailing backslash if it exists */
 static char * FixSlash(char *s)
 {
-	int len = 0;
+	size_t len = 0;
 
 	if (s)
 		len = strlen(s);
@@ -548,7 +548,7 @@ static BOOL Directories_OnBeginLabelEdit(HWND hDlg, NMHDR* pNMHDR)
 			if (MAX_DIRS <= DirInfo_NumDir(g_pDirInfo, nType))
 				return TRUE; /* don't edit */
 
-			hEdit = (HWND)(LRESULT)(int)SendMessage(GetDlgItem(hDlg, IDC_DIR_LIST), LVM_GETEDITCONTROL, 0, 0);
+			hEdit = (HWND)SendMessage(GetDlgItem(hDlg, IDC_DIR_LIST), LVM_GETEDITCONTROL, 0, 0);
 			Edit_SetText(hEdit, "");
 		}
 	}

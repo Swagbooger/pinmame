@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /************************************************************************************************
  Juegos Populares (Spain)
  ------------------------
@@ -9,12 +11,13 @@
    Hardware:
    ---------
 		CPU:     Z80 @ 4 MHz
-			INT: IRQ @ 977 Hz (4MHz/2048/2)
+		    INT: IRQ @ 977 Hz (4MHz/2048/2)
 		IO:      DMA, AY8910 input ports
 		DISPLAY: 7-digit 8-segment panels with direct segment access, driven by 4x 4094 serial controllers.
-		SOUND:	 AY8910 @ 2 MHz on CPU board,
+		SOUND:   AY8910 @ 2 MHz on CPU board,
 		         Z80 CPU with ADPCM chip (probably an MSM5205 @ 384 kHz) on separate board.
  ************************************************************************************************/
+
 //Games: America 1492 1986, Aqualand 1986, Faeton 1985, Halley Comet 1986,
 //       Lortium 1987, Olympus 1986, Petaco 1984, Petaco2 1985
 
@@ -23,7 +26,6 @@
 #include "core.h"
 #include "jp.h"
 #include "sound/ay8910.h"
-#include "sndbrd.h"
 #include "machine/4094.h"
 
 #define JP_VBLANKFREQ   60 /* VBLANK frequency */
@@ -42,6 +44,10 @@ static struct {
   int    i8279reg;
   UINT8  i8279ram[16];
   int    sixColumns;
+
+  UINT8 mdata;
+  UINT8 which;
+  UINT8 lastData;
 } locals;
 
 static INTERRUPT_GEN(JP_irq) {
@@ -59,10 +65,8 @@ static INTERRUPT_GEN(JP_vblank) {
     memcpy(coreGlobals.lampMatrix, coreGlobals.tmpLampMatrix, sizeof(coreGlobals.tmpLampMatrix));
   /*-- solenoids --*/
   coreGlobals.solenoids = locals.solenoids;
-  if ((++locals.solCount % JP_SOLSMOOTH) == 0) {
-    coreGlobals.solenoids = locals.solenoids;
+  if ((++locals.solCount % JP_SOLSMOOTH) == 0)
     locals.solenoids = 0;
-  }
   /*-- display --*/
   if ((locals.vblankCount % JP_DISPLAYSMOOTH) == 0) {
     memcpy(coreGlobals.segments, locals.segments, sizeof(locals.segments));
@@ -104,7 +108,7 @@ static SWITCH_UPDATE(JP) {
 // the rest of the bits enable the single digits (therefore 28 digits possible).
 static void dispStrobe(void) {
 //static UINT32 oldDisp;
-  static int pos[32] = { 31, 30, 29, 28, 26, 25, 24, 23, 22, 19, 18, 17, 16, 15,
+  static const int pos[32] = { 31, 30, 29, 28, 26, 25, 24, 23, 22, 19, 18, 17, 16, 15,
     12, 11, 10, 9, 8, 5, 4, 3, 2, 1, 33, 34, 35, 36, 21, 14, 7, 0 };
   int i, data = locals.sixColumns ? (!(locals.dispData >> 24) ? 8 : 
     core_BitColToNum(locals.dispData >> 24)) : (locals.dispData >> 24) & 0x0f;
@@ -278,13 +282,21 @@ static MACHINE_INIT(JP) {
   HC4094_oe_w(3, 1);
 }
 
+static MACHINE_STOP(JP) {
+  int i;
+  cpu_set_nmi_line(0, PULSE_LINE); // NMI routine makes sure the NVRAM is valid!
+  for (i = 0; i < (cpu_gettotalcpu() > 1 ? 40 : 6); i++) { // run some timeslices before shutdown so the NMI routine can finish
+    run_one_timeslice();
+  }
+}
+
 MACHINE_DRIVER_START(JP)
   MDRV_IMPORT_FROM(PinMAME)
   MDRV_CPU_ADD_TAG("mcpu", Z80, JP_CPUFREQ)
   MDRV_CPU_MEMORY(JP_readmem, JP_writemem)
   MDRV_CPU_VBLANK_INT(JP_vblank, 1)
-  MDRV_CPU_PERIODIC_INT(JP_irq, JP_CPUFREQ / 4096)
-  MDRV_CORE_INIT_RESET_STOP(JP,NULL,NULL)
+  MDRV_CPU_PERIODIC_INT(JP_irq, JP_CPUFREQ / 4096.)
+  MDRV_CORE_INIT_RESET_STOP(JP,NULL,JP)
   MDRV_NVRAM_HANDLER(generic_0fill)
   MDRV_DIPS(20)
   MDRV_SWITCH_UPDATE(JP)
@@ -296,8 +308,6 @@ MACHINE_DRIVER_END
 
 static MACHINE_INIT(JPS) {
   machine_init_JP();
-  /* init sound */
-  sndbrd_0_init(core_gameData->hw.soundBoard, 1, memory_region(JP_MEMREG_SND),NULL,NULL);
 }
 
 static MACHINE_INIT(JP1) {
@@ -305,19 +315,13 @@ static MACHINE_INIT(JP1) {
   locals.sixColumns = 1;
 }
 
-static MACHINE_STOP(JPS) {
-  sndbrd_0_exit();
-}
-
 static INTERRUPT_GEN(JPS_irq) {
   cpu_set_irq_line(1, 0, PULSE_LINE);
 }
 
 /* MSM5205 interrupt callback */
-static UINT8 mdata;
-static int which;
 static void JP_msmIrq(int data) {
-	MSM5205_data_w(0, (which = !which) ? mdata >> 4 : mdata & 0x0f);
+	MSM5205_data_w(0, (locals.which = !locals.which) ? locals.mdata >> 4 : locals.mdata & 0x0f);
 }
 
 static struct MSM5205interface JP_msm5205Int = {
@@ -335,8 +339,8 @@ static WRITE_HANDLER(bank_w) {
 
 static WRITE_HANDLER(snd_w) {
 //logerror("snd_w: %02x\n", data);
-  mdata = data;
-  which = 0;
+  locals.mdata = data;
+  locals.which = 0;
 }
 
 static WRITE_HANDLER(enable_w) {
@@ -363,14 +367,14 @@ MACHINE_DRIVER_START(JPS)
   MDRV_CPU_FLAGS(CPU_AUDIO_CPU)
   MDRV_CPU_MEMORY(jpsnd_readmem, jpsnd_writemem)
   MDRV_CPU_PERIODIC_INT(JPS_irq, 4000)
-  MDRV_CORE_INIT_RESET_STOP(JPS,NULL,JPS)
+  MDRV_CORE_INIT_RESET_STOP(JPS,NULL,JP)
   MDRV_INTERLEAVE(50)
   MDRV_SOUND_ADD(MSM5205, JP_msm5205Int)
 MACHINE_DRIVER_END
 
 MACHINE_DRIVER_START(JP1)
   MDRV_IMPORT_FROM(JP)
-  MDRV_CORE_INIT_RESET_STOP(JP1,NULL,JPS)
+  MDRV_CORE_INIT_RESET_STOP(JP1,NULL,JP)
 MACHINE_DRIVER_END
 
 
@@ -420,16 +424,15 @@ struct AY8910interface JP2_ay8910Int2 = {
 
 // handles the 8279 keyboard / display interface chip
 static READ_HANDLER(i8279_r) {
-  static UINT8 lastData;
-  if ((locals.i8279cmd & 0xe0) == 0x40) lastData = coreGlobals.swMatrix[1 + (locals.i8279cmd & 0x07)]; // read switches
-  else if ((locals.i8279cmd & 0xe0) == 0x60) lastData = locals.i8279ram[locals.i8279reg]; // read display ram
+  if ((locals.i8279cmd & 0xe0) == 0x40) locals.lastData = coreGlobals.swMatrix[1 + (locals.i8279cmd & 0x07)]; // read switches
+  else if ((locals.i8279cmd & 0xe0) == 0x60) locals.lastData = locals.i8279ram[locals.i8279reg]; // read display ram
   else logerror("i8279 r:%02x\n", locals.i8279cmd);
   if (locals.i8279cmd & 0x10) locals.i8279reg = (locals.i8279reg+1) % 16; // auto-increase if register is set
-  return lastData;
+  return locals.lastData;
 }
 static WRITE_HANDLER(i8279_w) {
-  static int pos[32] = { 26, 24, 27, 25,  5, 23,  4, 22,  3, 21,  2, 20,  1, 19,  0, 18,
-                         28, 30, 29, 31, 11, 17, 10, 16,  9, 15,  8, 14,  7, 13,  6, 12 };
+  static const int pos[32] = { 26, 24, 27, 25,  5, 23,  4, 22,  3, 21,  2, 20,  1, 19,  0, 18,
+                               28, 30, 29, 31, 11, 17, 10, 16,  9, 15,  8, 14,  7, 13,  6, 12 };
   if (offset) { // command
     locals.i8279cmd = data;
     if ((locals.i8279cmd & 0xe0) == 0x40)

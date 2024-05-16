@@ -1,11 +1,12 @@
 // Settings.cpp : Implementation of CGameSettings
-#include "stdafx.h"
-#include "VPinMAME_h.h"
+#include "StdAfx.h"
+#include <osdepend.h>
+#include "VPinMAME.h"
 #include "VPinMAMEAboutDlg.h"
 #include "VPinMAMEConfig.h"
 #include "ControllerGameSettings.h"
 
-#include "ControllerRegKeys.h"
+#include "ControllerRegkeys.h"
 #include "ControllerGame.h"
 
 #include <atlwin.h>
@@ -32,12 +33,13 @@ public:
 		MESSAGE_HANDLER(WM_INITDIALOG, OnInitDialog)
 		MESSAGE_HANDLER(WM_DESTROY, OnDestroy)
 		MESSAGE_HANDLER(WM_CTLCOLORSTATIC, OnCtrlColorStatic)
-                MESSAGE_HANDLER(WM_LBUTTONDOWN, OnLeftButtonDown)
-		COMMAND_RANGE_HANDLER(IDC_USECHEAT, IDC_DOUBLESIZE, OnCheckBox)
+		MESSAGE_HANDLER(WM_LBUTTONDOWN, OnLeftButtonDown)
 		COMMAND_RANGE_HANDLER(IDC_USECHEAT, IDC_PINDMD, OnCheckBox)
-                COMMAND_RANGE_HANDLER(IDC_USECHEAT, IDC_IGNOREROMCRC, OnCheckBox)
-                COMMAND_RANGE_HANDLER(IDC_USECHEAT, IDC_CABINETMODE, OnCheckBox)
-                COMMAND_ID_HANDLER(IDC_DMD_COLORIZE, OnDmdColorize)
+		COMMAND_RANGE_HANDLER(IDC_USECHEAT, IDC_WINDMD, OnCheckBox)
+		COMMAND_RANGE_HANDLER(IDC_USECHEAT, IDC_IGNOREROMCRC, OnCheckBox)
+		COMMAND_RANGE_HANDLER(IDC_USECHEAT, IDC_CABINETMODE, OnCheckBox)
+		COMMAND_RANGE_HANDLER(IDC_USECHEAT, IDC_VGMWRITE, OnCheckBox)
+		COMMAND_ID_HANDLER(IDC_DMD_COLORIZE, OnDmdColorize)
 		COMMAND_CODE_RANGE_HANDLER(IDC_SAMPLERATE, IDC_DMDPERC0, EN_CHANGE, OnEditCtrlChanged)
 		COMMAND_ID_HANDLER(IDOK, OnOK)
 		COMMAND_ID_HANDLER(IDCANCEL, OnCancel)
@@ -54,8 +56,8 @@ private:
 	bool				m_fChanged;
 	HBRUSH				m_hBrushDMDColor;
 
-        RGB m_dmd66, m_dmd33, m_dmd0; // colorized DMD values
-        COLORREF m_acrCustClr[16];    // custom color list for color chooser dialog
+	RGB m_dmd66, m_dmd33, m_dmd0; // colorized DMD values
+	COLORREF m_acrCustClr[16];    // custom color list for color chooser dialog
 
 	// helper functions
 	void SetControlValues() {
@@ -83,62 +85,66 @@ private:
 		VariantClear(&vValue);
 
 		pGameSettings->get_Value(CComBSTR("dmd_doublesize"), &vValue);
-		CheckDlgButton(IDC_DOUBLESIZE, (vValue.boolVal==VARIANT_TRUE)?BST_CHECKED:BST_UNCHECKED);
+		SetDlgItemInt(IDC_DOUBLESIZE, vValue.lVal, FALSE);
 		VariantClear(&vValue);
 
 		pGameSettings->get_Value(CComBSTR("samplerate"), &vValue);
 		SetDlgItemInt(IDC_SAMPLERATE, vValue.lVal, FALSE);
 		VariantClear(&vValue);
-		
+
 		pGameSettings->get_Value(CComBSTR("dmd_antialias"), &vValue);
 		SetDlgItemInt(IDC_ANTIALIAS, vValue.lVal, FALSE);
 		VariantClear(&vValue);
 
-		pGameSettings->get_Value(CComBSTR("synclevel"), &vValue);
-		SetDlgItemInt(IDC_SYNCLEVEL, vValue.lVal, TRUE);
+		pGameSettings->get_Value(CComBSTR("force_stereo"), &vValue);
+		CheckDlgButton(IDC_MONOTOSTEREO, (vValue.boolVal == VARIANT_TRUE) ? BST_CHECKED : BST_UNCHECKED);
 		VariantClear(&vValue);
 
 		pGameSettings->get_Value(CComBSTR("showpindmd"), &vValue);
 		CheckDlgButton(IDC_PINDMD, (vValue.boolVal==VARIANT_TRUE)?BST_CHECKED:BST_UNCHECKED);
 		VariantClear(&vValue);
 
-                pGameSettings->get_Value(CComBSTR("fastframes"), &vValue);
-                SetDlgItemInt(IDC_FASTFRAMES, vValue.lVal, TRUE);
-                VariantClear(&vValue);
+		pGameSettings->get_Value(CComBSTR("showwindmd"), &vValue);
+		CheckDlgButton(IDC_WINDMD, (vValue.boolVal==VARIANT_TRUE)?BST_CHECKED:BST_UNCHECKED);
+		VariantClear(&vValue);
 
-                pGameSettings->get_Value(CComBSTR("ignore_rom_crc"), &vValue);
-                CheckDlgButton(IDC_IGNOREROMCRC, (vValue.boolVal==VARIANT_TRUE)?BST_CHECKED:BST_UNCHECKED);
-                VariantClear(&vValue);
+		pGameSettings->get_Value(CComBSTR("fastframes"), &vValue);
+		SetDlgItemInt(IDC_FASTFRAMES, vValue.lVal, TRUE);
+		VariantClear(&vValue);
 
-                pGameSettings->get_Value(CComBSTR("cabinet_mode"), &vValue);
-                CheckDlgButton(IDC_CABINETMODE, (vValue.boolVal==VARIANT_TRUE)?BST_CHECKED:BST_UNCHECKED);
-                VariantClear(&vValue);
+		pGameSettings->get_Value(CComBSTR("ignore_rom_crc"), &vValue);
+		CheckDlgButton(IDC_IGNOREROMCRC, (vValue.boolVal==VARIANT_TRUE)?BST_CHECKED:BST_UNCHECKED);
+		VariantClear(&vValue);
 
-                // colorized dmd
-                pGameSettings->get_Value(CComBSTR("dmd_colorize"), &vValue);
-                CheckDlgButton(IDC_DMD_COLORIZE, (vValue.boolVal==VARIANT_TRUE)?BST_CHECKED:BST_UNCHECKED);
-                VariantClear(&vValue);
+		pGameSettings->get_Value(CComBSTR("cabinet_mode"), &vValue);
+		CheckDlgButton(IDC_CABINETMODE, (vValue.boolVal==VARIANT_TRUE)?BST_CHECKED:BST_UNCHECKED);
+		VariantClear(&vValue);
 
-                pGameSettings->get_Value(CComBSTR("dmd_red66"), &vValue);
-                m_dmd66.r = vValue.lVal;
-                pGameSettings->get_Value(CComBSTR("dmd_green66"), &vValue);
-                m_dmd66.g = vValue.lVal;
-                pGameSettings->get_Value(CComBSTR("dmd_blue66"), &vValue);
-                m_dmd66.b = vValue.lVal;
-                pGameSettings->get_Value(CComBSTR("dmd_red33"), &vValue);
-                m_dmd33.r = vValue.lVal;
-                pGameSettings->get_Value(CComBSTR("dmd_green33"), &vValue);
-                m_dmd33.g = vValue.lVal;
-                pGameSettings->get_Value(CComBSTR("dmd_blue33"), &vValue);
-                m_dmd33.b = vValue.lVal;
-                pGameSettings->get_Value(CComBSTR("dmd_red0"), &vValue);
-                m_dmd0.r = vValue.lVal;
-                pGameSettings->get_Value(CComBSTR("dmd_green0"), &vValue);
-                m_dmd0.g = vValue.lVal;
-                pGameSettings->get_Value(CComBSTR("dmd_blue0"), &vValue);
-                m_dmd0.b = vValue.lVal;
+		// colorized dmd
+		pGameSettings->get_Value(CComBSTR("dmd_colorize"), &vValue);
+		CheckDlgButton(IDC_DMD_COLORIZE, (vValue.boolVal==VARIANT_TRUE)?BST_CHECKED:BST_UNCHECKED);
+		VariantClear(&vValue);
 
-                show_hide_colorize_ctls();
+		pGameSettings->get_Value(CComBSTR("dmd_red66"), &vValue);
+		m_dmd66.r = vValue.lVal;
+		pGameSettings->get_Value(CComBSTR("dmd_green66"), &vValue);
+		m_dmd66.g = vValue.lVal;
+		pGameSettings->get_Value(CComBSTR("dmd_blue66"), &vValue);
+		m_dmd66.b = vValue.lVal;
+		pGameSettings->get_Value(CComBSTR("dmd_red33"), &vValue);
+		m_dmd33.r = vValue.lVal;
+		pGameSettings->get_Value(CComBSTR("dmd_green33"), &vValue);
+		m_dmd33.g = vValue.lVal;
+		pGameSettings->get_Value(CComBSTR("dmd_blue33"), &vValue);
+		m_dmd33.b = vValue.lVal;
+		pGameSettings->get_Value(CComBSTR("dmd_red0"), &vValue);
+		m_dmd0.r = vValue.lVal;
+		pGameSettings->get_Value(CComBSTR("dmd_green0"), &vValue);
+		m_dmd0.g = vValue.lVal;
+		pGameSettings->get_Value(CComBSTR("dmd_blue0"), &vValue);
+		m_dmd0.b = vValue.lVal;
+
+		show_hide_colorize_ctls();
 
 		pGameSettings->get_Value(CComBSTR("dmd_red"), &vValue);
 		SetDlgItemInt(IDC_DMDRED, vValue.lVal, FALSE);
@@ -147,7 +153,7 @@ private:
 		pGameSettings->get_Value(CComBSTR("dmd_green"), &vValue);
 		SetDlgItemInt(IDC_DMDGREEN, vValue.lVal, FALSE);
 		VariantClear(&vValue);
-		
+
 		pGameSettings->get_Value(CComBSTR("dmd_blue"), &vValue);
 		SetDlgItemInt(IDC_DMDBLUE, vValue.lVal, FALSE);
 		VariantClear(&vValue);
@@ -159,9 +165,27 @@ private:
 		pGameSettings->get_Value(CComBSTR("dmd_perc33"), &vValue);
 		SetDlgItemInt(IDC_DMDPERC33, vValue.lVal ,FALSE);
 		VariantClear(&vValue);
-		
+
 		pGameSettings->get_Value(CComBSTR("dmd_perc0"), &vValue);
 		SetDlgItemInt(IDC_DMDPERC0, vValue.lVal, FALSE);
+		VariantClear(&vValue);
+
+		pGameSettings->get_Value(CComBSTR("dmd_opacity"), &vValue);
+		SetDlgItemInt(IDC_DMDOPACITY, vValue.lVal, FALSE);
+		VariantClear(&vValue);
+
+		pGameSettings->get_Value(CComBSTR("resampling_quality"), &vValue);
+		SetDlgItemInt(IDC_RESAMPLEQ, vValue.lVal, FALSE);
+		VariantClear(&vValue);
+
+#if defined(VPINMAME_ALTSOUND) || defined(VPINMAME_PINSOUND)
+		pGameSettings->get_Value(CComBSTR("sound_mode"), &vValue);
+		SetDlgItemInt(IDC_SOUNDMODE, vValue.lVal, FALSE);
+		VariantClear(&vValue);
+#endif
+
+		pGameSettings->get_Value(CComBSTR("vgmwrite"), &vValue);
+		CheckDlgButton(IDC_VGMWRITE, (vValue.boolVal == VARIANT_TRUE) ? BST_CHECKED : BST_UNCHECKED);
 		VariantClear(&vValue);
 
 		pGameSettings->Release();
@@ -172,21 +196,25 @@ private:
 		IGameSettings *pGameSettings;
 		m_pGame->get_Settings((IGameSettings**) &pGameSettings);
 
+		pGameSettings->put_Value(CComBSTR("volume"), CComVariant(osd_get_mastervolume())); // a bit hacky way to store the mastervolume from in here :/
+
 		pGameSettings->put_Value(CComBSTR("cheat"), CComVariant((BOOL) IsDlgButtonChecked(IDC_USECHEAT)));
 		pGameSettings->put_Value(CComBSTR("sound"), CComVariant((BOOL) IsDlgButtonChecked(IDC_USESOUND)));
 		pGameSettings->put_Value(CComBSTR("samples"), CComVariant((BOOL) IsDlgButtonChecked(IDC_USESAMPLES)));
 		pGameSettings->put_Value(CComBSTR("dmd_compact"), CComVariant((BOOL) IsDlgButtonChecked(IDC_COMPACTSIZE)));
-		pGameSettings->put_Value(CComBSTR("dmd_doublesize"), CComVariant((BOOL) IsDlgButtonChecked(IDC_DOUBLESIZE)));
+		pGameSettings->put_Value(CComBSTR("dmd_doublesize"), CComVariant((int) GetDlgItemInt(IDC_DOUBLESIZE,NULL,TRUE)));
 
 		pGameSettings->put_Value(CComBSTR("samplerate"), CComVariant((int) GetDlgItemInt(IDC_SAMPLERATE,NULL,TRUE)));
 		pGameSettings->put_Value(CComBSTR("dmd_antialias"), CComVariant((int) GetDlgItemInt(IDC_ANTIALIAS,NULL,TRUE)));
-		pGameSettings->put_Value(CComBSTR("synclevel"), CComVariant((int) GetDlgItemInt(IDC_SYNCLEVEL,NULL,TRUE)));
+
+		pGameSettings->put_Value(CComBSTR("force_stereo"), CComVariant((BOOL) IsDlgButtonChecked(IDC_MONOTOSTEREO)));
 
 		pGameSettings->put_Value(CComBSTR("showpindmd"), CComVariant((BOOL) IsDlgButtonChecked(IDC_PINDMD)));
+		pGameSettings->put_Value(CComBSTR("showwindmd"), CComVariant((BOOL) IsDlgButtonChecked(IDC_WINDMD)));
 
-                pGameSettings->put_Value(CComBSTR("fastframes"), CComVariant((int) GetDlgItemInt(IDC_FASTFRAMES,NULL,TRUE)));
-                pGameSettings->put_Value(CComBSTR("ignore_rom_crc"), CComVariant((BOOL) IsDlgButtonChecked(IDC_IGNOREROMCRC)));
-                pGameSettings->put_Value(CComBSTR("cabinet_mode"), CComVariant((BOOL) IsDlgButtonChecked(IDC_CABINETMODE)));
+		pGameSettings->put_Value(CComBSTR("fastframes"), CComVariant((int) GetDlgItemInt(IDC_FASTFRAMES,NULL,TRUE)));
+		pGameSettings->put_Value(CComBSTR("ignore_rom_crc"), CComVariant((BOOL) IsDlgButtonChecked(IDC_IGNOREROMCRC)));
+		pGameSettings->put_Value(CComBSTR("cabinet_mode"), CComVariant((BOOL) IsDlgButtonChecked(IDC_CABINETMODE)));
 
 		pGameSettings->put_Value(CComBSTR("dmd_red"), CComVariant((int) GetDlgItemInt(IDC_DMDRED,NULL,TRUE)));
 		pGameSettings->put_Value(CComBSTR("dmd_green"), CComVariant((int) GetDlgItemInt(IDC_DMDGREEN,NULL,TRUE)));
@@ -196,17 +224,27 @@ private:
 		pGameSettings->put_Value(CComBSTR("dmd_perc33"), CComVariant((int) GetDlgItemInt(IDC_DMDPERC33,NULL,TRUE)));
 		pGameSettings->put_Value(CComBSTR("dmd_perc0"), CComVariant((int) GetDlgItemInt(IDC_DMDPERC0,NULL,TRUE)));
 
-                pGameSettings->put_Value(CComBSTR("dmd_colorize"), CComVariant((BOOL) IsDlgButtonChecked(IDC_DMD_COLORIZE)));
-                pGameSettings->put_Value(CComBSTR("dmd_red66"), CComVariant(m_dmd66.r));
-                pGameSettings->put_Value(CComBSTR("dmd_green66"), CComVariant(m_dmd66.g));
-                pGameSettings->put_Value(CComBSTR("dmd_blue66"), CComVariant(m_dmd66.b));
-                pGameSettings->put_Value(CComBSTR("dmd_red33"), CComVariant(m_dmd33.r));
-                pGameSettings->put_Value(CComBSTR("dmd_green33"), CComVariant(m_dmd33.g));
-                pGameSettings->put_Value(CComBSTR("dmd_blue33"), CComVariant(m_dmd33.b));
-                pGameSettings->put_Value(CComBSTR("dmd_red0"), CComVariant(m_dmd0.r));
-                pGameSettings->put_Value(CComBSTR("dmd_green0"), CComVariant(m_dmd0.g));
-                pGameSettings->put_Value(CComBSTR("dmd_blue0"), CComVariant(m_dmd0.b));
-                
+		pGameSettings->put_Value(CComBSTR("dmd_colorize"), CComVariant((BOOL) IsDlgButtonChecked(IDC_DMD_COLORIZE)));
+		pGameSettings->put_Value(CComBSTR("dmd_red66"), CComVariant(m_dmd66.r));
+		pGameSettings->put_Value(CComBSTR("dmd_green66"), CComVariant(m_dmd66.g));
+		pGameSettings->put_Value(CComBSTR("dmd_blue66"), CComVariant(m_dmd66.b));
+		pGameSettings->put_Value(CComBSTR("dmd_red33"), CComVariant(m_dmd33.r));
+		pGameSettings->put_Value(CComBSTR("dmd_green33"), CComVariant(m_dmd33.g));
+		pGameSettings->put_Value(CComBSTR("dmd_blue33"), CComVariant(m_dmd33.b));
+		pGameSettings->put_Value(CComBSTR("dmd_red0"), CComVariant(m_dmd0.r));
+		pGameSettings->put_Value(CComBSTR("dmd_green0"), CComVariant(m_dmd0.g));
+		pGameSettings->put_Value(CComBSTR("dmd_blue0"), CComVariant(m_dmd0.b));
+
+		pGameSettings->put_Value(CComBSTR("dmd_opacity"), CComVariant((int) GetDlgItemInt(IDC_DMDOPACITY,NULL,TRUE)));
+
+		pGameSettings->put_Value(CComBSTR("resampling_quality"), CComVariant((int) GetDlgItemInt(IDC_RESAMPLEQ,NULL,TRUE)));
+
+#if defined(VPINMAME_ALTSOUND) || defined(VPINMAME_PINSOUND)
+		pGameSettings->put_Value(CComBSTR("sound_mode"), CComVariant((int) GetDlgItemInt(IDC_SOUNDMODE,NULL,TRUE)));
+#endif
+
+		pGameSettings->put_Value(CComBSTR("vgmwrite"), CComVariant((BOOL) IsDlgButtonChecked(IDC_VGMWRITE)));
+
 		pGameSettings->Release();
 	}
 
@@ -241,7 +279,7 @@ private:
 		if ( !m_pGame )
 			return 1;
 
-		char szTitle[256];
+		TCHAR szTitle[256];
 
 		CComBSTR sDescription;
 		m_pGame->get_Description(&sDescription);
@@ -251,11 +289,11 @@ private:
 		CComBSTR sROM;
 		m_pGame->get_Name(&sROM);
 		WideCharToMultiByte(CP_ACP, 0, sROM, -1, m_szROM, sizeof m_szROM, NULL, NULL);
-		
+
 		if ( m_szROM[0] )
-			wsprintf(szTitle, "%s (%s)", szDescription, m_szROM);
+			wsprintf(szTitle, TEXT("%s (%s)"), szDescription, m_szROM);
 		else
-			lstrcpy(szTitle, "Default Options");
+			lstrcpy(szTitle, TEXT("Default Options"));
 
 		SetWindowText(szTitle);
 
@@ -279,12 +317,12 @@ private:
 			::GetDlgCtrlID((HWND) lParam) == IDC_DMDSHOW2 ||
 			::GetDlgCtrlID((HWND) lParam) == IDC_DMDSHOW3 ||
 			::GetDlgCtrlID((HWND) lParam) == IDC_DMDSHOW4) {
-		
+
 			int r, g, b, np2, np3, np4;
 			float p2, p3, p4;
 			COLORREF thecolor;
 
-                        if (IsDlgButtonChecked(IDC_DMD_COLORIZE)) {
+			if (IsDlgButtonChecked(IDC_DMD_COLORIZE)) {
                                 /*Colorized mode - use the individual colors*/
                                 switch (::GetDlgCtrlID((HWND) lParam)) {
                                 case IDC_DMDSHOW1:
@@ -309,8 +347,7 @@ private:
                                         b = m_dmd0.b;
                                         break;
                                 }
-                        } else {
-                                
+			} else {
 			/*Pull values from Textboxes*/
 			GetDMD_RGB_Color(&r,&g,&b,&np2,&np3,&np4);
 			p2=(float)np2;
@@ -341,8 +378,8 @@ private:
 				b = (int)(b*(p4/100.00));
 				break;
 			}
-                        }
-			
+			}
+
 			/*create a color ref: 0x00bbggrr*/
 			thecolor = ((BYTE)b<<16) + ((BYTE)g<<8) + (BYTE)r;
 
@@ -350,12 +387,12 @@ private:
 			if (m_hBrushDMDColor)
 				DeleteObject(m_hBrushDMDColor);
 			/*Create new brush*/
-			
+
 			m_hBrushDMDColor = CreateSolidBrush(thecolor);
 
 			/*Change background color of item*/
 			SetBkColor((HDC) wParam, thecolor);
-			return (int) m_hBrushDMDColor;
+			return (LRESULT) m_hBrushDMDColor;
 		}
 		return 0;
 	}
@@ -399,7 +436,7 @@ private:
         LRESULT OnLeftButtonDown(UINT, WPARAM, LPARAM lpar, BOOL&) {
                 if (IsDlgButtonChecked(IDC_DMD_COLORIZE)) {
                         // check if the click is in a color patch text box
-                        POINT pt = { GET_X_LPARAM(lpar), GET_Y_LPARAM(lpar) };
+                        POINT pt = { ((int)(short)LOWORD(lpar)), ((int)(short)HIWORD(lpar)) };
                         RGB dmd100;
                         int np2, np3, np4;
                         GetDMD_RGB_Color(&dmd100.r, &dmd100.g, &dmd100.b, &np2, &np3, &np4);
@@ -440,6 +477,16 @@ private:
 			if ( IsEmulationRunning() )
 				MessageBox("Your changes will not take effect until you restart Visual PinMAME!","Notice!",MB_OK | MB_ICONINFORMATION);
 		}
+		else // a bit hacky way to store the mastervolume from in here :/
+		{
+			// Get a Settings object for the game specific settings
+			IGameSettings *pGameSettings;
+			m_pGame->get_Settings((IGameSettings**) &pGameSettings);
+
+			pGameSettings->put_Value(CComBSTR("volume"), CComVariant(osd_get_mastervolume()));
+
+			pGameSettings->Release();
+		}
 
 		EndDialog(IDOK);
 		return 0;
@@ -456,7 +503,7 @@ private:
 	}
 
 	LRESULT OnResetToDefault(WORD, UINT, HWND, BOOL&) {
-		BOOL fGameWasNeverStarted = GameWasNeverStarted(m_szROM);
+		bool fGameWasNeverStarted = GameWasNeverStarted(m_szROM);
 
 		/* Delete Game Specific Options from Registry and Reload Defaults */
 		char szKey[MAX_PATH];
@@ -464,7 +511,7 @@ private:
 
 		HKEY hKey;
 		if ( RegOpenKeyEx(HKEY_CURRENT_USER, szKey, 0, KEY_WRITE, &hKey)==ERROR_SUCCESS ) {
-			if ( !m_szROM )
+			if (m_szROM[0] == '\0')
 				RegDeleteKey(hKey, REG_DEFAULT);
 			else
 				RegDeleteKey(hKey, m_szROM);
@@ -541,9 +588,10 @@ private:
                         0
                 };
                 int clr = IsDlgButtonChecked(IDC_DMD_COLORIZE);
-                for (int i = 0 ; shade_ctls[i] != 0 ; ++i)
+                int i;
+                for (i = 0 ; shade_ctls[i] != 0 ; ++i)
                         ::ShowWindow(GetDlgItem(shade_ctls[i]), clr ? SW_HIDE : SW_SHOW);
-                for (int i = 0 ; colorize_ctls[i] != 0 ; ++i)
+                for (i = 0 ; colorize_ctls[i] != 0 ; ++i)
                         ::ShowWindow(GetDlgItem(colorize_ctls[i]), clr ? SW_SHOW : SW_HIDE);
         }
 
@@ -612,16 +660,16 @@ void CGameSettings::Init(IGame *pGame)
 		strcat(m_szRegKey, REG_DEFAULT);
 }
 
-STDMETHODIMP CGameSettings::ShowSettingsDlg(long hParentWnd)
+STDMETHODIMP CGameSettings::ShowSettingsDlg(LONG_PTR hParentWnd)
 {
 	switch ( hParentWnd ) {
 	case 0:
 		break;
 
 	case 1:
-		hParentWnd = (long) ::GetActiveWindow();
+		hParentWnd = (LONG_PTR) ::GetActiveWindow();
 		if ( !hParentWnd )
-			hParentWnd = (long) GetForegroundWindow();
+			hParentWnd = (LONG_PTR) GetForegroundWindow();
 		break;
 
 	default:
@@ -637,7 +685,7 @@ STDMETHODIMP CGameSettings::ShowSettingsDlg(long hParentWnd)
 
 STDMETHODIMP CGameSettings::Clear()
 {
-	BOOL fGameWasNeverStarted = GameWasNeverStarted(m_szROM);
+	bool fGameWasNeverStarted = GameWasNeverStarted(m_szROM);
 
 	DeleteGameSettings(m_szROM);
 
@@ -680,7 +728,7 @@ STDMETHODIMP CGameSettings::put_Value(BSTR sName, VARIANT newVal)
 	return hr;
 }
 
-STDMETHODIMP CGameSettings::SetDisplayPosition(VARIANT newValX, VARIANT newValY, long hWnd)
+STDMETHODIMP CGameSettings::SetDisplayPosition(VARIANT newValX, VARIANT newValY, LONG_PTR hWnd)
 {
 	VariantChangeType(&newValX, &newValX, 0, VT_I4);
 	VariantChangeType(&newValY, &newValY, 0, VT_I4);

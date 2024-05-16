@@ -1,69 +1,25 @@
 #ifndef INC_PINMAME
 #define INC_PINMAME
+
 #if !defined(__GNUC__) || (__GNUC__ == 3 && __GNUC_MINOR__ >= 4) || (__GNUC__ >= 4)	// GCC supports "pragma once" correctly since 3.4
 #pragma once
 #endif
 
-#define PINMAME_EXT     1 // PinMAME extensions added to MAME source
-#define PINMAME_EXIT    1 // Use Machine->exitfunc (normally only in MESS)
 #define WPCDCSSPEEDUP   1 // DCS Speedup added to MAME ADSP emulation
 #define DBG_BPR         1 // BPR command added to debugger
-#define PINMAME_SAMPLES 1 // Sample Support
 
-#define TINY_COMPILE
-#define NEOFREE
+#if !(defined(VPINMAME) || defined(LIBPINMAME) || defined(LISY_SUPPORT))
+ #define ENABLE_MECHANICAL_SAMPLES // maybe remove this at some point completely? not wired up for all machines anyway!
+#endif
 
-
-#if (MAMEVER >= 6800) && (MAMEVER < 7100)
-#  ifndef INVALID_FILE_ATTRIBUTES
-#    define INVALID_FILE_ATTRIBUTES 0xffffffff
-#  endif
-#  ifndef INVALID_SET_FILE_POINTER
-#    define INVALID_SET_FILE_POINTER 0xffffffff
-#  endif
-#endif // MAMEVER
-#if (MAMEVER >= 6800)
-#  ifndef PI
-#    define PI 3.14159265354
-#  endif
-#else // MAMEVER < 6800
-#  define CRC(a) 0x##a
-#  define SHA1(a)
-#  define NO_DUMP 0x00000000
-#endif // MAMEVER < 6800
-#if MAMEVER >= 6100
-#define osd_mark_dirty(a,b,c,d)
-#endif /* MAMEVER */
-#if MAMEVER >= 6300
-#define VIDEO_SUPPORTS_DIRTY 0
+#ifndef PI
+ #define PI 3.1415926535897932384626433832795
+#endif
 #define FILETYPE_PRINTER FILETYPE_MEMCARD
-#endif /* MAMEVER */
-#if MAMEVER < 6300
-#define FILETYPE_WAVE OSD_FILETYPE_WAVEFILE
-#define FILETYPE_HIGHSCORE_DB OSD_FILETYPE_HIGHSCORE_DB
-#define FILETYPE_PRINTER OSD_FILETYPE_MEMCARD
-#define FILETYPE_ROM OSD_FILETYPE_ROM
-#define mame_file void
-#define mame_fopen osd_fopen
-#define mame_fclose osd_fclose
-#define mame_fgets osd_fgets
-#define mame_faccess osd_faccess
-#define mame_fwrite osd_fwrite
-#define mame_fwrite_lsbfirst osd_fwrite_lsbfirst
-#endif /* MAMEVER */
-#if MAMEVER > 3716
 #define BMTYPE UINT16
 #define M65C02_INT_IRQ M65C02_IRQ_LINE
 #define M65C02_INT_NMI INTERRUPT_NMI
 #define VIDEO_MODIFIES_PALETTE 0
-#else  /* MAMEVER */
-#define BMTYPE UINT8
-#define mame_bitmap osd_bitmap
-#define cpu_triggerint(x) cpu_trigger(-2000+(x))
-#define activecpu_get_reg(x) cpu_get_reg(x)
-#define activecpu_set_reg(x,y) cpu_set_reg((x),(y))
-#define activecpu_get_previouspc cpu_getpreviouspc
-#endif /* MAMEVER */
 
 #ifdef _MSC_VER // These must be in the makefile for WIN32 & DOS
 // CPUs
@@ -72,9 +28,7 @@
 #define HAS_M6800    1
 #define HAS_M6803    1
 #define HAS_M6802    1
-#if MAMEVER >= 6300
 #define HAS_ADSP2101 1 // must be defined for 2105 to work
-#endif // MAMEVER
 #define HAS_ADSP2105 1
 #define HAS_Z80      1
 #define HAS_M6502    1
@@ -105,12 +59,11 @@
 
 // Sound
 #define HAS_DAC        1
-#if MAMEVER > 3716
-#define HAS_YM2151_ALT 1
-#else /* MAMEVER */
-#define HAS_YM2151     1
-#endif /* MAMEVER */
+//#define HAS_YM2151_ALT 1
+//#define HAS_YM2151_NUKED 1
+#define HAS_YM2151_YMFM 1
 #define HAS_HC55516    1
+#define HAS_MC3417     1
 #define HAS_SAMPLES    1
 #define HAS_TMS5220    1
 #define HAS_AY8910     1
@@ -134,6 +87,10 @@
 #define HAS_SP0256     1
 #define HAS_Y8950      1
 #define HAS_ASTROCADE  1
+#define HAS_YMF262     1
+#define HAS_MEA8000    1
+#define HAS_SAA1099    1
+#define HAS_QSOUND     1
 #endif /* _MSC_VER */
 
 #ifdef _MSC_VER // Disable some VC++ warnings
@@ -145,14 +102,22 @@
 #undef INLINE
 #endif
 
-#define INLINE static __inline
-#pragma warning(disable:4018)		// "signed/unsigned mismatch"
-#pragma warning(disable:4146)		// "unary minus operator applied to unsigned type"
-#pragma warning(disable:4244)		// "possible loss of data"
-#pragma warning(disable:4761)		// "integral size mismatch in argument"
-#pragma warning(disable:4550)		// "expression evaluates to a function which is missing an argument list"
+#if defined(_DEBUG)
+ #define INLINE static
+#else
+ #if defined __LP64__ || defined _WIN64 // at least VC2015s 64bit linker gets stuck
+  #define INLINE static __inline
+ #else
+  #define INLINE static __forceinline
+ #endif
+#endif
+//#pragma warning(disable:4018)		// "signed/unsigned mismatch"
+//#pragma warning(disable:4146)		// "unary minus operator applied to unsigned type"
+//#pragma warning(disable:4244)		// "possible loss of data"
+//#pragma warning(disable:4761)		// "integral size mismatch in argument"
+//#pragma warning(disable:4550)		// "expression evaluates to a function which is missing an argument list"
 #pragma warning(disable:4090)		// "different 'const' qualifiers"
-#define M_PI 3.14159265358
+#define M_PI 3.1415926535897932384626433832795
 
 #ifndef DD_OK
 #define DD_OK DS_OK
@@ -174,4 +139,95 @@
 #define pia_lsb_r(no) CAT3(pia_,no,_lsb_r)
 #define MWA_BANKNO(no) CAT2(MWA_BANK,no)
 #define MRA_BANKNO(no) CAT2(MRA_BANK,no)
+
+#ifdef PX_ZEN
+#undef INLINE
+#define INLINE static
+#endif
+
+#ifdef _MSC_VER
+/*-------------------------------------------------
+    rotl_32 - circularly shift a 32-bit value left
+    by the specified number of bits (modulo 32)
+-------------------------------------------------*/
+#ifndef rotl_32
+#define rotl_32 _rotl
+#endif
+/*-------------------------------------------------
+    rotr_32 - circularly shift a 32-bit value right
+    by the specified number of bits (modulo 32)
+-------------------------------------------------*/
+#ifndef rotr_32
+#define rotr_32 _rotr
+#endif
+/*-------------------------------------------------
+    rotl_64 - circularly shift a 64-bit value left
+    by the specified number of bits (modulo 64)
+-------------------------------------------------*/
+#ifndef rotl_64
+#define rotl_64 _rotl64
+#endif
+/*-------------------------------------------------
+    rotr_64 - circularly shift a 64-bit value right
+    by the specified number of bits (modulo 64)
+-------------------------------------------------*/
+#ifndef rotr_64
+#define rotr_64 _rotr64
+#endif
+
+#else
+/*-------------------------------------------------
+    rotl_32 - circularly shift a 32-bit value left
+    by the specified number of bits (modulo 32)
+-------------------------------------------------*/
+INLINE unsigned int rotl_32(unsigned int val, int shift)
+{
+	shift &= 31;
+	if (shift)
+		return val << shift | val >> (32 - shift);
+	else
+		return val;
+}
+
+/*-------------------------------------------------
+    rotr_32 - circularly shift a 32-bit value right
+    by the specified number of bits (modulo 32)
+-------------------------------------------------*/
+INLINE unsigned int rotr_32(unsigned int val, int shift)
+{
+	shift &= 31;
+	if (shift)
+		return val >> shift | val << (32 - shift);
+	else
+		return val;
+}
+
+/*-------------------------------------------------
+    rotl_64 - circularly shift a 64-bit value left
+    by the specified number of bits (modulo 64)
+-------------------------------------------------*/
+INLINE unsigned long long rotl_64(unsigned long long val, int shift)
+{
+	shift &= 63;
+	if (shift)
+		return val << shift | val >> (64 - shift);
+	else
+		return val;
+}
+
+/*-------------------------------------------------
+    rotr_64 - circularly shift a 64-bit value right
+    by the specified number of bits (modulo 64)
+-------------------------------------------------*/
+INLINE unsigned long long rotr_64(unsigned long long val, int shift)
+{
+	shift &= 63;
+	if (shift)
+		return val >> shift | val << (64 - shift);
+	else
+		return val;
+}
+
+#endif
+
 #endif /* INC_PINMAME */

@@ -3,21 +3,24 @@
 #define _WIN32_DCOM
 
 #include "Windows.h"
-#include "Resource.h"
+#include "resource.h"
 #include "Globals.h"
 
 #include "Utils.h"
 #include "TestVPinMAME.h"
 
+#ifndef _WIN64
+ #define VPMDLLNAME "VPinMAME.dll"
+#else
+ #define VPMDLLNAME "VPinMAME64.dll"
+#endif
+
 int RegisterUnregisterVPinMAME(HWND hWnd, int fRegister)
 {
-	HRESULT hr;
-	HMODULE hModule;
-
 	// so now let's see if we can load vpinmame.dll
-	hModule = LoadLibrary("vpinmame.dll");
+	HMODULE hModule = LoadLibrary(VPMDLLNAME);
 	if ( !hModule ) {
-		DisplayError(hWnd, GetLastError(), "The 'vpinmame.dll' file can't be loaded.", "Be sure to have this file in the current directory!");
+		DisplayError(hWnd, GetLastError(), "The '" VPMDLLNAME "' file can't be loaded.", "Be sure to have this file in the current directory!");
 		return 0;
 	}
 
@@ -27,11 +30,11 @@ int RegisterUnregisterVPinMAME(HWND hWnd, int fRegister)
 	char szVersion[256];
 	GetVersionResourceEntry(szModuleFilename, TEXT("ProductVersion"), szVersion, sizeof szVersion);
 
-	char szMsg[256];
+	TCHAR szMsg[256];
 	if ( fRegister )
-		wsprintf(szMsg, "You have selected to install version %s of Visual PinMAME! \nAre you ready to proceed?", szVersion);
+		wsprintf(szMsg, TEXT("You have selected to install version %s of Visual PinMAME! \nAre you ready to proceed?"), szVersion);
 	else
-		wsprintf(szMsg, "You have selected to uninstall version %s of Visual PinMAME! \nAre you ready to proceed?", szVersion);	
+		wsprintf(szMsg, TEXT("You have selected to uninstall version %s of Visual PinMAME! \nAre you ready to proceed?"), szVersion);	
 
 	if ( MessageBox(hWnd, szMsg, g_szCaption, MB_ICONQUESTION|MB_YESNO)==IDNO ) {
 		if ( fRegister )
@@ -47,14 +50,14 @@ int RegisterUnregisterVPinMAME(HWND hWnd, int fRegister)
 
 		DLLREGISTERSERVER* DllRegisterServer = (DLLREGISTERSERVER*) GetProcAddress(hModule, "DllRegisterServer");
 		if ( !DllRegisterServer ) {
-			DisplayError(hWnd, GetLastError(), "Can't find the registering function (DllRegisterServer) in the vpinmame.dll.", "Please check if you have a valid vpinmame.dll!");
+			DisplayError(hWnd, GetLastError(), "Can't find the registering function (DllRegisterServer) in the " VPMDLLNAME ".", "Please check if you have a valid " VPMDLLNAME "!");
 			FreeLibrary(hModule);
 			return 0;
 		}
 
-		hr = (*DllRegisterServer)();
+		HRESULT hr = (*DllRegisterServer)();
 		if ( FAILED(hr) ) {
-			DisplayError(hWnd, hr, "Unable to register the class object!", "Please check if you have a valid vpinmame.dll!");
+			DisplayError(hWnd, hr, "Unable to register the class object!", "Please check if you have a valid " VPMDLLNAME "!");
 			FreeLibrary(hModule);
 			return 0;
 		}
@@ -83,14 +86,14 @@ int RegisterUnregisterVPinMAME(HWND hWnd, int fRegister)
 
 		DLLUNREGISTERSERVER* DllUnregisterServer = (DLLUNREGISTERSERVER*) GetProcAddress(hModule, "DllUnregisterServer");
 		if ( !DllUnregisterServer ) {
-			DisplayError(hWnd, GetLastError(), "Can't find the unregistering function (DllUnegisterServer) in the vpinmame.dll.", "Please check if you have a valid vpinmame.dll!");
+			DisplayError(hWnd, GetLastError(), "Can't find the unregistering function (DllUnegisterServer) in the " VPMDLLNAME ".", "Please check if you have a valid " VPMDLLNAME "!");
 			FreeLibrary(hModule);
 			return 0;
 		}
 
-		hr = (*DllUnregisterServer)();
+		HRESULT hr = (*DllUnregisterServer)();
 		if ( FAILED(hr) ) {
-			DisplayError(hWnd, hr, "Unable to unregister the class object!", "Please check if you have a valid vpinmame.dll!");
+			DisplayError(hWnd, hr, "Unable to unregister the class object!", "Please check if you have a valid " VPMDLLNAME "!");
 			FreeLibrary(hModule);
 			return 0;
 		}
@@ -174,9 +177,8 @@ int DisplayDialogs(HWND hWnd, int nDialog)
 
 void EnabledButtons(HWND hWnd)
 {
-	HRESULT hr;
 	CLSID ClsID;
-	hr = CLSIDFromProgID(OLESTR("VPinMAME.Controller"), &ClsID);
+	const HRESULT hr = CLSIDFromProgID(OLESTR("VPinMAME.Controller"), &ClsID);
 
 	EnableWindow(GetDlgItem(hWnd, IDC_UNREGISTER), !FAILED(hr));
 	EnableWindow(GetDlgItem(hWnd, IDC_DISPLAYPATHESDLG), !FAILED(hr));
@@ -190,18 +192,18 @@ void DisplayInstalledVersion(HWND hWnd)
 	char szInstalledVersion[256];
 	GetInstalledVersion(szInstalledVersion, sizeof szInstalledVersion);
 
-	char szVersionText[256];
+	TCHAR szVersionText[256];
 	if(strlen(szInstalledVersion) > 0)
-		wsprintf(szVersionText, "* Visual PinMAME Version %s is currently installed on your computer *", szInstalledVersion);
+		wsprintf(szVersionText, TEXT("* Visual PinMAME Version %s is currently installed on your computer *"), szInstalledVersion);
 	else
-		wsprintf(szVersionText, "* Visual PinMAME is not currently installed on your computer *");
-	SendMessage(GetDlgItem(hWnd, IDC_INSTALLEDVERSION), WM_SETTEXT, 0, (WPARAM) szVersionText);
+		wsprintf(szVersionText, TEXT("* Visual PinMAME is not currently installed on your computer *"));
+	SendMessage(GetDlgItem(hWnd, IDC_INSTALLEDVERSION), WM_SETTEXT, 0, (LPARAM) szVersionText);
 }
 
-int PASCAL MainDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+INT_PTR PASCAL MainDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	static HICON m_hIcon = 0;
-	char szHelp[256];
+	TCHAR szHelp[256];
 
 	switch ( uMsg ) {
 	case WM_INITDIALOG:
@@ -221,7 +223,7 @@ int PASCAL MainDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		char szModuleFilename[MAX_PATH];
 		GetModuleFileName(g_hInstance, szModuleFilename, sizeof szModuleFilename);
 
-		char szVersion[256];
+		TCHAR szVersion[256];
 		GetVersionResourceEntry(szModuleFilename, TEXT("ProductVersion"), szVersion, sizeof szVersion);
 
 		GetWindowText(hWnd, szHelp, sizeof szHelp);
@@ -278,12 +280,12 @@ int PASCAL MainDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 int APIENTRY WinMain(HINSTANCE hInstance,
                      HINSTANCE hPrevInstance,
-                     LPSTR     lpCmdLine,
+                     PSTR      lpCmdLine,
                      int       nCmdShow)
 {
 	g_hInstance = hInstance;
 
-	HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+	const HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
 	if ( FAILED(hr) ) {
 		DisplayError(0, hr, "Failed to initialize the COM subsystem.", "Please check your system!");
 		return 0;
@@ -294,4 +296,3 @@ int APIENTRY WinMain(HINSTANCE hInstance,
 
 	return 1;
 }
-

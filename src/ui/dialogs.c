@@ -25,18 +25,18 @@
 #include <commctrl.h>
 #include <string.h>
 
-#include "bitmask.h"
+#include "Bitmask.h"
 #include "TreeView.h"
 #include "M32Util.h"
 #include "resource.h"
-#include "directories.h"
+#include "Directories.h"
 #include "options.h"
-#include "splitters.h"
+#include "Splitters.h"
 #include "help.h"
 #include "audit32.h"
-#include "screenshot.h"
-#include "mame32.h"
-#include "properties.h"
+#include "Screenshot.h"
+#include "MAME32.h"
+#include "Properties.h"
 #include "dialogs.h"
 
 #ifdef _MSC_VER
@@ -345,11 +345,20 @@ INT_PTR CALLBACK AboutDialogProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPar
 		{
 			HBITMAP hBmp;
 			hBmp = (HBITMAP)LoadImage(GetModuleHandle(NULL),
-									  MAKEINTRESOURCE(IDB_ABOUT),
+									  MAKEINTRESOURCE(IDB_ABOUTS),
 									  IMAGE_BITMAP, 0, 0, LR_SHARED);
 			SendMessage(GetDlgItem(hDlg, IDC_ABOUT), STM_SETIMAGE,
 						(WPARAM)IMAGE_BITMAP, (LPARAM)hBmp);
-			Static_SetText(GetDlgItem(hDlg, IDC_VERSION), GetVersionString());
+
+			char tmp[80];
+
+#if defined(__LP64__) || defined(_WIN64)
+			snprintf(tmp,sizeof(tmp), "%s (x64)", GetVersionString());
+#else 
+			snprintf(tmp,sizeof(tmp), "%s", GetVersionString());
+#endif
+
+			Static_SetText(GetDlgItem(hDlg, IDC_VERSION), tmp);
 		}
 		return 1;
 
@@ -379,7 +388,7 @@ INT_PTR CALLBACK AddCustomFileDialogProc(HWND hDlg, UINT Msg, WPARAM wParam, LPA
 		HIMAGELIST hList;
 
 		// current game passed in using DialogBoxParam()
-		driver_index = lParam;
+		driver_index = (int)lParam;
 
 		hList = TreeView_SetImageList(GetDlgItem(hDlg,IDC_CUSTOM_TREE), treeview_icons, LVSIL_NORMAL);
 

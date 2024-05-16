@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 #ifndef INC_PLAYMATIC
 #define INC_PLAYMATIC
 #if !defined(__GNUC__) || (__GNUC__ == 3 && __GNUC_MINOR__ >= 4) || (__GNUC__ >= 4)	// GCC supports "pragma once" correctly since 3.4
@@ -48,7 +50,7 @@
     COREPORT_BIT(   0x0001, "Coin 1",      KEYCODE_3) \
     COREPORT_BIT(   0x0002, "Coin 2",      KEYCODE_4) \
     COREPORT_BIT(   0x0004, "Coin 3",      KEYCODE_5) \
-    COREPORT_BIT(   0x0010, "Tilt / Diagnostics", KEYCODE_7) \
+    COREPORT_BIT(   0x1010, "Tilt / Diagnostics", KEYCODE_7) \
     COREPORT_BIT(   0x0020, "Advance Digit", KEYCODE_2) \
     COREPORT_BIT(   0x0080, "Advance Step", KEYCODE_8) \
     /* Switch Column 0 */ \
@@ -94,7 +96,26 @@
       COREPORT_DIPSET(0x0002, "5" ) \
     COREPORT_DIPNAME( 0x0004, 0x0000, "Special award") \
       COREPORT_DIPSET(0x0000, "Replay" ) \
-      COREPORT_DIPSET(0x0004, "Extra ball" )
+      COREPORT_DIPSET(0x0004, "Extra ball" ) \
+  PORT_START /* 2 */ \
+    COREPORT_DIPNAME( 0x00ff, 0x0002, "Credits for small coin") \
+      COREPORT_DIPSET(0x0001, "1/2" ) \
+      COREPORT_DIPSET(0x0002, "1" ) \
+      COREPORT_DIPSET(0x0004, "3/2" ) \
+      COREPORT_DIPSET(0x0008, "2" ) \
+      COREPORT_DIPSET(0x0010, "3" ) \
+      COREPORT_DIPSET(0x0020, "4" ) \
+      COREPORT_DIPSET(0x0040, "5" ) \
+      COREPORT_DIPSET(0x0080, "6" ) \
+    COREPORT_DIPNAME( 0xff00, 0x0400, "Credits for big coin") \
+      COREPORT_DIPSET(0x0100, "3" ) \
+      COREPORT_DIPSET(0x0200, "4" ) \
+      COREPORT_DIPSET(0x0400, "5" ) \
+      COREPORT_DIPSET(0x0800, "6" ) \
+      COREPORT_DIPSET(0x1000, "7" ) \
+      COREPORT_DIPSET(0x2000, "8" ) \
+      COREPORT_DIPSET(0x4000, "9" ) \
+      COREPORT_DIPSET(0x8000, "10" )
 
 #define PLAYMATIC_INPUT_PORTS_START(name,balls) \
   INPUT_PORTS_START(name) \
@@ -233,7 +254,7 @@ ROM_START(name) \
 
 #define PLAYMATIC_SOUNDROMZ(n1, chk1) \
   SOUNDREGION(0x10000, PLAYMATIC_MEMREG_SCPU) \
-    ROM_LOAD(n1, 0x0000, 0x0400, chk1)
+    ROM_LOAD(n1, 0x0000, 0x0800, chk1)
 
 #define PLAYMATIC_SOUNDROM64(n1, chk1) \
   SOUNDREGION(0x10000, PLAYMATIC_MEMREG_SCPU) \
@@ -254,6 +275,19 @@ ROM_START(name) \
     ROM_LOAD(n2, 0x2000, 0x1000, chk2) \
       ROM_RELOAD(0x3000, 0x1000)
 
+#define PLAYMATIC_SOUNDROM256(n1, chk1) \
+  SOUNDREGION(0x10000, PLAYMATIC_MEMREG_SCPU) \
+    ROM_LOAD(n1, 0x0000, 0x8000, chk1) \
+  SOUNDREGION(0x20000, REGION_USER1)
+
+#define PLAYMATIC_SOUNDROM256x4(n1, chk1, n2, chk2, n3, chk3, n4, chk4) \
+  SOUNDREGION(0x10000, PLAYMATIC_MEMREG_SCPU) \
+    ROM_LOAD(n1, 0x0000, 0x8000, chk1) \
+  SOUNDREGION(0x20000, REGION_USER1) \
+    ROM_LOAD(n2, 0x00000, 0x8000, chk2) \
+    ROM_LOAD(n3, 0x08000, 0x8000, chk3) \
+    ROM_LOAD(n4, 0x10000, 0x8000, chk4)
+
 /*-- These are only here so the game structure can be in the game file --*/
 extern MACHINE_DRIVER_EXTERN(PLAYMATIC1);
 extern MACHINE_DRIVER_EXTERN(PLAYMATIC1A);
@@ -264,6 +298,8 @@ extern MACHINE_DRIVER_EXTERN(PLAYMATIC2S4);
 extern MACHINE_DRIVER_EXTERN(PLAYMATIC3S3);
 extern MACHINE_DRIVER_EXTERN(PLAYMATIC3S4);
 extern MACHINE_DRIVER_EXTERN(PLAYMATIC4);
+extern MACHINE_DRIVER_EXTERN(PLAYMATIC4SZSU);
+extern MACHINE_DRIVER_EXTERN(PLAYMATICBINGO);
 
 #define gl_mPLAYMATIC1     PLAYMATIC1
 #define gl_mPLAYMATIC1A    PLAYMATIC1A
@@ -274,6 +310,8 @@ extern MACHINE_DRIVER_EXTERN(PLAYMATIC4);
 #define gl_mPLAYMATIC3S3   PLAYMATIC3S3
 #define gl_mPLAYMATIC3S4   PLAYMATIC3S4
 #define gl_mPLAYMATIC4     PLAYMATIC4
+#define gl_mPLAYMATIC4SZSU PLAYMATIC4SZSU
+#define gl_mPLAYMATICBINGO PLAYMATICBINGO
 
 extern MACHINE_DRIVER_EXTERN(PLAYMATICS1);
 extern MACHINE_DRIVER_EXTERN(PLAYMATICS2);

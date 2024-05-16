@@ -1,0 +1,27 @@
+howto compile pinmame (X11) with raspberry PI and raspbian Jessie
+
+
+1) install subversion
+apt-get install subversion
+
+2) get latest code
+svn checkout https://svn.code.sf.net/p/pinmame/code/trunk pinmame-code
+
+
+3) install dependencies
+sudo apt-get install libx11-dev libxext-dev x11proto-video-dev libxv-dev libsdl1.2-dev
+
+For ALSA
+sudo apt-get install libasound2-dev
+
+4) compile
+cd pinmame-code
+make -f makefile.unix
+
+
+Notes on ALSA:
+
+If using the headphone connector as output: Use e.g. the commandline parameter "-ad plughw:1,0" (otherwise HDMI sound output may be used).
+
+Also important is to employ the ALSA-Mixer as well: With ALSA activated in makefile.unix only the alsa-dsp is loaded automatically
+but not the mixer (PinMAME still tries to use the oss-mixer). Use commandline parameter "-smp alsa".

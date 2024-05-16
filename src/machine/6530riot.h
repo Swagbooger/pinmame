@@ -15,14 +15,6 @@
 
 #define MAX_RIOT_6530 8
 
-#define RIOT6530_PORTA	0x00
-#define RIOT6530_DDRA	0x01
-#define RIOT6530_PORTB	0x02
-#define RIOT6530_DDRB	0x03
-
-#define RIOT6530_TIMER	0x00
-#define RIOT6530_IRF	0x01
-
 struct riot6530_interface
 {
 	mem_read_handler in_a_func;
@@ -38,7 +30,7 @@ extern "C" {
 
 void riot6530_unconfig(void);
 void riot6530_config(int which, const struct riot6530_interface *intf);
-void riot6530_set_clock(int which, int clock);
+void riot6530_set_clock(int which, double clock);
 void riot6530_reset(void);
 int  riot6530_read(int which, int offset);
 void riot6530_write(int which, int offset, int data);

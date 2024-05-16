@@ -11,6 +11,16 @@
 **
 **
 ** History:
+**
+** 03-08-2003 Jarek Burczynski:
+**  - fixed BRDY flag implementation.
+**
+** 24-07-2003 Jarek Burczynski, Frits Hilderink:
+**  - fixed delault value for control2 in YM_DELTAT_ADPCM_Reset
+**
+** 22-07-2003 Jarek Burczynski, Frits Hilderink:
+**  - fixed external memory support
+**
 ** 15-06-2003 Jarek Burczynski:
 **  - implemented CPU -> AUDIO ADPCM synthesis (via writes to the ADPCM data reg $08)
 **  - implemented support for the Limit address register
@@ -41,9 +51,9 @@
 **    Thanks go to Stefan Jokisch (stefan.jokisch@gmx.de) for tracking down the problem.
 **
 ** TO DO:
-**		Check size of the address register on the other chips....
+**      Check size of the address register on the other chips....
 **
-** Version 0.68
+** Version 0.72
 **
 ** sound chips that have this unit:
 ** YM2608   OPNA
@@ -61,53 +71,78 @@
 
 /* Forecast to next Forecast (rate = *8) */
 /* 1/8 , 3/8 , 5/8 , 7/8 , 9/8 , 11/8 , 13/8 , 15/8 */
-const INT32 ym_deltat_decode_tableB1[16] = {
+/*static*/ const INT32 ym_deltat_decode_tableB1[16] = {
   1,   3,   5,   7,   9,  11,  13,  15,
   -1,  -3,  -5,  -7,  -9, -11, -13, -15,
 };
 /* delta to next delta (rate= *64) */
 /* 0.9 , 0.9 , 0.9 , 0.9 , 1.2 , 1.6 , 2.0 , 2.4 */
-const INT32 ym_deltat_decode_tableB2[16] = {
+/*static*/ const INT32 ym_deltat_decode_tableB2[16] = {
   57,  57,  57,  57, 77, 102, 128, 153,
   57,  57,  57,  57, 77, 102, 128, 153
 };
 
+#if 0
+void YM_DELTAT_BRDY_callback(YM_DELTAT *DELTAT)
+{
+	logerror("BRDY_callback reached (flag set) !\n");
 
+	/* set BRDY bit in status register */
+	if(DELTAT->status_set_handler != NULL && DELTAT->status_change_BRDY_bit)
+		(DELTAT->status_set_handler)(DELTAT->status_change_which_chip, DELTAT->status_change_BRDY_bit);
+}
+#endif
 
 UINT8 YM_DELTAT_ADPCM_Read(YM_DELTAT *DELTAT)
 {
 	UINT8 v = 0;
 
-	/* two dummy reads */
-	if (DELTAT->memread)
-	{ 
-		DELTAT->memread--;
-		return 0;
-	}
-
-
-	if ( DELTAT->now_addr != (DELTAT->end<<1) )
+	/* external memory read */
+	if ( (DELTAT->portstate & 0xe0)==0x20 )
 	{
-		v = DELTAT->memory[DELTAT->now_addr>>1];
+		/* two dummy reads */
+		if (DELTAT->memread)
+		{
+			DELTAT->now_addr = DELTAT->start << 1;
+			DELTAT->memread--;
+			return 0;
+		}
 
-		DELTAT->now_addr+=2; /* two nibbles at a time */
 
-		/* set BRDY bit in status register */
-		if(DELTAT->status_set_handler)
-			if(DELTAT->status_change_BRDY_bit)
-				(DELTAT->status_set_handler)(DELTAT->status_change_which_chip, DELTAT->status_change_BRDY_bit);
-	}
-	else 
-	{
-		/* set EOS bit in status register */
-		if(DELTAT->status_set_handler)
-			if(DELTAT->status_change_EOS_bit)
-				(DELTAT->status_set_handler)(DELTAT->status_change_which_chip, DELTAT->status_change_EOS_bit);
+		if ( DELTAT->now_addr != (DELTAT->end<<1) )
+		{
+			v = DELTAT->memory[(DELTAT->now_addr>>1)&DELTAT->memory_mask];
+
+			/*logerror("YM Delta-T memory read  $%08x, v=$%02x\n", DELTAT->now_addr >> 1, v);*/
+
+			DELTAT->now_addr+=2; /* two nibbles at a time */
+
+			/* reset BRDY bit in status register, which means we are reading the memory now */
+			if (DELTAT->status_reset_handler && DELTAT->status_change_BRDY_bit)
+					(DELTAT->status_reset_handler)(DELTAT->status_change_which_chip, DELTAT->status_change_BRDY_bit);
+
+	/* setup a timer that will callback us in 10 master clock cycles for Y8950
+	* in the callback set the BRDY flag to 1 , which means we have another data ready.
+	* For now, we don't really do this; we simply reset and set the flag in zero time, so that the IRQ will work.
+	*/
+			/* set BRDY bit in status register */
+			if (DELTAT->status_set_handler != NULL && DELTAT->status_change_BRDY_bit)
+					(DELTAT->status_set_handler)(DELTAT->status_change_which_chip, DELTAT->status_change_BRDY_bit);
+		}
+		else
+		{
+			/* set EOS bit in status register */
+			if (DELTAT->status_set_handler != NULL && DELTAT->status_change_EOS_bit)
+					(DELTAT->status_set_handler)(DELTAT->status_change_which_chip, DELTAT->status_change_EOS_bit);
+		}
 	}
 
 	return v;
 }
 
+
+/* 0-DRAM x1, 1-ROM, 2-DRAM x8, 3-ROM (3 is bad setting - not allowed by the manual) */
+static const UINT8 dram_rightshift[4]={3,0,0,0};
 
 /* DELTA-T ADPCM write register */
 void YM_DELTAT_ADPCM_Write(YM_DELTAT *DELTAT,int r,int v)
@@ -120,22 +155,22 @@ void YM_DELTAT_ADPCM_Write(YM_DELTAT *DELTAT,int r,int v)
 	case 0x00:
 /*
 START:
-	Accessing *external* memory is started when START bit (D7) is set to "1", so
-	you must set all conditions needed for recording/playback before starting.
-	If you access *CPU-managed* memory, recording/playback starts after
-	read/write of ADPCM data register $08.
+    Accessing *external* memory is started when START bit (D7) is set to "1", so
+    you must set all conditions needed for recording/playback before starting.
+    If you access *CPU-managed* memory, recording/playback starts after
+    read/write of ADPCM data register $08.
 
 REC:
     0 = ADPCM synthesis (playback)
-	1 = ADPCM analysis (record)
+    1 = ADPCM analysis (record)
 
 MEMDATA:
-	0 = processor (*CPU-managed*) memory (means: using register $08)
-	1 = external memory (using start/end/limit registers to access memory: RAM or ROM)
+    0 = processor (*CPU-managed*) memory (means: using register $08)
+    1 = external memory (using start/end/limit registers to access memory: RAM or ROM)
 
 
 SPOFF:
-	controls output pin that should disable the speaker while ADPCM analysis
+    controls output pin that should disable the speaker while ADPCM analysis
 
 RESET and REPEAT only work with external memory.
 
@@ -151,7 +186,13 @@ value:   START, REC, MEMDAT, REPEAT, SPOFF, x,x,RESET   meaning:
   20     0      0    1       0       0      0 0 0       External memory read via ADPCM data register $08
 
 */
-		DELTAT->portstate = v & (0x80|0x40|0x20|0x10); /* start, rec, memory mode, repeat flag copy */
+		/* handle emulation mode */
+		if(DELTAT->emulation_mode == YM_DELTAT_EMULATION_MODE_YM2610)
+		{
+			v |= 0x20;      /*  YM2610 always uses external memory and doesn't even have memory flag bit. */
+		}
+
+		DELTAT->portstate = v & (0x80|0x40|0x20|0x10|0x01); /* start, rec, memory mode, repeat flag copy, reset(bit0) */
 
 		if( DELTAT->portstate&0x80 )/* START,REC,MEMDATA,REPEAT,SPOFF,--,--,RESET */
 		{
@@ -164,16 +205,19 @@ value:   START, REC, MEMDAT, REPEAT, SPOFF, x,x,RESET   meaning:
 			DELTAT->prev_acc = 0;
 			DELTAT->adpcml   = 0;
 			DELTAT->adpcmd   = YM_DELTAT_DELTA_DEF;
-
+			DELTAT->now_data = 0;
+			if (DELTAT->start > DELTAT->end)
+				//logerror("DeltaT-Warning: Start: %06X, End: %06X\n", DELTAT->start, DELTAT->end);
+				logerror("DeltaT-Warning: Start: %06X, End: %06X, Limit %06X, MemMask %06X\n", DELTAT->start, DELTAT->end, DELTAT->limit, DELTAT->memory_mask);
 		}
 
 		if( DELTAT->portstate&0x20 ) /* do we access external memory? */
 		{
 			DELTAT->now_addr = DELTAT->start << 1;
-			DELTAT->memread = 2;	/* two dummy reads needed before accesing external memory via register $08*/
+			DELTAT->memread = 2;    /* two dummy reads needed before accesing external memory via register $08*/
 
 			/* if yes, then let's check if ADPCM memory is mapped and big enough */
-			if(DELTAT->memory == 0)
+			if(DELTAT->memory == NULL)
 			{
 				logerror("YM Delta-T ADPCM rom not mapped\n");
 				DELTAT->portstate = 0x00;
@@ -181,12 +225,13 @@ value:   START, REC, MEMDAT, REPEAT, SPOFF, x,x,RESET   meaning:
 			}
 			else
 			{
-				if( DELTAT->end >= DELTAT->memory_size )	/* Check End in Range */
+				if( (DELTAT->end & DELTAT->memory_mask) >= DELTAT->memory_size )	/* Check End in Range */
 				{
-					logerror("YM Delta-T ADPCM end out of range: $%08x\n", DELTAT->end);
-					DELTAT->end = DELTAT->memory_size - 1;
+					//logerror("YM Delta-T ADPCM end out of range: $%08x\n", DELTAT->end);
+					logerror("YM Delta-T ADPCM end out of range: %06X >= %06X\n", DELTAT->end, DELTAT->memory_size);
+					DELTAT->end = (DELTAT->end & ~DELTAT->memory_mask) | (DELTAT->memory_size - 1);
 				}
-				if( DELTAT->start >= DELTAT->memory_size )	/* Check Start in Range */
+				if( (DELTAT->start & DELTAT->memory_mask) >= DELTAT->memory_size )	/* Check Start in Range */
 				{
 					logerror("YM Delta-T ADPCM start out of range: $%08x\n", DELTAT->start);
 					DELTAT->portstate = 0x00;
@@ -194,7 +239,7 @@ value:   START, REC, MEMDAT, REPEAT, SPOFF, x,x,RESET   meaning:
 				}
 			}
 		}
-		else	/* we access CPU memory (ADPCM data register $08) so we only reset now_addr here */
+		else    /* we access CPU memory (ADPCM data register $08) so we only reset now_addr here */
 		{
 			DELTAT->now_addr = 0;
 		}
@@ -206,41 +251,61 @@ value:   START, REC, MEMDAT, REPEAT, SPOFF, x,x,RESET   meaning:
 			/* clear PCM BUSY bit (in status register) */
 			DELTAT->PCM_BSY = 0;
 
-			/* should we set EOS here too ? */
+			/* set BRDY flag */
+			if (DELTAT->status_set_handler != NULL && DELTAT->status_change_BRDY_bit)
+					(DELTAT->status_set_handler)(DELTAT->status_change_which_chip, DELTAT->status_change_BRDY_bit);
 		}
 		break;
-	case 0x01:	/* L,R,-,-,SAMPLE,DA/AD,RAMTYPE,ROM */
+	case 0x01:  /* L,R,-,-,SAMPLE,DA/AD,RAMTYPE,ROM */
+		/* handle emulation mode */
+		if(DELTAT->emulation_mode == YM_DELTAT_EMULATION_MODE_YM2610)
+		{
+			/*  YM2610 always uses ROM as an external memory and doesn't have ROM/RAM memory flag bit. */
+			v = (v & ~3) | (DELTAT->control2 & 3);
+		}
+
 		DELTAT->pan = &DELTAT->output_pointer[(v>>6)&0x03];
 		if ((DELTAT->control2 & 3) != (v & 3))
 		{
-			static UINT8 dram_rightshift[4]={3,0,0,0};
 			/*0-DRAM x1, 1-ROM, 2-DRAM x8, 3-ROM (3 is bad setting - not allowed by the manual) */
-			if (DELTAT->DRAMportshift != dram_rightshift[v&3])
+			UINT8 new_shift = DELTAT->portshift_base - dram_rightshift[v&3];
+
+			if (DELTAT->now_portshift != new_shift)
 			{
+				DELTAT->now_portshift = new_shift;
+
+				/* final shift value depends on chip type and memory type selected:
+				        8 for YM2610 (ROM only),
+				        5 for ROM for Y8950 and YM2608,
+				        5 for x8bit DRAMs for Y8950 and YM2608,
+				        2 for x1bit DRAMs for Y8950 and YM2608.
+				*/
+
 				/* refresh addresses */
-				DELTAT->start  = (DELTAT->reg[0x3]*0x0100 | DELTAT->reg[0x2]) << (DELTAT->portshift - DELTAT->DRAMportshift);
-				DELTAT->end    = (DELTAT->reg[0x5]*0x0100 | DELTAT->reg[0x4]) << (DELTAT->portshift - DELTAT->DRAMportshift);
-				DELTAT->end   += (1 << (DELTAT->portshift-DELTAT->DRAMportshift) ) - 1;
-				DELTAT->limit  = (DELTAT->reg[0xd]*0x0100 | DELTAT->reg[0xc]) << (DELTAT->portshift - DELTAT->DRAMportshift);
+				DELTAT->address_mask = (0x10000 << (DELTAT->now_portshift + 1)) - 1;
+				DELTAT->start  = (DELTAT->reg[0x3]*0x0100 | DELTAT->reg[0x2]) << DELTAT->now_portshift;
+				DELTAT->end    = (DELTAT->reg[0x5]*0x0100 | DELTAT->reg[0x4]) << DELTAT->now_portshift;
+				DELTAT->end   |= (1 << DELTAT->now_portshift ) - 1;
+				DELTAT->limit  = (DELTAT->reg[0xd]*0x0100 | DELTAT->reg[0xc]) << DELTAT->now_portshift;
 			}
 		}
 		DELTAT->control2 = v;
 		break;
-	case 0x02:	/* Start Address L */
-	case 0x03:	/* Start Address H */
-		DELTAT->start  = (DELTAT->reg[0x3]*0x0100 | DELTAT->reg[0x2]) << (DELTAT->portshift - DELTAT->DRAMportshift);
+	case 0x02:  /* Start Address L */
+	case 0x03:  /* Start Address H */
+		DELTAT->start  = (DELTAT->reg[0x3]*0x0100 | DELTAT->reg[0x2]) << DELTAT->now_portshift;
 		/*logerror("DELTAT start: 02=%2x 03=%2x addr=%8x\n",DELTAT->reg[0x2], DELTAT->reg[0x3],DELTAT->start );*/
 		break;
-	case 0x04:	/* Stop Address L */
-	case 0x05:	/* Stop Address H */
-		DELTAT->end    = (DELTAT->reg[0x5]*0x0100 | DELTAT->reg[0x4]) << (DELTAT->portshift - DELTAT->DRAMportshift);
-		DELTAT->end   += (1 << (DELTAT->portshift-DELTAT->DRAMportshift) ) - 1;
+	case 0x04:  /* Stop Address L */
+	case 0x05:  /* Stop Address H */
+		DELTAT->end    = (DELTAT->reg[0x5]*0x0100 | DELTAT->reg[0x4]) << DELTAT->now_portshift;
+		DELTAT->end   |= (1 << DELTAT->now_portshift ) - 1;
 		/*logerror("DELTAT end  : 04=%2x 05=%2x addr=%8x\n",DELTAT->reg[0x4], DELTAT->reg[0x5],DELTAT->end   );*/
 		break;
-	case 0x06:	/* Prescale L (ADPCM and Record frq) */
-	case 0x07:	/* Prescale H */
+	case 0x06:  /* Prescale L (ADPCM and Record frq) */
+	case 0x07:  /* Prescale H */
 		break;
-	case 0x08:	/* ADPCM data */
+	case 0x08:  /* ADPCM data */
 
 /*
 some examples:
@@ -258,49 +323,69 @@ value:   START, REC, MEMDAT, REPEAT, SPOFF, x,x,RESET   meaning:
 		/* external memory write */
 		if ( (DELTAT->portstate & 0xe0)==0x60 )
 		{
+			if (DELTAT->memread)
+			{
+				DELTAT->now_addr = DELTAT->start << 1;
+				DELTAT->memread = 0;
+			}
+
+			/*logerror("YM Delta-T memory write $%08x, v=$%02x\n", DELTAT->now_addr >> 1, v);*/
+
 			if ( DELTAT->now_addr != (DELTAT->end<<1) )
 			{
-				DELTAT->memory[DELTAT->now_addr>>1] = v;
-			 	DELTAT->now_addr+=2; /* two nibbles at a time */
+				DELTAT->memory[(DELTAT->now_addr>>1)&DELTAT->memory_mask] = v;
+				DELTAT->now_addr+=2; /* two nibbles at a time */
+
+				/* reset BRDY bit in status register, which means we are processing the write */
+				if (DELTAT->status_reset_handler && DELTAT->status_change_BRDY_bit)
+						(DELTAT->status_reset_handler)(DELTAT->status_change_which_chip, DELTAT->status_change_BRDY_bit);
+
+	/* setup a timer that will callback us in 10 master clock cycles for Y8950
+	* in the callback set the BRDY flag to 1 , which means we have written the data.
+	* For now, we don't really do this; we simply reset and set the flag in zero time, so that the IRQ will work.
+	*/
 				/* set BRDY bit in status register */
-				if(DELTAT->status_set_handler)
-					if(DELTAT->status_change_BRDY_bit)
+				if (DELTAT->status_set_handler != NULL && DELTAT->status_change_BRDY_bit)
 						(DELTAT->status_set_handler)(DELTAT->status_change_which_chip, DELTAT->status_change_BRDY_bit);
 
 			}
 			else
 			{
 				/* set EOS bit in status register */
-				if(DELTAT->status_set_handler)
-					if(DELTAT->status_change_EOS_bit)
+				if (DELTAT->status_set_handler != NULL && DELTAT->status_change_EOS_bit)
 						(DELTAT->status_set_handler)(DELTAT->status_change_which_chip, DELTAT->status_change_EOS_bit);
 			}
-            return;
+
+			return;
 		}
 
 		/* ADPCM synthesis from CPU */
 		if ( (DELTAT->portstate & 0xe0)==0x80 )
 		{
-			DELTAT->now_data = v;
+			DELTAT->CPU_data = v;
+
+			/* Reset BRDY bit in status register, which means we are full of data */
+			if (DELTAT->status_reset_handler && DELTAT->status_change_BRDY_bit)
+					(DELTAT->status_reset_handler)(DELTAT->status_change_which_chip, DELTAT->status_change_BRDY_bit);
 			return;
 		}
 
-	  break;
-	case 0x09:	/* DELTA-N L (ADPCM Playback Prescaler) */
-	case 0x0a:	/* DELTA-N H */
+		break;
+	case 0x09:  /* DELTA-N L (ADPCM Playback Prescaler) */
+	case 0x0a:  /* DELTA-N H */
 		DELTAT->delta  = (DELTAT->reg[0xa]*0x0100 | DELTAT->reg[0x9]);
 		DELTAT->step     = (UINT32)( (double)(DELTAT->delta /* *(1<<(YM_DELTAT_SHIFT-16)) */ ) * (DELTAT->freqbase) );
 		/*logerror("DELTAT deltan:09=%2x 0a=%2x\n",DELTAT->reg[0x9], DELTAT->reg[0xa]);*/
 		break;
-	case 0x0b:	/* Output level control (volume, linear) */
+	case 0x0b:  /* Output level control (volume, linear) */
 		{
 			INT32 oldvol = DELTAT->volume;
 			DELTAT->volume = (v&0xff) * (DELTAT->output_range/256) / YM_DELTAT_DECODE_RANGE;
-/*								v	  *		((1<<16)>>8)		>>	15;
-*						thus:	v	  *		(1<<8)				>>	15;
-*						thus: output_range must be (1 << (15+8)) at least
-*								v     *		((1<<23)>>8)		>>	15;
-*								v	  *		(1<<15)				>>	15;
+/*                              v     *     ((1<<16)>>8)        >>  15;
+*                       thus:   v     *     (1<<8)              >>  15;
+*                       thus: output_range must be (1 << (15+8)) at least
+*                               v     *     ((1<<23)>>8)        >>  15;
+*                               v     *     (1<<15)             >>  15;
 */
 			/*logerror("DELTAT vol = %2x\n",v&0xff);*/
 			if( oldvol != 0 )
@@ -309,12 +394,37 @@ value:   START, REC, MEMDAT, REPEAT, SPOFF, x,x,RESET   meaning:
 			}
 		}
 		break;
-	case 0x0c:	/* Limit Address L */
-	case 0x0d:	/* Limit Address H */
-		DELTAT->limit  = (DELTAT->reg[0xd]*0x0100 | DELTAT->reg[0xc]) << (DELTAT->portshift - DELTAT->DRAMportshift);
+	case 0x0c:  /* Limit Address L */
+	case 0x0d:  /* Limit Address H */
+		{
+		UINT32 oldLimit = DELTAT->limit;
+		DELTAT->limit  = (DELTAT->reg[0xd]*0x0100 | DELTAT->reg[0xc]) << DELTAT->now_portshift;
 		/*logerror("DELTAT limit: 0c=%2x 0d=%2x addr=%8x\n",DELTAT->reg[0xc], DELTAT->reg[0xd],DELTAT->limit );*/
+		if (oldLimit != DELTAT->limit)
+		  logerror("DELTAT limit: %02x=%02x addr=%06x\n",r, DELTAT->reg[r],DELTAT->limit );
+		}
 		break;
 	}
+}
+
+void YM_DELTAT_ADPCM_Init(YM_DELTAT *DELTAT,int emulation_mode,int portshift,INT32* output_ptr,int output_range)
+{
+	DELTAT->emulation_mode = (UINT8)emulation_mode;
+	if (DELTAT->emulation_mode == YM_DELTAT_EMULATION_MODE_YM2610)
+	{
+		DELTAT->portstate = 0x20;
+		DELTAT->control2  = 0x01;
+	}
+	else
+	{
+		DELTAT->portstate = 0x00;
+		DELTAT->control2  = 0x00;	/* default setting depends on the emulation mode. MSX demo called "facdemo_4" doesn't setup control2 register at all and still works */
+	}
+	DELTAT->portshift_base = (UINT8)portshift;
+	DELTAT->output_pointer = output_ptr;
+	DELTAT->output_range = output_range;
+	DELTAT->now_portshift = DELTAT->portshift_base - dram_rightshift[DELTAT->control2 & 3];
+	DELTAT->address_mask = (0x10000 << (DELTAT->now_portshift + 1)) - 1;
 }
 
 void YM_DELTAT_ADPCM_Reset(YM_DELTAT *DELTAT,int pan)
@@ -324,30 +434,50 @@ void YM_DELTAT_ADPCM_Reset(YM_DELTAT *DELTAT,int pan)
 	DELTAT->step      = 0;
 	DELTAT->start     = 0;
 	DELTAT->end       = 0;
-	DELTAT->limit     = ~0; /*this way YM2610 and Y8950 (both of which don't have limit address reg) will still work */
+	DELTAT->limit     = ~0; /* this way YM2610 and Y8950 (both of which don't have limit address reg) will still work */
 	DELTAT->volume    = 0;
 	DELTAT->pan       = &DELTAT->output_pointer[pan];
 	DELTAT->acc       = 0;
 	DELTAT->prev_acc  = 0;
 	DELTAT->adpcmd    = 127;
 	DELTAT->adpcml    = 0;
-	DELTAT->portstate = 0;
+	if (DELTAT->emulation_mode == YM_DELTAT_EMULATION_MODE_YM2610)
+	{
+		DELTAT->portstate &= 0x20;
+		DELTAT->control2  &= 0x03;
+	}
+	else
+	{
+		DELTAT->portstate = 0x00;
+		DELTAT->control2  = 0x00;
+	}
+	DELTAT->now_portshift = DELTAT->portshift_base - dram_rightshift[DELTAT->control2 & 3];
+	DELTAT->address_mask = (0x10000 << (DELTAT->now_portshift + 1)) - 1;
+
+	/* The flag mask register disables the BRDY after the reset, however
+	** as soon as the mask is enabled the flag needs to be set. */
+
+	/* set BRDY bit in status register */
+	if (DELTAT->status_set_handler != NULL && DELTAT->status_change_BRDY_bit)
+			(DELTAT->status_set_handler)(DELTAT->status_change_which_chip, DELTAT->status_change_BRDY_bit);
 }
 
 void YM_DELTAT_postload(YM_DELTAT *DELTAT,UINT8 *regs)
 {
 	int r;
 
-	/* to keep adpcml */
+	// to keep adpcml
 	DELTAT->volume = 0;
-	/* update */
+	// update
 	for(r=1;r<16;r++)
 		YM_DELTAT_ADPCM_Write(DELTAT,r,regs[r]);
 	DELTAT->reg[0] = regs[0];
-	/* current rom data */
-	DELTAT->now_data = *(DELTAT->memory + (DELTAT->now_addr>>1) );
 
+	// current rom data
+	if (DELTAT->memory)
+		DELTAT->now_data = *(DELTAT->memory + (DELTAT->now_addr>>1) );
 }
+
 void YM_DELTAT_savestate(const char *statename,int num,YM_DELTAT *DELTAT)
 {
 	state_save_register_UINT8 (statename, num, "DeltaT.portstate", &DELTAT->portstate, 1);
@@ -374,29 +504,25 @@ void YM_DELTAT_savestate(const char *statename,int num,YM_DELTAT *DELTAT)
 extern const INT32 ym_deltat_decode_tableB1[];
 extern const INT32 ym_deltat_decode_tableB2[];
 
-#define YM_DELTAT_Limit(val,max,min)	\
-{										\
-	if ( val > max ) val = max;			\
-	else if ( val < min ) val = min;	\
+#define YM_DELTAT_Limit(val,max,min)    \
+{                                       \
+	if ( val > max ) val = max;         \
+	else if ( val < min ) val = min;    \
 }
 
 INLINE void YM_DELTAT_synthesis_from_external_memory(YM_DELTAT *DELTAT)
 {
-	UINT32 step;
-	int data;
-
 	DELTAT->now_step += DELTAT->step;
 	if ( DELTAT->now_step >= (1<<YM_DELTAT_SHIFT) )
 	{
-		step = DELTAT->now_step >> YM_DELTAT_SHIFT;
+		UINT32 step = DELTAT->now_step >> YM_DELTAT_SHIFT;
 		DELTAT->now_step &= (1<<YM_DELTAT_SHIFT)-1;
 		do{
-
+			int data;
 			if ( DELTAT->now_addr == (DELTAT->limit<<1) )
 				DELTAT->now_addr = 0;
 
-
-			if ( DELTAT->now_addr == (DELTAT->end<<1) ) {	/* 12-06-2001 JB: corrected comparison. Was > instead of == */
+			if ( DELTAT->now_addr == (DELTAT->end<<1) ) {   /* 12-06-2001 JB: corrected comparison. Was > instead of == */
 				if( DELTAT->portstate&0x10 ){
 					/* repeat start */
 					DELTAT->now_addr = DELTAT->start<<1;
@@ -405,8 +531,7 @@ INLINE void YM_DELTAT_synthesis_from_external_memory(YM_DELTAT *DELTAT)
 					DELTAT->prev_acc = 0;
 				}else{
 					/* set EOS bit in status register */
-					if(DELTAT->status_set_handler)
-						if(DELTAT->status_change_EOS_bit)
+					if(DELTAT->status_set_handler != NULL && DELTAT->status_change_EOS_bit)
 							(DELTAT->status_set_handler)(DELTAT->status_change_which_chip, DELTAT->status_change_EOS_bit);
 
 					/* clear PCM BUSY bit (reflected in status register) */
@@ -418,10 +543,11 @@ INLINE void YM_DELTAT_synthesis_from_external_memory(YM_DELTAT *DELTAT)
 					return;
 				}
 			}
+
 			if( DELTAT->now_addr&1 ) data = DELTAT->now_data & 0x0f;
 			else
 			{
-				DELTAT->now_data = *(DELTAT->memory + (DELTAT->now_addr>>1));
+				DELTAT->now_data = DELTAT->memory[(DELTAT->now_addr>>1)&DELTAT->memory_mask];
 				data = DELTAT->now_data >> 4;
 			}
 
@@ -431,7 +557,8 @@ INLINE void YM_DELTAT_synthesis_from_external_memory(YM_DELTAT *DELTAT)
 			/* The "+1" is there because we use 1 bit more for nibble calculations.*/
 			/* WARNING: */
 			/* Side effect: we should take the size of the mapped ROM into account */
-			DELTAT->now_addr &= ( (1<<(24+1))-1);
+			//DELTAT->now_addr &= ( (1<<(24+1))-1);
+			DELTAT->now_addr &= DELTAT->address_mask;
 
 			/* store accumulator value */
 			DELTAT->prev_acc = DELTAT->acc;
@@ -464,30 +591,27 @@ INLINE void YM_DELTAT_synthesis_from_external_memory(YM_DELTAT *DELTAT)
 
 INLINE void YM_DELTAT_synthesis_from_CPU_memory(YM_DELTAT *DELTAT)
 {
-	UINT32 step;
-	int data;
-
 	DELTAT->now_step += DELTAT->step;
 	if ( DELTAT->now_step >= (1<<YM_DELTAT_SHIFT) )
 	{
-		step = DELTAT->now_step >> YM_DELTAT_SHIFT;
+		UINT32 step = DELTAT->now_step >> YM_DELTAT_SHIFT;
 		DELTAT->now_step &= (1<<YM_DELTAT_SHIFT)-1;
 		do{
-
+			int data;
 			if( DELTAT->now_addr&1 )
 			{
 				data = DELTAT->now_data & 0x0f;
 
-				/* set BRDY bit in status register */
-				if(DELTAT->status_set_handler)
-					if(DELTAT->status_change_BRDY_bit)
-						(DELTAT->status_set_handler)(DELTAT->status_change_which_chip, DELTAT->status_change_BRDY_bit);
+				DELTAT->now_data = DELTAT->CPU_data;
 
+				/* after we used CPU_data, we set BRDY bit in status register,
+				* which means we are ready to accept another byte of data */
+				if(DELTAT->status_set_handler != NULL && DELTAT->status_change_BRDY_bit)
+						(DELTAT->status_set_handler)(DELTAT->status_change_which_chip, DELTAT->status_change_BRDY_bit);
 			}
 			else
 			{
 				data = DELTAT->now_data >> 4;
-
 			}
 
 			DELTAT->now_addr++;
@@ -522,7 +646,6 @@ INLINE void YM_DELTAT_synthesis_from_CPU_memory(YM_DELTAT *DELTAT)
 /* ADPCM B (Delta-T control type) */
 INLINE void YM_DELTAT_ADPCM_CALC(YM_DELTAT *DELTAT)
 {
-
 /*
 some examples:
 value:   START, REC, MEMDAT, REPEAT, SPOFF, x,x,RESET   meaning:
@@ -539,20 +662,41 @@ value:   START, REC, MEMDAT, REPEAT, SPOFF, x,x,RESET   meaning:
 	if ( (DELTAT->portstate & 0xe0)==0xa0 )
 	{
 		YM_DELTAT_synthesis_from_external_memory(DELTAT);
-        return;
+		return;
 	}
 
 	if ( (DELTAT->portstate & 0xe0)==0x80 )
 	{
 		/* ADPCM synthesis from CPU-managed memory (from reg $08) */
-		YM_DELTAT_synthesis_from_CPU_memory(DELTAT);	/* refresh BRDY and change output based on data in ADPCM data reg ($08) */
+		YM_DELTAT_synthesis_from_CPU_memory(DELTAT);    /* change output based on data in ADPCM data reg ($08) */
 		return;
 	}
 
 //todo: ADPCM analysis
-//	if ( (DELTAT->portstate & 0xe0)==0xc0 )
-//	if ( (DELTAT->portstate & 0xe0)==0xe0 )
+//  if ( (DELTAT->portstate & 0xe0)==0xc0 )
+//  if ( (DELTAT->portstate & 0xe0)==0xe0 )
 
+	return;
+}
+
+// create a mask that covers the range 0...v-1
+INLINE UINT32 pow2_mask(UINT32 v)
+{
+	if (v == 0)
+		return 0;
+	v --;
+	v |= (v >>  1);
+	v |= (v >>  2);
+	v |= (v >>  4);
+	v |= (v >>  8);
+	v |= (v >> 16);
+	return v;
+}
+
+INLINE void YM_DELTAT_calc_mem_mask(YM_DELTAT* DELTAT)
+{
+	DELTAT->memory_mask = pow2_mask(DELTAT->memory_size);
+	
 	return;
 }
 

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 #include "driver.h"
 #include "cpu/m6800/m6800.h"
 #include "machine/6821pia.h"
@@ -6,15 +8,18 @@
 #include "wmssnd.h"
 #include "s6.h"
 
+#if defined(PINMAME) && defined(LISY_SUPPORT)
+ #include "lisy/lisy_w.h"
+#endif /* PINMAME && LISY_SUPPORT */
+
 #define S6_PIA0 0
 #define S6_PIA1 1
 #define S6_PIA2 2
 #define S6_PIA3 3
 
-#define S6_VBLANKFREQ    60 /* VBLANK frequency */
-#define S6_IRQFREQ     1000 /* IRQ Frequency*/
+#define S6_IRQFREQ         (3579545./4./(0x380+32)) // CPU clock / (Length of time in cycles between IRQs + length of IRQ)
 
-#define S6_SOLSMOOTH       2 /* Smooth the Solenoids over this numer of VBLANKS */
+#define S6_SOLSMOOTH       2 /* Smooth the Solenoids over this number of VBLANKS */
 #define S6_LAMPSMOOTH      2 /* Smooth the lamps over this number of VBLANKS */
 #define S6_DISPLAYSMOOTH   2 /* Smooth the display over this number of VBLANKS */
 
@@ -107,6 +112,17 @@ static void s6_piaIrq(int state) {
 
 static INTERRUPT_GEN(s6_irq) {
   s6_irqline(1);
+#if defined(LISY_SUPPORT)
+ static count = 0;
+ //get the switches from LISY_mini (needed in test/diag mode)
+ lisy_w_switch_handler();
+ //reduced call to throttle in order not to interfere with timing
+ //but needed for nvram timer
+ if ((count++) > 500 ) {
+   lisy_w_throttle();
+   count = 0;
+   }
+#endif
   timer_set(TIME_IN_CYCLES(32,0),0,s6_irqline);
 }
 
@@ -130,8 +146,21 @@ static READ_HANDLER(s6_dips_r) {
 /********************/
 /*SWITCH MATRIX     */
 /********************/
-static READ_HANDLER(s6_swrow_r) { return core_getSwCol(s6locals.swCol); }
-static WRITE_HANDLER(s6_swcol_w) { s6locals.swCol = data; }
+static READ_HANDLER(s6_swrow_r) {
+#if defined(LISY_SUPPORT)
+ //get the switches from LISY_mini
+ lisy_w_switch_handler();
+#endif
+ return core_getSwCol(s6locals.swCol);
+}
+
+static WRITE_HANDLER(s6_swcol_w) {
+#if defined(LISY_SUPPORT)
+ //LISY timing adjusted with switch polling
+ lisy_w_throttle();
+#endif
+ s6locals.swCol = data;
+}
 
 /*****************/
 /*DISPLAY ALPHA  */
@@ -238,11 +267,14 @@ static INTERRUPT_GEN(s6_vblank) {
   /*-------------------------------
   /  copy local data to interface
   /--------------------------------*/
-  s6locals.vblankCount += 1;
+  s6locals.vblankCount++;
 
   /*-- lamps --*/
   if ((s6locals.vblankCount % S6_LAMPSMOOTH) == 0) {
     memcpy(coreGlobals.lampMatrix, coreGlobals.tmpLampMatrix, sizeof(coreGlobals.tmpLampMatrix));
+#if defined(LISY_SUPPORT)
+    lisy_w_lamp_handler();
+#endif
     memset(coreGlobals.tmpLampMatrix, 0, sizeof(coreGlobals.tmpLampMatrix));
   }
   /*-- solenoids --*/
@@ -250,21 +282,31 @@ static INTERRUPT_GEN(s6_vblank) {
     int ii;
     s6locals.solenoids |= CORE_SOLBIT(CORE_SSFLIPENSOL);
     /*-- special solenoids updated based on switches --*/
+    /*-- but only when no LISY, otherwise special solenoids -- */
+    /*-- lock on when controlled by direct switches         -- */
+#ifndef LISY_SUPPORT
     for (ii = 0; ii < 6; ii++) {
       if (core_gameData->sxx.ssSw[ii] && core_getSw(core_gameData->sxx.ssSw[ii]))
         s6locals.solenoids |= CORE_SOLBIT(CORE_FIRSTSSSOL+ii);
     }
+#endif
   }
   s6locals.solsmooth[s6locals.vblankCount % S6_SOLSMOOTH] = s6locals.solenoids;
 #if S6_SOLSMOOTH != 2
 #  error "Need to update smooth formula"
 #endif
   coreGlobals.solenoids = s6locals.solsmooth[0] | s6locals.solsmooth[1];
+#if defined(LISY_SUPPORT)
+  lisy_w_solenoid_handler();
+#endif
   s6locals.solenoids = coreGlobals.pulsedSolState;
   
   /*-- display --*/
   if ((s6locals.vblankCount % S6_DISPLAYSMOOTH) == 0) {
     memcpy(coreGlobals.segments, s6locals.segments, sizeof(coreGlobals.segments));
+#if defined(LISY_SUPPORT)
+    lisy_w_display_handler();
+#endif
     memcpy(s6locals.segments, s6locals.pseg, sizeof(s6locals.segments));
 
     /*update leds*/
@@ -276,10 +318,13 @@ static INTERRUPT_GEN(s6_vblank) {
 }
 
 static SWITCH_UPDATE(s6) {
+#ifndef LISY_SUPPORT
+//if we have LISY, all switches come from LISY (Matrix[0] has e.g. ADVANCE Button!
   if (inports) {
     coreGlobals.swMatrix[1] = inports[S6_COMINPORT] & 0x00ff;
     coreGlobals.swMatrix[0] = (inports[S6_COMINPORT] & 0xff00)>>8;
   }
+#endif
   /*-- Diagnostic buttons on CPU board --*/
   if (core_getSw(S6_SWCPUDIAG)) {    cpu_set_nmi_line(0, ASSERT_LINE);    memset(&s6locals.pseg,0,sizeof(s6locals.pseg));  }  else    cpu_set_nmi_line(0, CLEAR_LINE);
   sndbrd_0_diag(core_getSw(S6_SWSOUNDDIAG));
@@ -334,7 +379,7 @@ MEMORY_END
 MACHINE_DRIVER_START(s6)
   MDRV_IMPORT_FROM(PinMAME)
   MDRV_CORE_INIT_RESET_STOP(s6,s6,s6)
-  MDRV_CPU_ADD(M6808, 3580000/4)
+  MDRV_CPU_ADD(M6808, 3579545./4.) // MAME: 3580000
   MDRV_CPU_MEMORY(s6_readmem, s6_writemem)
   MDRV_CPU_VBLANK_INT(s6_vblank, 1)
   MDRV_CPU_PERIODIC_INT(s6_irq, S6_IRQFREQ)
@@ -355,4 +400,3 @@ MACHINE_DRIVER_END
 static NVRAM_HANDLER(s6) {
   core_nvram(file, read_or_write, s6_CMOS, 0x0100, 0xff);
 }
-

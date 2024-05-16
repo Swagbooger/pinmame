@@ -182,13 +182,9 @@ static TMS9928A tms[MAX_VDP];
 ** initialize the palette
 */
 PALETTE_INIT(TMS9928A) {
-#if MAMEVER < 6100
-  memcpy(palette,&TMS9928A_palette, sizeof(TMS9928A_palette));
-#else
   int ii;
   for (ii = 0; ii < TMS9928A_PALETTE_SIZE; ii++)
     palette_set_color(ii,TMS9928A_palette[ii*3+0],TMS9928A_palette[ii*3+1],TMS9928A_palette[ii*3+2]);
-#endif /* MAMEVER */
 }
 
 
@@ -441,7 +437,7 @@ static void _TMS9928A_change_register (int which, int reg, UINT8 val) {
     tms[which].Change = 1;
     switch (reg) {
     case 0:
-        if (val & 2) {
+        /*if (val & 2)*/ {
             /* re-calculate masks and pattern generator & colour */
             if (val & 2) {
                 tms[which].colour = ((tms[which].Regs[3] & 0x80) * 64) & (tms[which].vramsize - 1);

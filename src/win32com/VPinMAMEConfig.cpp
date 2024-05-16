@@ -1,10 +1,10 @@
-#include "stdafx.h"
-#include <stdarg.h>
+#include "StdAfx.h"
+#include <cstdarg>
 #include <ctype.h>
-#include <time.h>
+#include <ctime>
 #include "windows.h"
 #include "VPinMAMEConfig.h"
-#include "ControllerRegKeys.h"
+#include "ControllerRegkeys.h"
 
 #ifdef _MSC_VER
 #include "msc.h"
@@ -24,10 +24,12 @@ extern "C" {
   extern struct rc_struct *rc;
   extern FILE *config_get_logfile(void);
   // Global options
-  int verbose	= 0;
-  char *rompath_extra;
-  // from usbdmd.c  /* pinDMD */
+  int verbose = 0;
+  /* pinDMD */
   extern char g_fShowPinDMD;
+  extern char g_fShowWinDMD;
+  extern int g_low_latency_throttle;
+  int g_cpu_affinity_mask = 0;
 }
 
 int fAllowWriteAccess = 1;
@@ -36,7 +38,7 @@ int dmd_border = 1;
 int dmd_title  = 1;
 int dmd_pos_x  = 0;
 int dmd_pos_y  = 0;
-int dmd_doublesize = 0;
+int dmd_scalefactor = 0;
 int dmd_width = 0;
 int dmd_height = 0;
 extern "C" int fastfrms;
@@ -47,12 +49,18 @@ int dmd_colorize = FALSE;
 int dmd_red66 = 225, dmd_green66 = 15, dmd_blue66 = 193;
 int dmd_red33 = 6, dmd_green33 = 0, dmd_blue33 = 214;
 int dmd_red0 = 0, dmd_green0 = 0, dmd_blue0 = 0;
+int dmd_opacity = 100;
+int resampling_quality = 0;
+#if defined(VPINMAME_ALTSOUND) || defined(VPINMAME_PINSOUND)
+int sound_mode = 0;
+#endif
+int g_vgmwrite = 0;
+int g_force_mono_to_stereo = 0;
 
 int threadpriority = 1;
-//int synclevel = 60;
-int synclevel = 0;		//SJE: Default synclevel is 0 now.. 10/01/03
+static int deprecated_synclevel = 0;
 
-static FILE *logfile;
+static FILE *logfile = NULL;
 
 static struct rc_option vpinmame_opts[] = {
 	// VPinMAME options
@@ -63,26 +71,39 @@ static struct rc_option vpinmame_opts[] = {
 	{ "dmd_pos_y",  NULL, rc_int,  &dmd_pos_y,  "0", -10000, 10000, NULL, "DMD display position y" },
 	{ "dmd_width",  NULL, rc_int,  &dmd_width,  "0", 0, 10000, NULL, "DMD display width" },
 	{ "dmd_height", NULL, rc_int,  &dmd_height, "0", 0, 10000, NULL, "DMD display height" },
-	{ "dmd_doublesize",  NULL, rc_bool,  &dmd_doublesize,  "0", 0, 0, NULL, "DMD display doublesize" },
+	{ "dmd_doublesize",  NULL, rc_int,  &dmd_scalefactor,  "0", 0, 10000, NULL, "DMD display size (1/2 = 2x, 3,4,.. = 3x,4x,..)" },
 	{ "threadpriority",  NULL, rc_int,  &threadpriority,  "1", 0, 2, NULL, "priority of the worker thread" },
-	{ "synclevel",  NULL, rc_int,  &synclevel,  "0", -50, 60, NULL, "Sync. of frame rate for external programs (fps)" },	//SJE: Default synclevel is 0 now.. 10/01/03
-        { "fastframes",  NULL, rc_int,  &fastfrms,  "-1", -1, 100000, NULL, "Unthrottled frames at game start" },
-        { "ignore_rom_crc", NULL, rc_bool, &ignoreRomCRC,  "0", -1, 1, NULL, "Ignore ROM CRC Errors" },
-        { "cabinet_mode", NULL, rc_bool, &cabinetMode,  "0", -1, 1, NULL, "Enables Cabinet Mode" },
+	{ "synclevel",  NULL, rc_int,  &deprecated_synclevel,  "0", -50, 60, NULL, "Sync. of frame rate for external programs (fps)" },
+	{ "fastframes",  NULL, rc_int,  &fastfrms,  "-1", -1, 100000, NULL, "Unthrottled frames at game start" },
+	{ "ignore_rom_crc", NULL, rc_bool, &ignoreRomCRC,  "0", -1, 1, NULL, "Ignore ROM CRC Errors" },
+	{ "cabinet_mode", NULL, rc_bool, &cabinetMode,  "0", -1, 1, NULL, "Enables Cabinet Mode" },
 
-        { "dmd_colorize", NULL, rc_bool, &dmd_colorize, "0", 0, 0, NULL, "Set DMD intensity levels as independent colors" },
-        { "dmd_red66", NULL, rc_int, &dmd_red66, "225", 0, 255, NULL, "Colorized DMD: red level for 66% intensity" },
-        { "dmd_green66", NULL, rc_int, &dmd_green66, "15", 0, 255, NULL, "Colorized DMD: green level for 66% intensity" },
-        { "dmd_blue66", NULL, rc_int, &dmd_blue66, "193", 0, 255, NULL, "Colorized DMD: blue level for 66% intensity" },
-        { "dmd_red33", NULL, rc_int, &dmd_red33, "6", 0, 255, NULL, "Colorized DMD: red level for 33% intensity" },
-        { "dmd_green33", NULL, rc_int, &dmd_green33, "0", 0, 255, NULL, "Colorized DMD: green level for 33% intensity" },
-        { "dmd_blue33", NULL, rc_int, &dmd_blue33, "214", 0, 255, NULL, "Colorized DMD: blue level for 33% intensity" },
-        { "dmd_red0", NULL, rc_int, &dmd_red0, "0", 0, 255, NULL, "Colorized DMD: red level for 0% intensity" },
-        { "dmd_green0", NULL, rc_int, &dmd_green0, "0", 0, 255, NULL, "Colorized DMD: green level for 0% intensity" },
-        { "dmd_blue0", NULL, rc_int, &dmd_blue0, "0", 0, 255, NULL, "Colorized DMD: blue level for 0% intensity" },
-        
+	{ "dmd_colorize", NULL, rc_bool, &dmd_colorize, "0", 0, 0, NULL, "Set DMD intensity levels as independent colors" },
+	{ "dmd_red66", NULL, rc_int, &dmd_red66, "225", 0, 255, NULL, "Colorized DMD: red level for 66% intensity" },
+	{ "dmd_green66", NULL, rc_int, &dmd_green66, "15", 0, 255, NULL, "Colorized DMD: green level for 66% intensity" },
+	{ "dmd_blue66", NULL, rc_int, &dmd_blue66, "193", 0, 255, NULL, "Colorized DMD: blue level for 66% intensity" },
+	{ "dmd_red33", NULL, rc_int, &dmd_red33, "6", 0, 255, NULL, "Colorized DMD: red level for 33% intensity" },
+	{ "dmd_green33", NULL, rc_int, &dmd_green33, "0", 0, 255, NULL, "Colorized DMD: green level for 33% intensity" },
+	{ "dmd_blue33", NULL, rc_int, &dmd_blue33, "214", 0, 255, NULL, "Colorized DMD: blue level for 33% intensity" },
+	{ "dmd_red0", NULL, rc_int, &dmd_red0, "0", 0, 255, NULL, "Colorized DMD: red level for 0% intensity" },
+	{ "dmd_green0", NULL, rc_int, &dmd_green0, "0", 0, 255, NULL, "Colorized DMD: green level for 0% intensity" },
+	{ "dmd_blue0", NULL, rc_int, &dmd_blue0, "0", 0, 255, NULL, "Colorized DMD: blue level for 0% intensity" },
+	{ "dmd_opacity", NULL, rc_int, &dmd_opacity, "100", 0, 100, NULL, "Set DMD opacity" },
+
+	{ "resampling_quality", NULL, rc_int, &resampling_quality, "0", 0, 1, NULL, "Quality of the resampling implementation (0=Fast,1=Normal)" },
+#if defined(VPINMAME_ALTSOUND) || defined(VPINMAME_PINSOUND)
+	{ "sound_mode", NULL, rc_int, &sound_mode, "0", 0, 3, NULL, "Sound processing mode (PinMAME, Alternative, PinSound, PinSound + Recordings)" },
+#endif
+
 	/* pinDMD */
 	{ "showpindmd", NULL, rc_bool, &g_fShowPinDMD, "0", 0, 0, NULL, "Show PinDMD display" },
+	{ "showwindmd", NULL, rc_bool, &g_fShowWinDMD, "1", 0, 0, NULL, "Show DMD display" },
+
+	{ "cpu_affinity_mask", NULL, rc_int, &g_cpu_affinity_mask, "0", 0, 0, NULL, "CPU affinity mask" },
+	{ "low_latency_throttle", NULL, rc_bool, &g_low_latency_throttle, "1", 0, 0, NULL, "Distribute CPU execution across one emulated frame to minimize flipper latency" },
+
+	{ "vgmwrite", NULL, rc_bool, &g_vgmwrite, "0", 0, 0, NULL, "Enable to write a VGM of the current session (name is based on romname)" },
+	{ "force_stereo", NULL, rc_bool, &g_force_mono_to_stereo, "0", 0, 0, NULL, "Always force stereo output (e.g. to better support multi channel sound systems)" },
 	{ NULL,	NULL, rc_end, NULL, NULL, 0, 0,	NULL, NULL }
 };
 
@@ -100,7 +121,7 @@ static struct rc_option opts[] = {
 	{ NULL,	NULL, rc_end, NULL, NULL, 0, 0,	NULL, NULL }
 };
 
-static char* GlobalSettings[] = {
+static const char* GlobalSettings[] = {
 	// fileio_opts
 	"rompath",
 	"samplepath",
@@ -129,10 +150,14 @@ static char* GlobalSettings[] = {
 	"screen",
 	"window",
 
+	// performance opts
+	"cpu_affinity_mask",
+	"low_latency_throttle",
+
 	NULL
 };
 
-static char* PathOrFileSettings[] = {
+const static char* PathOrFileSettings[] = {
 	// fileio_opts
 	"rompath",
 	"samplepath",
@@ -153,7 +178,7 @@ static char* PathOrFileSettings[] = {
 	NULL
 };
 
-static char* IgnoredSettings[] = {
+const static char* IgnoredSettings[] = {
 	"resolution",
 	"debug_resolution",
 	"maximize",
@@ -164,7 +189,7 @@ static char* IgnoredSettings[] = {
 	NULL
 };
 
-static char* RunningGameSettings[] = {
+const static char* RunningGameSettings[] = {
 	// fileio_opts
 	"dmd_pos_x",
 	"dmd_pos_y",
@@ -174,16 +199,30 @@ static char* RunningGameSettings[] = {
 	"dmd_width",
 	"dmd_height",
 
-        "dmd_colorize",
-        "dmd_red66",
-        "dmd_green66",
-        "dmd_blue66",
-        "dmd_red33",
-        "dmd_green33",
-        "dmd_blue33",
-        "dmd_red0",
-        "dmd_green0",
-        "dmd_blue0",
+	"dmd_colorize",
+	"dmd_red66",
+	"dmd_green66",
+	"dmd_blue66",
+	"dmd_red33",
+	"dmd_green33",
+	"dmd_blue33",
+	"dmd_red0",
+	"dmd_green0",
+	"dmd_blue0",
+	"dmd_opacity",
+	"resampling_quality",
+#if defined(VPINMAME_ALTSOUND) || defined(VPINMAME_PINSOUND)
+	"sound_mode",
+#endif
+
+	"showpindmd",
+	"showwindmd",
+
+	"cpu_affinity_mask",
+	"low_latency_throttle",
+
+	"vgmwrite",
+	"force_stereo",
 
 	// video_opts
 	"screen",
@@ -195,10 +234,6 @@ static char* RunningGameSettings[] = {
 void vpm_frontend_init(void) {
   /* clear all core options */
   memset(&options,0,sizeof(options));
-#if MAMEVER < 6100
-  /* directly define these */
-  options.use_emulated_ym3812 = 1;
-#endif /* MAMEVER */
   /* create the rc object */
   if (!(rc = rc_create()))
     { fprintf (stderr, "error on rc creation\n"); exit(1); }
@@ -207,9 +242,7 @@ void vpm_frontend_init(void) {
   /* need a decent default for debug width/height */
   if (options.debug_width == 0)  options.debug_width = 640;
   if (options.debug_height == 0) options.debug_height = 480;
-#if MAMEVER >= 6100
   options.debug_depth = 8; // Debugger only works with 8 bits?
-#endif /* MAMEVER */
   options.gui_host = 1;
 //#ifdef MAME_DEBUG
 //  options.mame_debug = 1;
@@ -220,6 +253,13 @@ void vpm_frontend_init(void) {
 }
 
 void vpm_frontend_exit(void) {
+  // DAR@20230528
+  // This is causing a crash.  The logfile was not opened by this code but
+  // it's being closed here.  The code that owns the file doesnt know this
+  // and will return the handle to the closed file in the vpm_game_init()
+  // call.  Can't do that!
+  //if (logfile) // don't know if this is legit to do here, but just be safe
+  //{ fclose(logfile); logfile = NULL; }
 }
 
 extern "C" {
@@ -245,12 +285,12 @@ void vpm_game_init(int game_index) {
 
 	/* override if no rotation requested */
 	// if (video_norotate)
-	if ( (int) get_option("norotate") )
+	if ( (int) get_option("norotate") ) //!! cast to int is ok
 		orientation = options.ui_orientation = ROT0;
 
 	/* rotate right */
 //	if (video_ror)
-	if ( (int) get_option("ror") )
+	if ( (int) get_option("ror") ) //!! cast to int is ok
 	{
 		/* if only one of the components is inverted, switch them */
 		if ((orientation & ROT180) == ORIENTATION_FLIP_X ||
@@ -262,7 +302,7 @@ void vpm_game_init(int game_index) {
 
 	/* rotate left */
 	// if (video_rol)
-	if ( (int) get_option("rol") )
+	if ( (int) get_option("rol") ) //!! cast to int is ok
 	{
 		/* if only one of the components is inverted, switch them */
 		if ((orientation & ROT180) == ORIENTATION_FLIP_X ||
@@ -274,7 +314,7 @@ void vpm_game_init(int game_index) {
 
 	/* auto-rotate right (e.g. for rotating lcds), based on original orientation */
 	// if (video_autoror && (drivers[game_index]->flags & ORIENTATION_SWAP_XY) )
-	if ( (int) get_option("autoror") && (drivers[game_index]->flags & ORIENTATION_SWAP_XY) )
+	if ( (int) get_option("autoror") && (drivers[game_index]->flags & ORIENTATION_SWAP_XY) ) //!! cast to int is ok
 	{
 		/* if only one of the components is inverted, switch them */
 		if ((orientation & ROT180) == ORIENTATION_FLIP_X ||
@@ -286,7 +326,7 @@ void vpm_game_init(int game_index) {
 
 	/* auto-rotate left (e.g. for rotating lcds), based on original orientation */
 	// if (video_autorol && (drivers[game_index]->flags & ORIENTATION_SWAP_XY) )
-	if ( (int) get_option("autorol") && (drivers[game_index]->flags & ORIENTATION_SWAP_XY) )
+	if ( (int) get_option("autorol") && (drivers[game_index]->flags & ORIENTATION_SWAP_XY) ) //!! cast to int is ok
 	{
 		/* if only one of the components is inverted, switch them */
 		if ((orientation & ROT180) == ORIENTATION_FLIP_X ||
@@ -298,10 +338,10 @@ void vpm_game_init(int game_index) {
 
 	/* flip X/Y */
 	// if (video_flipx)
-	if ( (int) get_option("flipx") )
+	if ( (int) get_option("flipx") ) //!! cast to int is ok
 		orientation ^= ORIENTATION_FLIP_X;
 	// if (video_flipy)
-	if ( (int) get_option("flipy") )
+	if ( (int) get_option("flipy") ) //!! cast to int is ok
 		orientation ^= ORIENTATION_FLIP_Y;
 
 	blit_flipx = ((orientation & ORIENTATION_FLIP_X) != 0);
@@ -315,8 +355,7 @@ void vpm_game_init(int game_index) {
 	}
 	if( blit_swapxy )
 	{
-		int temp;
-		temp = options.vector_width;
+		int temp = options.vector_width;
 		options.vector_width = options.vector_height;
 		options.vector_height = temp;
 	}
@@ -326,8 +365,8 @@ void vpm_game_exit(int game_index) {
   /* close open files */
   if (options.language_file) /* this seems to never be opened in Win32 version */
     { mame_fclose(options.language_file); options.language_file = NULL; }
-  if (logfile)
-    { fclose(logfile); logfile = NULL; }
+  //if (logfile) // cannot close this here, as we did not open the file ourselves
+  //  { fclose(logfile); logfile = NULL; }
 }
 
 #if (!defined(PINMAME) || defined(MAME_DEBUG) || defined(_DEBUG)) // In PinMAME, log only in debug mode.
@@ -340,24 +379,28 @@ void CLIB_DECL logerror(const char *text,...) {
     vsnprintf(szBuffer, sizeof(szBuffer) / sizeof(szBuffer[0]), text, arg);
     OutputDebugString(szBuffer);
     fprintf(logfile, szBuffer);
+	
+	//DAR@20230518 Delay in output was hiding cause of crash, should flush
+	//             the buffer regularly to ensure capture
+	fflush(logfile);
   }
   va_end(arg);
 }
 #endif /* PINMAME DEBUG */
 
-int set_option(const char *name, const char *arg, int priority)
+int set_option(const char * const name, const char * const arg, int priority)
 {
 	return rc_set_option(rc, name, arg, priority);
 }
 
-void *get_option(const char *name)
+void *get_option(const char * const name)
 {
 	return *(char**) rc_get_option(rc, name)->dest;
 
 //	return Value;
 }
 
-BOOL FindSettingInList(char* pList[], const char* pszName)
+BOOL FindSettingInList(const char* pList[], const char* const pszName)
 {
 	if ( !pszName || !*pszName )
 		return FALSE;
@@ -371,22 +414,22 @@ BOOL FindSettingInList(char* pList[], const char* pszName)
 	return false;
 }
 
-BOOL IsGlobalSetting(const char* pszName)
+BOOL IsGlobalSetting(const char* const pszName)
 {
 	return FindSettingInList(GlobalSettings, pszName);
 }
 
-BOOL IsPathOrFile(const char* pszName)
+BOOL IsPathOrFile(const char* const pszName)
 {
 	return FindSettingInList(PathOrFileSettings, pszName);
 }
 
-BOOL IgnoreSetting(const char* pszName)
+BOOL IgnoreSetting(const char* const pszName)
 {
 	return FindSettingInList(IgnoredSettings, pszName);
 }
 
-BOOL SettingAffectsRunningGame(const char* pszName)
+BOOL SettingAffectsRunningGame(const char* const pszName)
 {
 	return FindSettingInList(RunningGameSettings, pszName);
 }
@@ -402,6 +445,8 @@ bool RegLoadOpts(HKEY hKey, rc_option *pOpt, char* pszDefault, char* pszValue)
 	DWORD dwSize;
 	char szValue[4096];
 	DWORD dwValue;
+
+	szValue[0] = '\0';
 
 	switch ( pOpt->type ) {
 	case rc_string:
@@ -441,7 +486,7 @@ bool RegLoadOpts(HKEY hKey, rc_option *pOpt, char* pszDefault, char* pszValue)
 			fNew = true;
 		}
 		else
-			sprintf(szValue, "%i", dwValue);
+			sprintf(szValue, "%i", (int)dwValue); // needs to always be interpreted as int!
 		break;
 
 	case rc_bool:
@@ -482,25 +527,25 @@ bool RegSaveOpts(HKEY hKey, rc_option *pOpt, void* pValue)
 	case rc_string:
 		pszValue = *(char**) pValue;
 		if ( pszValue )
-			fFailed = (RegSetValueEx(hKey, pOpt->name, 0, REG_SZ, (LPBYTE) pszValue, lstrlen(pszValue)+1)!=ERROR_SUCCESS);
+			fFailed = (RegSetValueEx(hKey, pOpt->name, 0, REG_SZ, (LPBYTE) pszValue, strlen(pszValue)+1)!=ERROR_SUCCESS);
 		else {
 			lstrcpy(szTemp, "");
-			fFailed = (RegSetValueEx(hKey, pOpt->name, 0, REG_SZ, (LPBYTE) &szTemp, lstrlen(szTemp)+1)!=ERROR_SUCCESS);
+			fFailed = (RegSetValueEx(hKey, pOpt->name, 0, REG_SZ, (LPBYTE) &szTemp, strlen(szTemp)+1)!=ERROR_SUCCESS);
 		}
 		break;
 
 	case rc_int:
-		fFailed = (RegSetValueEx(hKey, pOpt->name, 0, REG_DWORD, (LPBYTE) pValue, sizeof DWORD)!=ERROR_SUCCESS);
+		fFailed = (RegSetValueEx(hKey, pOpt->name, 0, REG_DWORD, (LPBYTE) pValue, sizeof(DWORD))!=ERROR_SUCCESS);
 		break;
 
 	case rc_bool:
 		dwValue = *(int*) pValue?1:0;
-		fFailed = (RegSetValueEx(hKey, pOpt->name, 0, REG_DWORD, (LPBYTE) &dwValue, sizeof dwValue)!=ERROR_SUCCESS);
+		fFailed = (RegSetValueEx(hKey, pOpt->name, 0, REG_DWORD, (LPBYTE) &dwValue, sizeof(dwValue))!=ERROR_SUCCESS);
 		break;
 
 	case rc_float:
-		sprintf(szTemp, "%f", pValue);
-		fFailed = (RegSetValueEx(hKey, pOpt->name, 0, REG_SZ, (LPBYTE) szTemp, lstrlen(szTemp)+1)!=ERROR_SUCCESS);
+		sprintf(szTemp, "%f", *(float*)pValue);
+		fFailed = (RegSetValueEx(hKey, pOpt->name, 0, REG_SZ, (LPBYTE) szTemp, strlen(szTemp)+1)!=ERROR_SUCCESS);
 		break;
 	}
 
@@ -588,7 +633,8 @@ void LoadGlobalSettings()
 				if ( IsPathOrFile(opts[sp]->name) )
 					lstrcpy(szDefault, szInstallDir);
 				
-				lstrcat(szDefault, opts[sp]->deflt);
+				if (opts[sp]->deflt)
+					lstrcat(szDefault, opts[sp]->deflt);
 
 				fNew |= RegLoadOpts(hKey, opts[sp], szDefault, szValue);
 				rc_set_option3(opts[sp], szValue, 0);
@@ -628,7 +674,7 @@ void DeleteGlobalSettings()
 	RegCloseKey(hKey);
 }
 
-void SaveGameSettings(char* pszGameName)
+void SaveGameSettings(const char* const pszGameName)
 {
 	char szKey[MAX_PATH];
 	lstrcpy(szKey, REG_BASEKEY);
@@ -675,7 +721,7 @@ void SaveGameSettings(char* pszGameName)
 	RegCloseKey(hKey);
 }
 
-void LoadGameSettings(char* pszGameName)
+void LoadGameSettings(const char* const pszGameName)
 {
 	bool fNew = false;
 
@@ -744,7 +790,7 @@ void LoadGameSettings(char* pszGameName)
 		SaveGameSettings(pszGameName);
 }
 
-void DeleteGameSettings(char *pszGameName)
+void DeleteGameSettings(const char * const pszGameName)
 {
 	char szKey[MAX_PATH];
 	lstrcpy(szKey, REG_BASEKEY);
@@ -761,9 +807,9 @@ void DeleteGameSettings(char *pszGameName)
 	RegCloseKey(hKey);
 }
 
-BOOL GetSetting(char* pszGameName, char* pszName, VARIANT *pVal)
+BOOL GetSetting(const char* const pszGameName, const char* const pszName, VARIANT *pVal)
 {
-	if ( !pszName && !*pszName )
+	if ( !pszName || !*pszName )
 		return FALSE;
 
 	if ( (pszGameName && IsGlobalSetting(pszName)) || IgnoreSetting(pszName) )
@@ -772,7 +818,7 @@ BOOL GetSetting(char* pszGameName, char* pszName, VARIANT *pVal)
 	struct rc_option *option;
 	if(!(option = rc_get_option2(opts, pszName)))
 		return FALSE;
-	
+
 	HKEY hKey = 0;
 	char szKey[MAX_PATH];
 	lstrcpy(szKey, REG_BASEKEY);
@@ -836,9 +882,9 @@ BOOL GetSetting(char* pszGameName, char* pszName, VARIANT *pVal)
 	return TRUE;
 }
 
-BOOL PutSetting(char* pszGameName, char* pszName, VARIANT vValue)
+BOOL PutSetting(const char* const pszGameName, const char* const pszName, VARIANT vValue)
 {
-	if ( !pszName && !*pszName )
+	if ( !pszName || !*pszName )
 		return FALSE;
 
 	if ( (pszGameName && IsGlobalSetting(pszName)) || IgnoreSetting(pszName) )
@@ -907,7 +953,7 @@ BOOL PutSetting(char* pszGameName, char* pszName, VARIANT vValue)
 /* Registry function */
 
 /* Writes a DWORD to the Registry! Opens the Registry Key Specified & Closes When Done*/
-BOOL WriteRegistry(char* pszKey, char* pszName, DWORD dwValue) {
+BOOL WriteRegistry(const char* const pszKey, const char* const pszName, DWORD dwValue) {
 	HKEY hKey;
 	DWORD dwDisposition;
 
@@ -927,7 +973,7 @@ BOOL WriteRegistry(char* pszKey, char* pszName, DWORD dwValue) {
 }
 
 /* Reads a DWORD from the Registry! Opens the Registry Key Specified & Closes When Done*/
-DWORD ReadRegistry(char* pszKey, char* pszName, DWORD dwDefault) {
+DWORD ReadRegistry(const char* const pszKey, const char* const pszName, DWORD dwDefault) {
 	DWORD dwValue = dwDefault;
 	HKEY hKey;
 	DWORD dwType;
@@ -948,7 +994,7 @@ DWORD ReadRegistry(char* pszKey, char* pszName, DWORD dwDefault) {
 	return dwValue;
 }
 
-char* GetInstallDir(char *pszInstallDir, int iSize)
+char* GetInstallDir(char * const pszInstallDir, int iSize)
 {
 	if ( !pszInstallDir )
 		return NULL;

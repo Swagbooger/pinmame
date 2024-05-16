@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 #ifndef INC_LTD
 #define INC_LTD
 #if !defined(__GNUC__) || (__GNUC__ == 3 && __GNUC_MINOR__ >= 4) || (__GNUC__ >= 4)	// GCC supports "pragma once" correctly since 3.4
@@ -27,9 +29,11 @@
 #define LTD4_COMPORTS \
   PORT_START /* 0 */ \
     /* switch column 2 */ \
+    COREPORT_BITDEF(  0x0010, IPT_COIN1,          IP_KEY_DEFAULT) \
     COREPORT_BIT   (  0x0001, "A7 - Diagnostics", KEYCODE_7) \
     COREPORT_BIT   (  0x0002, "A8 - Enter",       KEYCODE_8) \
-    COREPORT_BITDEF(  0x0010, IPT_COIN1,          IP_KEY_DEFAULT) \
+    /* switch column 0 */ \
+    COREPORT_BIT   (  0x0200, "General Tilt",     KEYCODE_HOME)
 
 /*-- Standard input ports --*/
 #define LTD_INPUT_PORTS_START(name,balls) \
@@ -48,16 +52,39 @@
 
 #define LTD_COMINPORT       CORE_COREINPORT
 
-#define LTD_SOLSMOOTH       6 /* Smooth the Solenoids over this numer of VBLANKS */
-#define LTD4_SOLSMOOTH      2 /* Smooth the Solenoids over this numer of VBLANKS */
+#define LTD_SOLSMOOTH       6 /* Smooth the Solenoids over this number of VBLANKS */
+#define LTD4_SOLSMOOTH      2 /* Smooth the Solenoids over this number of VBLANKS */
 #define LTD_LAMPSMOOTH      2 /* Smooth the lamps over this number of VBLANKS */
 #define LTD_DISPLAYSMOOTH   2 /* Smooth the display over this number of VBLANKS */
 
 /*-- Memory regions --*/
 #define LTD_MEMREG_CPU	REGION_CPU1
+#define LTD_MEMREG_CPU_EKKY REGION_CPU2
 
 /* CPUs */
 #define LTD_CPU	0
+#define LTD_CPU_EKKY 1
+
+/*-- LTD CPU regions and ROM, 1x1K game PROM version --*/
+#define LTD_1_ROMSTART(name, n1, chk1) \
+   ROM_START(name) \
+     NORMALREGION(0x10000, LTD_MEMREG_CPU) \
+       ROM_LOAD(n1, 0xc000, 0x0400, chk1) \
+         ROM_RELOAD(0xc400, 0x0400) \
+         ROM_RELOAD(0xc800, 0x0400) \
+         ROM_RELOAD(0xcc00, 0x0400) \
+         ROM_RELOAD(0xd000, 0x0400) \
+         ROM_RELOAD(0xd400, 0x0400) \
+         ROM_RELOAD(0xd800, 0x0400) \
+         ROM_RELOAD(0xdc00, 0x0400) \
+         ROM_RELOAD(0xe000, 0x0400) \
+         ROM_RELOAD(0xe400, 0x0400) \
+         ROM_RELOAD(0xe800, 0x0400) \
+         ROM_RELOAD(0xec00, 0x0400) \
+         ROM_RELOAD(0xf000, 0x0400) \
+         ROM_RELOAD(0xf400, 0x0400) \
+         ROM_RELOAD(0xf800, 0x0400) \
+         ROM_RELOAD(0xfc00, 0x0400)
 
 /*-- LTD CPU regions and ROM, 1x2K game PROM version --*/
 #define LTD_2_ROMSTART(name, n1, chk1) \
@@ -70,7 +97,7 @@
          ROM_RELOAD(0xe000, 0x0800) \
          ROM_RELOAD(0xe800, 0x0800) \
          ROM_RELOAD(0xf000, 0x0800) \
-         ROM_RELOAD(0xf800, 0x0800) \
+         ROM_RELOAD(0xf800, 0x0800)
 
 /*-- LTD CPU regions and ROM, 1x4K game PROM version --*/
 #define LTD_4_ROMSTART(name, n1, chk1) \
@@ -91,10 +118,16 @@
          ROM_RELOAD(0xf000, 0x1000)
 
 /*-- These are only here so the game structure can be in the game file --*/
-extern MACHINE_DRIVER_EXTERN(LTD);
+extern MACHINE_DRIVER_EXTERN(LTD3);
+extern MACHINE_DRIVER_EXTERN(LTD3_EKKY);
+extern MACHINE_DRIVER_EXTERN(LTD3A);
 extern MACHINE_DRIVER_EXTERN(LTD4);
+extern MACHINE_DRIVER_EXTERN(LTD4HH);
 
-#define gl_mLTD		LTD
-#define gl_mLTD4	LTD4
+#define gl_mLTD3   LTD3
+#define gl_mLTD3EKKY LTD3_EKKY
+#define gl_mLTD3A  LTD3A
+#define gl_mLTD4   LTD4
+#define gl_mLTD4HH LTD4HH
 
 #endif /* INC_LTD */

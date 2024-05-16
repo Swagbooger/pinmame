@@ -11,6 +11,10 @@
 #define ZACSND_CPUBREGION (REGION_CPU1+ZACSND_CPUB)
 #define ZACSND_CPUCREGION (REGION_CPU1+ZACSND_CPUC)
 
+#define USES_TMS_5220            1
+#define NEEDS_TMS_RESET_ON_DATA  2
+#define NO_AY8910                4
+
 extern MACHINE_DRIVER_EXTERN(zac1311);
 extern MACHINE_DRIVER_EXTERN(zac1125);
 extern MACHINE_DRIVER_EXTERN(zac1346);
@@ -73,17 +77,15 @@ extern MACHINE_DRIVER_EXTERN(techno);
 
 #define ZAC_SOUNDROM_e2f2(ue,chke,uf,chkf) \
   SOUNDREGION(0x10000, ZACSND_CPUAREGION) \
-    ROM_LOAD(ue, 0xc000, 0x2000, chke) \
-    ROM_LOAD(uf, 0xe000, 0x2000, chkf)
+    ROM_LOAD(ue, 0xa000, 0x2000, chke) \
+      ROM_RELOAD(0x8000, 0x2000) \
+    ROM_LOAD(uf, 0xe000, 0x2000, chkf) \
+      ROM_RELOAD(0xc000, 0x2000)
 
 #define ZAC_SOUNDROM_e2f4(ue,chke,uf,chkf) \
   SOUNDREGION(0x10000, ZACSND_CPUAREGION) \
     ROM_LOAD(ue, 0xa000, 0x2000, chke) \
-    ROM_LOAD(uf, 0xc000, 0x4000, chkf)
-
-#define ZAC_SOUNDROM_e4f4(ue,chke,uf,chkf) \
-  SOUNDREGION(0x10000, ZACSND_CPUAREGION) \
-    ROM_LOAD(ue, 0x8000, 0x4000, chke) \
+      ROM_RELOAD(0x8000, 0x2000) \
     ROM_LOAD(uf, 0xc000, 0x4000, chkf)
 
 #define ZAC_SOUNDROM_f(uf,chkf) \

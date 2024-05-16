@@ -5,6 +5,9 @@
 #endif
 
 #include "osd_cpu.h"
+#ifdef PINMAME
+#include "pinmame.h"
+#endif
 #include "inptport.h"
 
 #ifdef __cplusplus
@@ -16,8 +19,8 @@ extern "C" {
 #define CLIB_DECL
 #endif
 
-#ifdef __LP64__
-#define FPTR unsigned long   /* 64bit: sizeof(void *) is sizeof(long)  */
+#if defined __LP64__ || defined _WIN64
+#define FPTR unsigned long long  /* 64bit: sizeof(void *) is sizeof(long long)  */
 #else
 #define FPTR unsigned int
 #endif
@@ -297,6 +300,28 @@ void osd_customize_inputport_defaults(struct ipd *defaults);
 
 /******************************************************************************
 
+	P-ROC
+
+******************************************************************************/
+
+#if defined(PINMAME) && defined(PROC_SUPPORT)
+/*
+  return a list of all available P-ROC inputs (see input.h)
+*/
+const struct PROCInfo *osd_get_proc_list(void);
+
+/*
+  tell whether the specified p-roc button is pressed or not.
+  proccode is the OS dependent code specified in the list returned by
+  osd_get_proc_list().
+*/
+int osd_is_proc_pressed(int joycode);
+#endif /* PINMAME && PROC_SUPPORT */
+
+
+
+/******************************************************************************
+
 	File I/O
 
 ******************************************************************************/
@@ -330,6 +355,8 @@ int osd_get_path_info(int pathtype, int pathindex, const char *filename);
 
 /* Attempt to open a file with the given name and mode using the specified path type */
 osd_file *osd_fopen(int pathtype, int pathindex, const char *filename, const char *mode);
+
+UINT64 osd_fsize(osd_file *file);
 
 /* Seek within a file */
 int osd_fseek(osd_file *file, INT64 offset, int whence);

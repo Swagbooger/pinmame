@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /************************************************************************************************
  LTD (Brasil)
  ------------
@@ -6,10 +8,8 @@
  Emulating LTD was a wee little difficult as information is relatively sparse.
 
  There are some very good schematics for system III redrawn by Newton Pessoa (thanks!)
- but somehow they wouldn't align to what is happening on the CPU side.
- Still, I somehow came up with a DMA solution for all of the inputs and outputs.
- Maybe one day I'll find out how they really did it, and rework the driver,
- but for the moment it's working OK...
+ but I failed to see how the DMA access to the peripherals works for the longest time.
+ Now it's understood, and there is sound for the early games as well.
 
  System 4 was hell at first, but some terribly good fun in the end. :)
  LTD switched over from a simple 6802 CPU to the 6803 MCU, and had me sitting and wondering
@@ -18,19 +18,18 @@
  CPU ports were suddenly available (imagine me slapping my forehead at that point)! ;)
 
  I had a manual for system 4 written in Portuguese that was a bit of a help,
- but I still had to guess most of the data; it seems to work fairly good now,
- only whenever a sound is played, this seems to interfere with the displays, which is
- odd because they run on completely different outputs!?
+ but I still had to guess most of the data; it seems to work fairly good now.
 
  Fun fact: LTD obviously didn't use any IRQ or NMI timing on system 4 at all!
  They also drive the flipper coils directly by two pulsed solenoid outputs.
 
    Hardware:
    ---------
-		CPU:	 M6802 for system III, M6803 for system 4 with NTSC quartz
+		CPU:     M6802 for system III, M6803 for system 4 with NTSC quartz
 		DISPLAY: 7-segment LED panels, direct segment access on system 4
-		SOUND:	 - discrete (4 tones, like Zaccaria's 1311) on system III, maybe something better on Zephy
-				 - 2 x AY8910 (separated for left & right speaker) for system 4 games
+		SOUND:   - discrete (tones) on early system III games
+		         - unknown sound hardware on Force, Space Poker, and Black Hole
+		         - 2 x AY8910 (separated for left & right speaker) for Cowboy, Zephy, and system 4 games
  ************************************************************************************************/
 
 #include "driver.h"
@@ -44,34 +43,46 @@
 /-----------------*/
 static struct {
   int vblankCount;
-  int diagnosticLed;
+  UINT8 diagnosticLed;
   UINT32 solenoids;
   UINT16 solenoids2;
   core_tSeg segments;
-  int swCol, lampCol, cycle, solBank;
-  UINT8 port2, dispData[2], auxData;
+  int swCol, cycle;
+  UINT8 port2, auxData;
+
+  UINT8 isHH; // LTD4HH
+
+  UINT8 strobe;
+  UINT8 lampStrobe;
+  UINT8 dispData[2];
+  int clear;
+  int lampCol;
+  int solBank;
 } locals;
 
-#define LTD_CPUFREQ	3579545/4
+#define LTD_CPUFREQ	(3579545./4.)
 
-static WRITE_HANDLER(ay8910_0_ctrl_w) { AY8910Write(0,0,data); }
-static WRITE_HANDLER(ay8910_0_data_w) { AY8910Write(0,1,data); }
-static WRITE_HANDLER(ay8910_0_reset)  { AY8910_reset(0); }
-#ifndef PINMAME_NO_UNUSED	// currently unused function (GCC 3.4)
-static READ_HANDLER (ay8910_0_r)      { return AY8910Read(0); }
-#endif
+static WRITE_HANDLER(ay8910_0_ctrl_w)  { AY8910Write(0,0,data); }
+static WRITE_HANDLER(ay8910_0_data_w)  { AY8910Write(0,1,data); }
+static WRITE_HANDLER(ay8910_0_reset)   { AY8910_reset(0);  }
+static WRITE_HANDLER(ay8910_1_ctrl_w)  { AY8910Write(1,0,data); }
+static WRITE_HANDLER(ay8910_1_data_w)  { AY8910Write(1,1,data); }
+static WRITE_HANDLER(ay8910_1_reset)   { AY8910_reset(1); }
+static WRITE_HANDLER(ay8910_01_ctrl_w) { ay8910_0_ctrl_w(offset, data); ay8910_1_ctrl_w(offset, data); }
+static WRITE_HANDLER(ay8910_01_data_w) { ay8910_0_data_w(offset, data); ay8910_1_data_w(offset, data); }
+static WRITE_HANDLER(ay8910_01_reset)  { ay8910_0_reset(offset, data); ay8910_1_reset(offset, data); }
 
-static WRITE_HANDLER(ay8910_1_ctrl_w) { AY8910Write(1,0,data); }
-static WRITE_HANDLER(ay8910_1_data_w) { AY8910Write(1,1,data); }
-static WRITE_HANDLER(ay8910_1_reset)  { AY8910_reset(1); }
-#ifndef PINMAME_NO_UNUSED	// currently unused function (GCC 3.4)
-static READ_HANDLER (ay8910_1_r)      { return AY8910Read(1); }
-#endif
+static WRITE_HANDLER(port_0a_w) { logerror("AY#0 port A: %02x\n", data); }
+static WRITE_HANDLER(port_0b_w) { logerror("AY#0 port B: %02x\n", data); }
+static WRITE_HANDLER(port_1a_w) { locals.auxData = data; }
+static WRITE_HANDLER(port_1b_w) { logerror("AY#1 port B: %02x\n", data); }
 
 struct AY8910interface LTD_ay8910Int = {
 	2,					/* 2 chips */
 	LTD_CPUFREQ,		/* 895 kHz */
 	{ MIXER(50,MIXER_PAN_LEFT), MIXER(50,MIXER_PAN_RIGHT) },	/* Volume */
+	{ NULL }, { NULL },
+	{ port_0a_w, port_1a_w }, { port_0b_w, port_1b_w },
 };
 
 
@@ -88,9 +99,17 @@ static INTERRUPT_GEN(LTD_vblank) {
   }
   /*-- solenoids --*/
   if ((locals.vblankCount % LTD_SOLSMOOTH) == 0) {
-    coreGlobals.solenoids = locals.solenoids;
     locals.solenoids &= 0x10000;
   }
+  if (!strncasecmp(Machine->gamedrv->name, "force", 5) && (locals.vblankCount % 2) == 0) {
+    locals.solenoids &= 0xff100ff;
+    coreGlobals.tmpLampMatrix[6] = 0;
+  }
+  if (!strncasecmp(Machine->gamedrv->name, "spcpoker", 8) && (locals.vblankCount % 2) == 0) {
+    locals.solenoids &= 0x1ffff;
+    coreGlobals.tmpLampMatrix[5] = 0;
+  }
+  coreGlobals.solenoids = locals.solenoids;
   /*-- display --*/
   if ((locals.vblankCount % LTD_DISPLAYSMOOTH) == 0)
   {
@@ -103,7 +122,7 @@ static INTERRUPT_GEN(LTD_vblank) {
 }
 
 static INTERRUPT_GEN(LTD_irq) {
-  cpu_set_irq_line(0, M6800_IRQ_LINE, PULSE_LINE);
+  cpu_set_irq_line(LTD_CPU, M6800_IRQ_LINE, PULSE_LINE);
 }
 
 static SWITCH_UPDATE(LTD) {
@@ -115,6 +134,19 @@ static SWITCH_UPDATE(LTD) {
   cpu_set_nmi_line(LTD_CPU, coreGlobals.swMatrix[0] & 1);
 }
 
+static DISCRETE_SOUND_START(ltd3_discInt)
+	DISCRETE_INPUT(NODE_01,1,0x0003,0) // tone
+	DISCRETE_INPUT(NODE_02,2,0x0003,0) // enable
+	DISCRETE_MULTADD(NODE_03,1,NODE_01,10,200)
+	DISCRETE_TRIANGLEWAVE(NODE_04,NODE_02,NODE_03,20000,10000,0)
+	DISCRETE_GAIN(NODE_05,NODE_04,12)
+	DISCRETE_OUTPUT(NODE_05,50)
+DISCRETE_SOUND_END
+
+static void snd_stop(int param) {
+  discrete_sound_w(param, 0);
+}
+
 /* Activate periphal write:
    0-6 : INT1-INT7 - Lamps & flipper enable
    7   : INT8      - Solenoids
@@ -123,64 +155,112 @@ static SWITCH_UPDATE(LTD) {
    15  : CLR       - resets all output
  */
 static WRITE_HANDLER(peri_w) {
-  if (offset < 10) {
-    locals.segments[18 - 2*offset].w = core_bcd2seg[data >> 4];
-    locals.segments[19 - 2*offset].w = core_bcd2seg[data & 0x0f];
-  } else if (offset >= 0x10 && offset < 0x16) {
-    coreGlobals.tmpLampMatrix[offset - 0x10] = data;
-    // map flippers enable to sol 17
-    if (offset == 0x10) {
-      locals.solenoids = (locals.solenoids & 0x0ffff) | ((coreGlobals.tmpLampMatrix[0] & 0x40) ? 0 : 0x10000);
-      locals.diagnosticLed = coreGlobals.tmpLampMatrix[0] >> 7;
+  static const int freq[] = { 105, 70, 40, 30, 21, 15, 10, 5 };
+  int seg;
+  if (offset < 0x06) {
+    if (!strncasecmp(Machine->gamedrv->name, "spcpoker", 8)) {
+      if (offset == 5) { // extra strobe for more lamps
+        if (data & 0x08) locals.lampStrobe = 0;
+        else if (data & 0x80) locals.lampStrobe = 1;
+        coreGlobals.tmpLampMatrix[5] = data & 0x77;
+        if (cpu_gettotalcpu() > 1) { // for Ekky sound module
+          if (!(data & 0x77)) {
+            locals.auxData = 0;
+          } else if (~locals.auxData & data & 0x77) {
+            locals.auxData = data & 0x77;
+            cpu_set_nmi_line(LTD_CPU_EKKY, PULSE_LINE);
+          }
+        }
+        if (data & 0x77) {
+          locals.solenoids = (locals.solenoids & 0x1ffff) | ((data & 0x77) << 17);
+          coreGlobals.solenoids = locals.solenoids;
+          locals.vblankCount = 0;
+        }
+      } else {
+        if (offset == 1 && locals.lampStrobe) {
+          coreGlobals.tmpLampMatrix[13] = data;
+        } else {
+          coreGlobals.tmpLampMatrix[offset] = data;
+        }
+      }
+    } else {
+      coreGlobals.tmpLampMatrix[offset] = data;
     }
-  } else if (offset == 0x16) {
-    locals.solenoids = (locals.solenoids & 0x100ff) | (data << 8);
-  } else if (offset == 0x17) {
-    locals.solenoids = (locals.solenoids & 0x1ff00) | data;
+    // map flippers enable to sol 17
+    if (!offset) {
+      locals.solenoids = (locals.solenoids & 0xfeffff) | ((data & 0x40) || (~data & 0x10) ? 0 : 0x10000);
+      locals.diagnosticLed = data >> 7;
+      if (cpu_gettotalcpu() > 1) { // for Ekky sound module: (un)mute background sound depending on enable
+        mixer_set_volume(2, (locals.solenoids & 0x10000) ? 100 : 0);
+      }
+    }
+  } else if (offset == 0x06) { // either lamps or solenoids, or a mix of both!
+    coreGlobals.tmpLampMatrix[6] = data;
+    if (cpu_gettotalcpu() > 1 && strncasecmp(Machine->gamedrv->name, "spcpoker", 8)) { // for Ekky sound module
+      locals.auxData = data & 0x7f; // mask out "Happy birthday" tune for the Ekky module
+      if (locals.auxData) {
+        cpu_set_nmi_line(LTD_CPU_EKKY, PULSE_LINE);
+      }
+    }
+    locals.solenoids = (locals.solenoids & 0xff00ff) | (data << 8);
+    coreGlobals.solenoids = locals.solenoids;
+    locals.vblankCount = 0;
+  } else if (offset == 0x07) {
+    locals.solenoids = (locals.solenoids & 0xffff00) | data;
+    coreGlobals.solenoids = locals.solenoids;
+    locals.vblankCount = 0;
+  } else if (offset == 0x08) {
+    seg = 9 - (locals.strobe & 0x0f);
+    locals.segments[seg].w = core_bcd2seg7a[data >> 4];
+    locals.segments[10 + seg].w = core_bcd2seg7a[data & 0x0f];
+    if (core_gameData->hw.gameSpecific1 & (1 << seg)) {
+      if (seg & 1)
+        coreGlobals.tmpLampMatrix[8 + seg / 2 * 2] = (coreGlobals.tmpLampMatrix[8 + seg / 2 * 2] & 0xf0) | (data >> 4);
+      else
+        coreGlobals.tmpLampMatrix[8 + seg / 2 * 2] = (coreGlobals.tmpLampMatrix[8 + seg / 2 * 2] & 0x0f) | (data & 0xf0);
+    }
+    if (core_gameData->hw.gameSpecific2 & (1 << seg)) {
+      if (seg & 1)
+        coreGlobals.tmpLampMatrix[9 + seg / 2 * 2] = (coreGlobals.tmpLampMatrix[9 + seg / 2 * 2] & 0xf0) | (data & 0x0f);
+      else
+        coreGlobals.tmpLampMatrix[9 + seg / 2 * 2] = (coreGlobals.tmpLampMatrix[9 + seg / 2 * 2] & 0x0f) | (data << 4);
+    }
+  } else if (offset == 0x09) {
+    locals.strobe = data;
+    if (data & 0x10) {
+      discrete_sound_w(1, freq[data >> 5]);
+      discrete_sound_w(2, 1);
+      timer_set(0.1, 2, snd_stop);
+    }
+  } else if (offset == 0x0d && !strncasecmp(Machine->gamedrv->name, "force", 5)) { // drop target single reset solenoids
+    locals.solenoids = (locals.solenoids & 0x1ffff) | (0x10000 << data);
+    coreGlobals.solenoids = locals.solenoids;
+    locals.vblankCount = 0;
+  } else if (offset == 0x0f) {
+    logerror("CLR\n");
+  } else {
+    logerror("INT%d:%02x\n", offset + 1, data);
   }
 }
 
-static WRITE_HANDLER(auxlamp1_w) {
-  coreGlobals.tmpLampMatrix[8] = data;
-}
-
-static WRITE_HANDLER(auxlamp2_w) {
-  coreGlobals.tmpLampMatrix[9] = data;
-}
-
-static WRITE_HANDLER(auxlamp3_w) {
-  coreGlobals.tmpLampMatrix[10] = data;
-}
-
-static WRITE_HANDLER(auxlamp4_w) {
-  coreGlobals.tmpLampMatrix[11] = data;
-}
-
-static WRITE_HANDLER(auxlamp5_w) {
-  coreGlobals.tmpLampMatrix[12] = data;
-}
-
-static WRITE_HANDLER(auxlamp6_w) {
-  coreGlobals.tmpLampMatrix[13] = data;
-}
-
-#ifndef PINMAME_NO_UNUSED	// currently unused function (GCC 3.4)
-static WRITE_HANDLER(auxlamp7_w) {
-  coreGlobals.tmpLampMatrix[7] = data;
-}
-#endif
-
 static WRITE_HANDLER(ram_w) {
   generic_nvram[offset] = data;
-  if (offset >= 0x60 && offset < 0x78) peri_w(offset-0x60, data);
+  if (offset >= 0x70 && offset < 0x80) peri_w(offset-0x70, data);
 }
 
 static READ_HANDLER(sw_r) {
   return ~(coreGlobals.swMatrix[offset + 1] & 0x3f);
 }
 
+static READ_HANDLER(ff_r) {
+  return 0xff;
+}
+
 static MACHINE_INIT(LTD) {
   memset(&locals, 0, sizeof locals);
+  if (cpu_gettotalcpu() > 1) { // for Ekky sound module: mute background sound at start
+    mixer_set_volume(2, 0);
+  }
 }
 
 /*-----------------------------------------
@@ -188,34 +268,51 @@ static MACHINE_INIT(LTD) {
 /------------------------------------------*/
 static MEMORY_READ_START(LTD_readmem)
   {0x0000,0x007f, MRA_RAM},
-  {0x0080,0x00ff, sw_r},
+  {0x0080,0x0087, sw_r},
+  {0x00ff,0x00ff, ff_r}, // spcpoker code flaw: lda $00FF instead of lda #$FF, read from unmapped space -> all bits should be high
   {0xc000,0xffff, MRA_ROM},
 MEMORY_END
 
 static MEMORY_WRITE_START(LTD_writemem)
   {0x0000,0x007f, ram_w, &generic_nvram, &generic_nvram_size},
-  {0x0800,0x0800, auxlamp1_w},
-  {0x0c00,0x0c00, auxlamp4_w},
-  {0x1800,0x1800, auxlamp2_w},
-  {0x1c00,0x1c00, auxlamp5_w},
-  {0x2800,0x2800, auxlamp3_w},
-  {0x2c00,0x2c00, auxlamp6_w},
+  {0x0800,0x0800, ay8910_01_data_w},
+  {0x0c00,0x0c00, ay8910_01_ctrl_w},
+  {0x1800,0x1800, ay8910_0_data_w},
+  {0x1c00,0x1c00, ay8910_0_ctrl_w},
+  {0x2800,0x2800, ay8910_1_data_w},
+  {0x2c00,0x2c00, ay8910_1_ctrl_w},
+  {0xb000,0xb000, ay8910_01_reset},
 MEMORY_END
 
-MACHINE_DRIVER_START(LTD)
+MACHINE_DRIVER_START(LTD3)
   MDRV_IMPORT_FROM(PinMAME)
   MDRV_CPU_ADD_TAG("mcpu", M6802, LTD_CPUFREQ)
   MDRV_CPU_MEMORY(LTD_readmem, LTD_writemem)
   MDRV_CPU_VBLANK_INT(LTD_vblank, 1)
-  MDRV_CPU_PERIODIC_INT(LTD_irq, 200)
+  MDRV_CPU_PERIODIC_INT(LTD_irq, 260)
   MDRV_CORE_INIT_RESET_STOP(LTD,NULL,NULL)
   MDRV_NVRAM_HANDLER(generic_1fill)
   MDRV_DIAGNOSTIC_LEDH(1)
   MDRV_SWITCH_UPDATE(LTD)
+  MDRV_SOUND_ADD(DISCRETE, ltd3_discInt)
+MACHINE_DRIVER_END
+
+MACHINE_DRIVER_START(LTD3A)
+  MDRV_IMPORT_FROM(LTD3)
+  MDRV_CPU_MODIFY("mcpu")
+  MDRV_CPU_PERIODIC_INT(LTD_irq, 1111)
+
+  MDRV_SOUND_ADD(AY8910, LTD_ay8910Int)
+  MDRV_SOUND_ATTRIBUTES(SOUND_SUPPORTS_STEREO)
 MACHINE_DRIVER_END
 
 
 // System 4
+
+static MACHINE_INIT(LTDHH) {
+  memset(&locals, 0, sizeof locals);
+  locals.isHH = 1;
+}
 
 static INTERRUPT_GEN(LTD4_vblank) {
   locals.vblankCount++;
@@ -240,6 +337,7 @@ static INTERRUPT_GEN(LTD4_vblank) {
 static SWITCH_UPDATE(LTD4) {
   if (inports) {
     CORE_SETKEYSW(inports[LTD_COMINPORT], 0x13, 2);
+    CORE_SETKEYSW(inports[LTD_COMINPORT]>>8, 0xff, 0);
   }
 }
 
@@ -259,41 +357,39 @@ static UINT8 convDisp(UINT8 data) {
 }
 
 static WRITE_HANDLER(peri4_w) {
-  static int clear = 0;
   if (locals.port2 & 0x10) {
     switch (locals.cycle) {
-      case  0: if (data != 0xff) locals.lampCol = (1 + core_BitColToNum(data)) % 8; clear = (data != 0xff); break;
-      case  1: locals.solBank = core_BitColToNum(data); break;
+      case  0: locals.clear = data != 0xff; if (locals.clear) locals.lampCol = (1 + core_BitColToNum(data)) % 8; break;
+      case  1: if (locals.isHH) {
+                 if ((data & 0x0f) != 0x0f) locals.solenoids |= 0x10 << (data & 0x0f);
+                 if ((data & 0xf0) != 0xf0) locals.solenoids |= 0x4000 << (data >> 4);
+                 coreGlobals.solenoids = locals.solenoids;
+               } else
+                 locals.solBank = core_BitColToNum(data);
+               break;
       case  2: locals.solenoids |= (data >> 4) << (locals.solBank * 4);
                locals.solenoids2 |= (data & 0x0f) << 4;
                coreGlobals.solenoids = locals.solenoids; coreGlobals.solenoids2 = locals.solenoids2; break;
-      case  6: if (clear) locals.swCol = data >> 4;
+      case  6: if (locals.clear) locals.swCol = data >> 4;
                locals.segments[31-(data & 0x0f)].w = locals.dispData[0];
                locals.segments[15-(data & 0x0f)].w = locals.dispData[1]; break;
-      case  7: if (clear) locals.dispData[0] = convDisp(data); break;
-      case  8: if (clear) locals.dispData[1] = convDisp(data); break;
-      case  9: coreGlobals.tmpLampMatrix[(locals.lampCol % 2 ? 8 : 12) + locals.lampCol / 2] = locals.auxData; break;
-      case 10: coreGlobals.tmpLampMatrix[locals.lampCol] = data; break;
+      case  7: if (locals.clear) locals.dispData[0] = convDisp(data); break;
+      case  8: if (locals.clear) locals.dispData[1] = convDisp(data); break;
+      case  9: if (locals.clear) coreGlobals.tmpLampMatrix[(locals.lampCol % 2 ? 8 : 12) + locals.lampCol / 2] = locals.auxData; break;
+      case 10: if (locals.clear) coreGlobals.tmpLampMatrix[locals.lampCol] = data; break;
       default: logerror("peri_%d_w = %02x\n", locals.cycle, data);
     }
   }
 }
 
-static READ_HANDLER(unknown_r) {
-  return locals.port2;
+static READ_HANDLER(tilt_r) {
+  return coreGlobals.swMatrix[0];
 }
 
 static WRITE_HANDLER(cycle_w) {
   if (~locals.port2 & data & 0x10) locals.cycle++;
+  if (locals.port2 == 0x04) locals.cycle = 0;
   locals.port2 = data;
-}
-
-static WRITE_HANDLER(cycle_reset_w) {
-  locals.cycle = 0;
-}
-
-static WRITE_HANDLER(auxlamps_w) {
-  locals.auxData = data;
 }
 
 /*-----------------------------------------
@@ -310,19 +406,20 @@ static MEMORY_WRITE_START(LTD4_writemem)
   {0x0000,0x001f, m6803_internal_registers_w},
   {0x0080,0x00ff, MWA_RAM},
   {0x0100,0x01ff, MWA_RAM, &generic_nvram, &generic_nvram_size},
-  {0x0800,0x0800, cycle_reset_w},
-  {0x2800,0x2800, auxlamps_w},
+  {0x0800,0x0800, ay8910_1_ctrl_w},
   {0x0c00,0x0c00, ay8910_1_reset},
   {0x1000,0x1000, ay8910_0_ctrl_w},
   {0x1400,0x1400, ay8910_0_reset},
-  {0x1800,0x1800, ay8910_1_ctrl_w},
+  {0x1800,0x1800, ay8910_01_ctrl_w},
+  {0x1c00,0x1c00, ay8910_01_reset},
+  {0x2800,0x2800, ay8910_1_data_w},
   {0x3000,0x3000, ay8910_0_data_w},
-  {0x3800,0x3800, ay8910_1_data_w},
+  {0x3800,0x3800, ay8910_01_data_w},
 MEMORY_END
 
 static PORT_READ_START(LTD4_readport)
   { M6803_PORT1, M6803_PORT1, sw4_r },
-  { M6803_PORT2, M6803_PORT2, unknown_r },
+  { M6803_PORT2, M6803_PORT2, tilt_r },
 PORT_END
 
 static PORT_WRITE_START(LTD4_writeport)
@@ -341,4 +438,47 @@ MACHINE_DRIVER_START(LTD4)
   MDRV_SWITCH_UPDATE(LTD4)
   MDRV_SOUND_ADD(AY8910, LTD_ay8910Int)
   MDRV_SOUND_ATTRIBUTES(SOUND_SUPPORTS_STEREO)
+MACHINE_DRIVER_END
+
+MACHINE_DRIVER_START(LTD4HH)
+  MDRV_IMPORT_FROM(LTD4)
+  MDRV_CORE_INIT_RESET_STOP(LTDHH,NULL,NULL)
+MACHINE_DRIVER_END
+
+
+// "EKKY" sound board - plays 8 different sounds (including "happy birthday", and a background sound)
+
+static READ_HANDLER(m1000_r) {
+  return ~core_revbyte(locals.auxData);
+}
+
+static WRITE_HANDLER(m1800_w) {
+  if (data & 1) DAC_0_data_w(0, 0x80);
+  if (data & 2) DAC_0_data_w(0, 0x00);
+  if (data & 4) DAC_1_data_w(0, 0x80);
+  if (data & 8) DAC_1_data_w(0, 0x00);
+}
+
+static MEMORY_READ_START(ekky_readmem)
+  {0x0000, 0x07ff, MRA_ROM},
+  {0x1000, 0x1000, m1000_r},
+MEMORY_END
+
+static MEMORY_WRITE_START(ekky_writemem)
+  {0x0000, 0x17ff, MWA_NOP},
+  {0x1800, 0x1800, m1800_w},
+  {0x1801, 0xffff, MWA_NOP},
+MEMORY_END
+
+static struct DACinterface ekky_dacInt = {
+  2,
+  { 30, 15 }
+};
+
+MACHINE_DRIVER_START(LTD3_EKKY)
+  MDRV_IMPORT_FROM(LTD3)
+  MDRV_CPU_ADD_TAG("scpu", Z80, 3579545./2.)
+  MDRV_CPU_MEMORY(ekky_readmem, ekky_writemem)
+  MDRV_CPU_FLAGS(CPU_AUDIO_CPU)
+  MDRV_SOUND_ADD(DAC, ekky_dacInt)
 MACHINE_DRIVER_END

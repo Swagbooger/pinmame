@@ -1,13 +1,15 @@
+// license:BSD-3-Clause
+
 /************************************************************************************************
  Peyper (Spain)
  --------------
    Hardware:
    ---------
-		CPU:     Z80 @ 2.5 MHz
-			INT: IRQ @ 2500 Hz
+		CPU:     Z80B @ 5 MHz
+		    INT: IRQ @ ~1600 Hz (R/C timer, needs to be measured on real machine, eg. Video Dens uses a slower rate)
 		IO:      Z80 ports, Intel 8279 KDI chip, AY8910 ports for lamps
 		DISPLAY: 7-segment panels in both sizes
-		SOUND:	 2 x AY8910 @ 2.5 MHz
+		SOUND:   2 x AY8910 @ 2.5 MHz
  ************************************************************************************************/
 
 #include "driver.h"
@@ -16,8 +18,11 @@
 #include "peyper.h"
 #include "sndbrd.h"
 
-#define PEYPER_IRQFREQ    2500 /* IRQ frequency */
-#define PEYPER_CPUFREQ 2500000 /* CPU clock frequency */
+#define VD_IRQFREQ         600 /* IRQ frequency for Video Dens games on this hardware */
+#define PEYPER_IRQFREQ    1600 /* IRQ frequency */
+#define PEYPER_IRQFREQ_O  2500 /* IRQ frequency for Odin (Deluxe) */
+#define PEYPER_IRQFREQ_OP  440 /* IRQ frequency for Odin Prototype */
+#define PEYPER_CPUFREQ 5000000 /* CPU clock frequency */
 
 /*----------------
 /  Local variables
@@ -29,10 +34,12 @@ static struct {
   int    i8279cmd;
   int    i8279reg;
   UINT8  i8279ram[16];
+
+  UINT8 lastData;
 } locals;
 
 static INTERRUPT_GEN(PEYPER_irq) {
-  cpu_set_irq_line(PEYPER_CPU, 0, PULSE_LINE);
+  cpu_set_irq_line(PEYPER_CPU, 0, HOLD_LINE);
 }
 
 /*-------------------------------
@@ -46,7 +53,7 @@ static INTERRUPT_GEN(PEYPER_vblank) {
   /*-- solenoids --*/
   coreGlobals.solenoids = locals.solenoids;
   if ((locals.vblankCount % PEYPER_SOLSMOOTH) == 0)
-  	locals.solenoids &= 0xff000000;
+    locals.solenoids &= 0xff000000;
   /*-- display --*/
   if ((locals.vblankCount % PEYPER_DISPLAYSMOOTH) == 0) {
     memcpy(coreGlobals.segments, locals.segments, sizeof(locals.segments));
@@ -89,7 +96,10 @@ static WRITE_HANDLER(lamp7_w) {
 
 // the right decoder provided, you could access up to 255 solenoids this way; I guess only 16 are used though
 static WRITE_HANDLER(sol_w) {
-  if (data) locals.solenoids |= (1 << (data-1));
+  if (data) {
+    locals.solenoids |= (1 << (data-1));
+    locals.vblankCount = 0;
+  }
 }
 
 static WRITE_HANDLER(ay8910_0_ctrl_w)   { AY8910Write(0,0,data); }
@@ -102,8 +112,8 @@ static WRITE_HANDLER(ay8910_1_porta_w)	{ coreGlobals.tmpLampMatrix[2] = data; }
 static WRITE_HANDLER(ay8910_1_portb_w)	{ coreGlobals.tmpLampMatrix[3] = data; }
 
 struct AY8910interface PEYPER_ay8910Int = {
-	2,			/* 2 chip */
-	2500000,	/* 2.5 MHz */
+	2,				/* 2 chips */
+	2500000,		/* 2.5 MHz */
 	{ 30, 30 },		/* Volume */
 	{ 0, 0 }, { 0, 0 },
 	{ ay8910_0_porta_w, ay8910_1_porta_w },
@@ -112,13 +122,12 @@ struct AY8910interface PEYPER_ay8910Int = {
 
 // handles the 8279 keyboard / display interface chip
 static READ_HANDLER(i8279_r) {
-  static UINT8 lastData;
   logerror("i8279 r%d (cmd %02x, reg %02x)\n", offset, locals.i8279cmd, locals.i8279reg);
-  if ((locals.i8279cmd & 0xe0) == 0x40) lastData = coreGlobals.swMatrix[1 + (locals.i8279cmd & 0x07)]; // read switches (only 4 columns actually used)
-  else if ((locals.i8279cmd & 0xe0) == 0x60) lastData = locals.i8279ram[locals.i8279reg]; // read display ram
+  if ((locals.i8279cmd & 0xe0) == 0x40) locals.lastData = coreGlobals.swMatrix[1 + (locals.i8279cmd & 0x07)]; // read switches (only 4 columns actually used)
+  else if ((locals.i8279cmd & 0xe0) == 0x60) locals.lastData = locals.i8279ram[locals.i8279reg]; // read display ram
   else logerror("i8279 r:%02x\n", locals.i8279cmd);
   if (locals.i8279cmd & 0x10) locals.i8279reg = (locals.i8279reg+1) % 16; // auto-increase if register is set
-  return lastData;
+  return locals.lastData;
 }
 static WRITE_HANDLER(i8279_w) {
   if (offset) { // command
@@ -137,9 +146,9 @@ static WRITE_HANDLER(i8279_w) {
     if (locals.i8279cmd & 0x10) locals.i8279reg = data & 0x0f; // reset data for auto-increment
   } else { // data
     if ((locals.i8279cmd & 0xe0) == 0x80) { // write display ram
-      if ((coreGlobals.tmpLampMatrix[8] & 0x11) == 0x11) { // load replay values
+      locals.i8279ram[locals.i8279reg] = data;
+      if (!core_gameData->hw.gameSpecific1 && (coreGlobals.tmpLampMatrix[8] & 0x11) == 0x11) { // load replay values
         locals.segments[40 + locals.i8279reg].w = core_bcd2seg7[data >> 4];
-        locals.segments[36].w = core_bcd2seg7[0];
       } else {
         locals.segments[15 - locals.i8279reg].w = core_bcd2seg7[data >> 4];
         locals.segments[31 - locals.i8279reg].w = core_bcd2seg7[data & 0x0f];
@@ -152,6 +161,8 @@ static WRITE_HANDLER(i8279_w) {
           locals.segments[32].w = data & 0x40 ? core_bcd2seg7[1] : 0;
           locals.segments[35].w = data & 0x04 ? core_bcd2seg7[1] : 0;
           break;
+        case  6: if (!locals.segments[36].w) locals.segments[36].w = core_bcd2seg7[0]; break; // odin(dlx)
+        case  7: if (!locals.segments[36].w) locals.segments[36].w = core_bcd2seg7[0]; break; // others
         case  8: coreGlobals.tmpLampMatrix[9] = data; break;
         case  9: coreGlobals.tmpLampMatrix[10] = data; break;
         case 10:
@@ -171,13 +182,15 @@ static MEMORY_READ_START(PEYPER_readmem)
   {0x6000,0x67ff, MRA_RAM},
 MEMORY_END
 
-// NVRAM works, but not always?
 static MEMORY_WRITE_START(PEYPER_writemem)
+  {0x0000,0x5fff, MWA_NOP},
   {0x6000,0x67ff, MWA_RAM, &generic_nvram, &generic_nvram_size},
 MEMORY_END
 
 static PORT_READ_START(PEYPER_readport)
   {0x00,0x01, i8279_r},
+  {0x05,0x05, AY8910_read_port_0_r},
+  {0x09,0x09, AY8910_read_port_1_r},
   {0x20,0x24, dip_r}, // only 20, 24 used
   {0x28,0x28, sw0_r},
 PORT_END
@@ -210,4 +223,22 @@ MACHINE_DRIVER_START(PEYPER)
   MDRV_SWITCH_UPDATE(PEYPER)
   MDRV_SWITCH_CONV(PEYPER_sw2m,PEYPER_m2sw)
   MDRV_SOUND_ADD(AY8910, PEYPER_ay8910Int)
+MACHINE_DRIVER_END
+
+MACHINE_DRIVER_START(PEYPER_O)
+  MDRV_IMPORT_FROM(PEYPER)
+  MDRV_CPU_MODIFY("mcpu")
+  MDRV_CPU_PERIODIC_INT(PEYPER_irq, PEYPER_IRQFREQ_O)
+MACHINE_DRIVER_END
+
+MACHINE_DRIVER_START(PEYPER_OP)
+  MDRV_IMPORT_FROM(PEYPER)
+  MDRV_CPU_MODIFY("mcpu")
+  MDRV_CPU_PERIODIC_INT(PEYPER_irq, PEYPER_IRQFREQ_OP)
+MACHINE_DRIVER_END
+
+MACHINE_DRIVER_START(PEYPER_VD)
+  MDRV_IMPORT_FROM(PEYPER)
+  MDRV_CPU_MODIFY("mcpu")
+  MDRV_CPU_PERIODIC_INT(PEYPER_irq, VD_IRQFREQ)
 MACHINE_DRIVER_END

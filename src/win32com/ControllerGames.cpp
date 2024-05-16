@@ -1,6 +1,6 @@
 // ControllerGames.cpp : Implementation of CGames
-#include "stdafx.h"
-#include "VPinMAME_h.h"
+#include "StdAfx.h"
+#include "VPinMAME.h"
 #include "ControllerGame.h"
 #include "ControllerGames.h"
 
@@ -29,7 +29,7 @@ public:
 		if ( m_pGames )
 			m_pGames->Release();
 		m_pGames = NULL;
- 	}
+	}
 
 
 DECLARE_NO_REGISTRY()
@@ -46,7 +46,7 @@ END_COM_MAP()
 // ISupportsErrorInfo
 	STDMETHOD(InterfaceSupportsErrorInfo)(REFIID riid)
 	{
-		static const IID* arr[] = 
+		static const IID* arr[] =
 		{
 			&IID_IEnumGames
 		};
@@ -62,7 +62,7 @@ END_COM_MAP()
 public:
 	STDMETHODIMP Next(ULONG celt,VARIANT __RPC_FAR *rgVar, ULONG __RPC_FAR *pCeltFetched)
 	{
-		HRESULT hr = S_FALSE;
+		HRESULT hr;
 
 		if ( pCeltFetched )
 			*pCeltFetched = 0;
@@ -70,7 +70,7 @@ public:
 		int i = 0;
 
 		while ( m_lCurrent<m_lMax && celt ) {
-			CComVariant varCelt(m_lCurrent++);
+			CComVariant varCelt(++m_lCurrent);
 			VariantInit(&rgVar[i]);
 
 			IGame* pGame;
@@ -82,7 +82,7 @@ public:
 			rgVar[i].ppdispVal = new IDispatch*;
 			hr = pGame->QueryInterface(IID_IDispatch, (void**) &rgVar[i].pdispVal);
 			pGame->Release();
-			
+
 			if ( FAILED(hr) ) 
 				return hr;
 
@@ -96,7 +96,7 @@ public:
 		return celt ? S_FALSE : S_OK;
 	}
 
-    STDMETHODIMP Skip(ULONG celt)
+	STDMETHODIMP Skip(ULONG celt)
 	{
 		m_lCurrent += celt;
 		if ( m_lCurrent<m_lMax ) return S_OK;
@@ -105,13 +105,13 @@ public:
 		return S_FALSE;
 	}
 
-    STDMETHODIMP Reset(void)
+	STDMETHODIMP Reset(void)
 	{
 		m_lCurrent = 0;
 
 		return S_OK;
 	}
-    
+
 	STDMETHODIMP Clone(IEnumVARIANT __RPC_FAR *__RPC_FAR *ppEnum)
 	{
 		return Clone((IUnknown**) ppEnum);
@@ -206,7 +206,7 @@ CGames::~CGames()
 			i++;
 		}
 
-		delete m_pGamesList;
+		delete [] m_pGamesList;
 		m_pGamesList = NULL;
 	}
 }

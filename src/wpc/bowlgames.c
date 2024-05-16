@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /*
  * In this file we'll collect any bowler, shuffle alley, pitch & bat game,
  * and other non-pinball stuff that's running on pinball machine hardware.
@@ -6,6 +8,7 @@
 #include "driver.h"
 #include "core.h"
 #include "by35.h"
+#include "by35snd.h"
 #include "sndbrd.h"
 #include "wmssnd.h"
 #include "wpc.h"
@@ -16,6 +19,7 @@
 #include "dedmd.h"
 #include "desound.h"
 #include "se.h"
+#include "inder.h"
 #include "vpintf.h"
 #include "machine/6821pia.h"
 
@@ -179,6 +183,23 @@ S4_ROMEND
 #define input_ports_tstrk input_ports_bowl
 CORE_GAMEDEF(tstrk,l1,"Triple Strike (Shuffle) (L-1)",1983,"Williams",s4_mS4,GAME_USES_CHIMES)
 
+/*--------------------------------
+/ Big Bat
+/-------------------------------*/
+static core_tLCDLayout dispBigbat[] = {
+  {0, 0,34, 6,CORE_SEG7}, {0}
+};
+static core_tGameData bigbatGameData = {GEN_BY35,dispBigbat,{FLIP_SW(FLIP_L),0,0,0,SNDBRD_BY61,0,BY35GD_NOSOUNDE}};
+static void init_bigbat(void) { core_gameData = &bigbatGameData; }
+BY35_ROMSTARTx00(bigbat,"u2.bin",CRC(2beda24d) SHA1(80fb9ed548e4886741c709979aa4f865f47d2257),
+                          "u6.bin",CRC(8f13469d) SHA1(00c626f7eb166f627f6498d75906b3c56bccdd62))
+BY61_SOUNDROMx000(        "u3.bin",CRC(b87a9335) SHA1(8a21bcbcbe91da1bab0af06b71604bb8f247d0d4),
+                          "u4.bin",CRC(4ab75b31) SHA1(46acd1c9250a635b51bffccd77ea4e67a0c5edf5),
+                          "u5.bin",CRC(0aec8204) SHA1(f44216cccc3652399549345d8c74bcae54662aa3))
+BY35_ROMEND
+BY35_INPUT_PORTS_START(bigbat,1) BY35_INPUT_PORTS_END
+CORE_GAMEDEFNV(bigbat,"Big Bat",1984,"Bally Midway",by35_mBY35_61S,0)
+
 /*------------------------------------------------
 / Midnight Marauders (BY35-???: 05/84) - Gun game
 /-------------------------------------------------*/
@@ -252,7 +273,7 @@ S9_ROMSTART12(pfevr,p3,"cpu_u19.732", CRC(03796c6d) SHA1(38c95fcce9d0f357a74f041
                        "cpu_u20.764", CRC(3a3acb39) SHA1(7844cc30a9486f718a556850fc9cef3be82f26b7))
 S9S_SOUNDROM4("cpu_u49.128", CRC(b0161712) SHA1(5850f1f1f11e3ac9b9629cff2b26c4ad32436b55))
 S9_ROMEND
-CORE_CLONEDEF(pfevr, p3, l2, "Pennant Fever Baseball (P-3)", 1984, "Williams", s9_mS9PS, 0)
+CORE_CLONEDEF(pfevr, p3, l2, "Pennant Fever Baseball (P-3 Prototype)", 1984, "Williams", s9_mS9PS, 0)
 
 /*--------------------
 / Still Crazy (#534)
@@ -358,6 +379,87 @@ S11_ROMEND
 S11_INPUT_PORTS_START(shfin, 1) S11_INPUT_PORTS_END
 CORE_GAMEDEF(shfin, l1, "Shuffle Inn (Shuffle) (L-1)", 1987, "Williams", s11_mS11S,0)
 
+/*-------------------------------------------------------------------
+/ La Rana (1990)
+/-------------------------------------------------------------------*/
+extern MACHINE_DRIVER_EXTERN(INDERS1RANA);
+static core_tLCDLayout inderDispRana[] = {
+  {0, 0, 5,3,CORE_SEG7}, {3, 0, 1,3,CORE_SEG7}, {0, 8,13,3,CORE_SEG7}, {3, 8, 9,3,CORE_SEG7},
+  {1,16,12,1,CORE_SEG7}, {1,18, 4,1,CORE_SEG7},
+  {0}
+};
+INDER_INPUT_PORTS_START(larana, 1) INDER_INPUT_PORTS_END
+static core_tGameData laranaGameData = {0,inderDispRana,{FLIP_SW(FLIP_L),0,8,0,SNDBRD_SPINB}};
+static void init_larana(void) {
+  core_gameData = &laranaGameData;
+}
+ROM_START(larana)
+  NORMALREGION(0x10000, INDER_MEMREG_CPU)
+    ROM_LOAD("game_0_050790.bin", 0x0000,0x2000, CRC(ba94618f) SHA1(0fd6ffe9a6ef514c1dbf8856b881a54bf184e863))
+  NORMALREGION(0x10000, INDER_MEMREG_SND)
+    ROM_LOAD("sound_a_050690.bin",0x0000,0x2000, CRC(1513fd92) SHA1(6ca0723f5d7c86b844476a4830c8fc3744cbf918))
+  NORMALREGION(0x40000, REGION_USER1)
+    ROM_LOAD("sound_b_200690.bin",0x0000,0x10000,CRC(3aaa7c7d) SHA1(4a8531b6859fc1f2a4bb63a51da35e9081b7e88b))
+ROM_END
+CORE_GAMEDEFNV(larana,"La Rana",1990,"Inder (Spain)",INDERS1RANA,0)
+
+/*-------------------------------------------------------------------
+/ Gun Shot
+--------------------------------------------------------------------*/
+extern MACHINE_DRIVER_EXTERN(gunshot);
+static core_tLCDLayout gs_disp[] = {{0}};
+static core_tGameData gunshotGameData = {0,gs_disp,{FLIP_SW(FLIP_L),0,-4,0,SNDBRD_SPINB,0,0,175},NULL,{"",{0,0,0x0f,0x10}}};
+static void init_gunshot(void) {
+  core_gameData = &gunshotGameData;
+}
+INPUT_PORTS_START(gunshot)
+  CORE_PORTS
+  SIM_PORTS(1)
+  PORT_START /* 0, switches */
+    COREPORT_BIT(     0x0001, "Coin", KEYCODE_1)
+    COREPORT_BIT(     0x0008, "Tilt", KEYCODE_DEL)
+    COREPORT_BIT(     0x0020, "Fire", KEYCODE_ENTER)
+  PORT_START /* 1, dips 1..8 */
+    COREPORT_DIPNAME( 0x000f, 0x000a, "Games/Coins")
+      COREPORT_DIPSET(0x0000, "2/1" )
+      COREPORT_DIPSET(0x0001, "1/1" )
+      COREPORT_DIPSET(0x000a, "1/1, 3/2" )
+      COREPORT_DIPSET(0x0002, "1/1, 5/4" )
+      COREPORT_DIPSET(0x000f, "2/2, 5/4" )
+      COREPORT_DIPSET(0x0003, "1/2" )
+      COREPORT_DIPSET(0x0004, "1/2, 5/8" )
+      COREPORT_DIPSET(0x0005, "1/2, 3/4" )
+      COREPORT_DIPSET(0x0006, "1/4" )
+      COREPORT_DIPSET(0x0007, "1/4, 6/20" )
+      COREPORT_DIPSET(0x0008, "1/4, 3/8" )
+//    COREPORT_DIPSET(0x0009, "1/1" )
+//    COREPORT_DIPSET(0x000b, "1/2" )
+//    COREPORT_DIPSET(0x000c, "1/2, 3/4" )
+//    COREPORT_DIPSET(0x000d, "1/2, 3/4" )
+//    COREPORT_DIPSET(0x000e, "1/2, 3/4" )
+    COREPORT_DIPNAME( 0x0010, 0x0000, DEF_STR(Unknown))
+      COREPORT_DIPSET(0x0000, DEF_STR(Off))
+      COREPORT_DIPSET(0x0010, DEF_STR(On))
+    COREPORT_DIPNAME( 0x0020, 0x0020, "Attract tune")
+      COREPORT_DIPSET(0x0000, DEF_STR(Off))
+      COREPORT_DIPSET(0x0020, DEF_STR(On))
+    COREPORT_DIPNAME( 0x0040, 0x0000, "Test mode")
+      COREPORT_DIPSET(0x0000, DEF_STR(Off))
+      COREPORT_DIPSET(0x0040, DEF_STR(On))
+    COREPORT_DIPNAME( 0x0080, 0x0000, "Game mode")
+      COREPORT_DIPSET(0x0000, "Normal" )
+      COREPORT_DIPSET(0x0080, "Exhibition (endless)" )
+INPUT_PORTS_END
+ROM_START(gunshot)
+  NORMALREGION(0x10000, REGION_CPU1)
+    ROM_LOAD("m-177_gun_shot_rom_0_version_0.4.ci3", 0x0000, 0x4000, CRC(4754a983) SHA1(21c517c78624af41e0295877cc6d6ba7a66fe0fa))
+  NORMALREGION(0x10000, REGION_CPU2)
+    ROM_LOAD("m-177_gun_shot_rom_1_version_0.0.ic9", 0x0000, 0x2000, CRC(19fcec2d) SHA1(ff69de0652a54d5c00738c8144897e33df972eee))
+  NORMALREGION(0x80000, REGION_USER1)
+    ROM_LOAD("m-177_gun_shot_rom_2_version_0.0.ic16",0x00000,0x80000,CRC(f91ddd0c) SHA1(cc4e1440e76330872f512d56376f45b92a8dbee6))
+ROM_END
+CORE_GAMEDEFNV(gunshot, "Gun Shot", 1996, "Spinball (Spain)", gunshot, 0) 
+
 /*--------------------
 / Slugfest baseball
 /--------------------*/
@@ -384,7 +486,7 @@ WPCS_SOUNDROM222("sf_u18.l1",CRC(78092c83) SHA1(7c922dfd8be4bb5e23d4c86b6eb18a29
 WPC_ROMEND
 WPC_INPUT_PORTS_START(sf, 0) WPC_INPUT_PORTS_END
 CORE_GAMEDEF(sf,l1,"Slugfest (L-1)",1991,"Williams",wpc_mDMDS,0)
-CORE_CLONEDEF(sf,d1,l1,"Slugfest (D-1) LED Ghost Fix",1991,"Williams",wpc_mDMDS,0)
+CORE_CLONEDEF(sf,d1,l1,"Slugfest (D-1 LED Ghost Fix)",1991,"Williams",wpc_mDMDS,0)
 
 /*-------------------
 / Strike Master
@@ -411,7 +513,7 @@ WPCS_SOUNDROM222("lc_u18.l1",CRC(beb84fd9) SHA1(b1d5472af5e3c0f5c67e7d636122eb79
 WPC_ROMEND
 WPC_INPUT_PORTS_START(strik, 0) WPC_INPUT_PORTS_END
 CORE_GAMEDEF(strik,l4,"Strike Master (L-4)",1992,"Williams",wpc_mFliptronS,0)
-CORE_CLONEDEF(strik,d4,l4,"Strike Master (D-4) LED Ghost Fix",1992,"Williams",wpc_mFliptronS,0)
+CORE_CLONEDEF(strik,d4,l4,"Strike Master (D-4 LED Ghost Fix)",1992,"Williams",wpc_mFliptronS,0)
 
 /*------------------
 / Hot Shot (#60017)
@@ -434,13 +536,13 @@ WPCS_SOUNDROM2x8("hshot_l1.u18",CRC(a0e5beba) SHA1(c54a22527d861df54891308752ebd
                  "hshot_l1.u14",CRC(a3ccf557) SHA1(a8e518ea115cd1963544273c45d9ae9a6cab5e1f))
 WPC_ROMEND
 WPC_INPUT_PORTS_START(hshot, 0) WPC_INPUT_PORTS_END
-CORE_GAMEDEF(hshot,p8,"Hot Shot Basketball (P-8)",1992,"Midway",wpc_mFliptronS,0)
+CORE_GAMEDEF(hshot,p8,"Hot Shot Basketball (P-8 Prototype)",1992,"Midway",wpc_mFliptronS,0)
 
 WPC_ROMSTART(hshot,p9,"hshot_p9.u6",0x80000,CRC(fa4d05df) SHA1(235aa096f2983f77ade6b257fd8544d91b5f6b28))
 WPCS_SOUNDROM2x8("hshot_l1.u18",CRC(a0e5beba) SHA1(c54a22527d861df54891308752ebdec5829deceb),
                  "hshot_l1.u14",CRC(a3ccf557) SHA1(a8e518ea115cd1963544273c45d9ae9a6cab5e1f))
 WPC_ROMEND
-CORE_CLONEDEF(hshot,p9,p8,"Hot Shot Basketball (P-9) LED Ghost Fix",1992,"Midway",wpc_mFliptronS,0)
+CORE_CLONEDEF(hshot,p9,p8,"Hot Shot Basketball (P-9 LED Ghost Fix)",1992,"Midway",wpc_mFliptronS,0)
 
 /*-------------
 / Addams Family Values
@@ -506,11 +608,11 @@ INPUT_PORTS_START(afv)
       COREPORT_DIPSET(0x0000, "0" ) \
       COREPORT_DIPSET(0x0080, "1" ) \
 INPUT_PORTS_END
-CORE_GAMEDEF(afv,l4,"Addams Family Values (Coin Dropper, L-4)",1993,"Williams",wpc_mDCSS,0)
-CORE_CLONEDEF(afv,d4,l4,"Addams Family Values (Coin Dropper, D-4) LED Ghost Fix",1993,"Williams",wpc_mDCSS,0)
+CORE_GAMEDEF(afv,l4,"Addams Family Values (Coin Dropper) (L-4)",1993,"Williams",wpc_mDCSS,0)
+CORE_CLONEDEF(afv,d4,l4,"Addams Family Values (Coin Dropper) (D-4 LED Ghost Fix)",1993,"Williams",wpc_mDCSS,0)
 
 /*-------------------------------------------------------------------
-/ Strikes n' Spares (#N111)
+/ Strikes N' Spares (#N111)
 /-------------------------------------------------------------------*/
 static struct core_dispLayout GTS3_dispDMD[] = {
   {0,0,32,128,CORE_DMD|CORE_DMDNOAA,(genf *)gts3_dmd128x32},
@@ -525,7 +627,7 @@ NORMALREGION(0x100000, REGION_USER3) \
   GTS3S_ROMLOAD4(0x00000, "arom1.bin", CRC(e248574a) SHA1(d2bdc2b9a330bb81556d25d464f617e0934995eb)) \
 GTS3_ROMEND
 GTS32_INPUT_PORTS_START(snspares, 4) GTS3_INPUT_PORTS_END
-CORE_GAMEDEFNV(snspares,"Strikes n' Spares (rev.6)",1995,"Gottlieb",mGTS3DMDS2, 0)
+CORE_GAMEDEFNV(snspares,"Strikes N' Spares (rev. 6)",1995,"Gottlieb",mGTS3DMDS2, 0)
 
 #define init_snspare1 init_snspares
 #define input_ports_snspare1 input_ports_snspares
@@ -534,7 +636,7 @@ GTS3_DMD256_ROMSTART2(  "dsprom.bin",CRC(5c901899) SHA1(d106561b2e382afdb16e9380
 NORMALREGION(0x100000, REGION_USER3) \
   GTS3S_ROMLOAD4(0x00000, "arom1.bin", CRC(e248574a) SHA1(d2bdc2b9a330bb81556d25d464f617e0934995eb)) \
 GTS3_ROMEND
-CORE_CLONEDEFNV(snspare1,snspares,"Strikes n' Spares (rev.1)",1995,"Gottlieb",mGTS3DMDS2, 0)
+CORE_CLONEDEFNV(snspare1,snspares,"Strikes N' Spares (rev. 1)",1995,"Gottlieb",mGTS3DMDS2, 0)
 
 #define init_snspare2 init_snspares
 #define input_ports_snspare2 input_ports_snspares
@@ -543,7 +645,7 @@ GTS3_DMD256_ROMSTART2(  "dsprom.bin",CRC(5c901899) SHA1(d106561b2e382afdb16e9380
 NORMALREGION(0x100000, REGION_USER3) \
   GTS3S_ROMLOAD4(0x00000, "arom1.bin", CRC(e248574a) SHA1(d2bdc2b9a330bb81556d25d464f617e0934995eb)) \
 GTS3_ROMEND
-CORE_CLONEDEFNV(snspare2,snspares,"Strikes n' Spares (rev.2)",1995,"Gottlieb",mGTS3DMDS2, 0)
+CORE_CLONEDEFNV(snspare2,snspares,"Strikes N' Spares (rev. 2)",1995,"Gottlieb",mGTS3DMDS2, 0)
 
 /*-----------------------------
 / League Champ (Shuffle Alley)
@@ -632,7 +734,7 @@ DE2S_SOUNDROM144("titau7.101" ,CRC(544fe1ac) SHA1(5c62eef6a42660b13e626d1a6bb8cd
                  "titau21.100",CRC(76ca05f8) SHA1(3e1c56fe37393c345111665fd8ab730d53cb6970))
 SE_ROMEND
 SE_INPUT_PORTS_START(titanic, 1) SE_INPUT_PORTS_END
-CORE_GAMEDEFNV(titanic,"Titanic (Coin dropper)",1998,"Sega",de_mSES2T,0)
+CORE_GAMEDEFNV(titanic,"Titanic (Coin Dropper)",1998,"Sega",de_mSES2T,0)
 
 /*-------------------------------------------------------------------
 / Monopoly (Coin dropper)
@@ -644,4 +746,4 @@ DE2S_SOUNDROM18("monopred.u7" ,CRC(1ca0cf63) SHA1(c4ce78718e3e3f1a8451b134f2869d
                 "monopred.u17",CRC(467dca62) SHA1(c727748b6b0b39ead19ce98bddd89fd05fb62d00))
 SE_ROMEND
 SE_INPUT_PORTS_START(monopred, 1) SE_INPUT_PORTS_END
-CORE_GAMEDEFNV(monopred,"Monopoly (Coin dropper)",2002,"Stern",de_mSES1,0)
+CORE_GAMEDEFNV(monopred,"Monopoly (Coin Dropper)",2002,"Stern",de_mSES1,0)

@@ -1,6 +1,7 @@
 // Microsoft Visual C++ generated resource script.
 //
 #include "resource.h"
+#include "..\version.h"
 
 // Generated Help ID header file
 #define APSTUDIO_HIDDEN_SYMBOLS
@@ -122,7 +123,7 @@ BEGIN
         MENUITEM "&Troubleshooting",            ID_HELP_TROUBLE
         MENUITEM SEPARATOR
         MENUITEM "&New Game Changes",           ID_HELP_WHATS_NEW32
-        MENUITEM "&PinMame Release Notes",      ID_HELP_WHATS_NEW
+        MENUITEM "&PinMAME Release Notes",      ID_HELP_WHATS_NEW
         MENUITEM SEPARATOR
         MENUITEM "&About",                      ID_HELP_ABOUT
     END
@@ -167,7 +168,6 @@ BEGIN
         POPUP "&Show Folders"
         BEGIN
             MENUITEM "overridden by code",          ID_CONTEXT_SHOW_FOLDER_START
-
         END
     END
 END
@@ -235,8 +235,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 2,5,0,0
- PRODUCTVERSION 2,5,0,0
+ FILEVERSION PM_VERSION_DIGITS
+ PRODUCTVERSION PM_VERSION_DIGITS
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -255,12 +255,12 @@ BEGIN
             VALUE "Comments", "Based on MAME32 by Christopher Kirmse and Michael Soderstrom"
             VALUE "CompanyName", "PinMAME Team"
             VALUE "FileDescription", "Multiple Pinball Machine Emulator for Win32"
-            VALUE "FileVersion", "2, 5, 0, 0"
+            VALUE "FileVersion", PM_VERSION_STRING_COMMAS
             VALUE "InternalName", "PinMAME32"
-            VALUE "LegalCopyright", "Copyright 2001-2014 by the PinMAME team"
+            VALUE "LegalCopyright", "Copyright 2001-2024 by the PinMAME team"
             VALUE "OriginalFilename", "PinMAME32.exe"
             VALUE "ProductName", "PinMAME32"
-            VALUE "ProductVersion", "2.5"
+            VALUE "ProductVersion", PM_VERSION_STRING_POINTS_FULL
         END
     END
     BLOCK "VarFileInfo"
@@ -310,7 +310,7 @@ IDI_HEADER_DOWN         ICON                    "res\\header_down.ico"
 // Dialog
 //
 
-IDD_ABOUT DIALOG  0, 0, 296, 129
+IDD_ABOUT DIALOG  0, 0, 296, 138
 STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "About PinMAME32"
 FONT 8, "MS Sans Serif"
@@ -319,7 +319,7 @@ BEGIN
     CTEXT           "Multiple Pinball Machine Emulator",IDC_STATIC,147,7,142,
                     11,NOT WS_GROUP
     CTEXT           "Version 0",IDC_VERSION,147,18,142,11,NOT WS_GROUP
-    CTEXT           "Copyright (C) 2001-2014 PinMAME Team",IDC_STATIC,147,29,
+    CTEXT           "Copyright (C) 2001-2024 PinMAME Team",IDC_STATIC,147,29,
                     142,10,NOT WS_GROUP
     CTEXT           "PinMAME32 version by Martin Adrian",IDC_STATIC,147,51,
                     142,10,NOT WS_GROUP
@@ -587,9 +587,9 @@ BEGIN
                     HIDC_USE_SOUND
     CONTROL         "Use samples",IDC_SAMPLES,"Button",BS_AUTOCHECKBOX |
                     WS_TABSTOP,50,64,55,10,0,HIDC_SAMPLES
-    CONTROL         "Resample if sample rate does not match",IDC_USE_FILTER,
-                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,50,78,140,10,0,
-                    HIDC_USE_FILTER
+    //CONTROL         "Resample if sample rate does not match",IDC_USE_FILTER,
+	//                "Button",BS_AUTOCHECKBOX | WS_TABSTOP,50,78,140,10,0,
+	//                HIDC_USE_FILTER
     LTEXT           "Sample rate:",IDC_RATETEXT,50,94,40,8,NOT WS_GROUP
     COMBOBOX        IDC_SAMPLERATE,94,92,59,60,CBS_DROPDOWNLIST |
                     CBS_UPPERCASE | WS_VSCROLL | WS_TABSTOP,0,
@@ -736,7 +736,7 @@ BEGIN
                     WS_TABSTOP,15,135,80,10,0,HIDC_CHEAT
     CONTROL         "Use less CPU time when possible",IDC_SLEEP,"Button",
                     BS_AUTOCHECKBOX | WS_TABSTOP,15,145,120,10,0,HIDC_SLEEP
-    CONTROL         "Use RDTSC timing system (for desktops)",IDC_OLD_TIMING,
+    CONTROL         "Use RDTSC timing system (UNSUPPORTED)",IDC_OLD_TIMING,
                     "Button",BS_AUTOCHECKBOX | WS_TABSTOP,15,155,95,10,0,
                     HIDC_OLD_TIMING
     CONTROL         "Error log (for developers)",IDC_LOG,"Button",
@@ -1222,6 +1222,7 @@ END
 //
 
 IDB_ABOUT               BITMAP                  "res\\about.bmp"
+IDB_ABOUTS              BITMAP                  "res\\abouts.bmp"
 IDB_TOOLBAR             BITMAP                  "res\\toolbar.bmp"
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1236,7 +1237,7 @@ IDC_CURSOR_HSPLIT       CURSOR                  "Res\\Splith.cur"
 // RT_MANIFEST
 //
 
-1                       RT_MANIFEST             "res\\pinmame32.manifest"
+//1                       RT_MANIFEST             "res\\pinmame32.manifest"
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -1246,7 +1247,7 @@ IDC_CURSOR_HSPLIT       CURSOR                  "Res\\Splith.cur"
 STRINGTABLE
 BEGIN
     IDS_UI_FILE             "Contains commands for working with the selected items"
-    IDS_UI_VIEW             "Contains commands for manupulating the view"
+    IDS_UI_VIEW             "Contains commands for manipulating the view"
     IDS_UI_OPTIONS          "Contains commands for user interface options"
     IDS_UI_HELP             "Contains commands for displaying help"
 END
@@ -1338,4 +1339,3 @@ END
 
 /////////////////////////////////////////////////////////////////////////////
 #endif    // not APSTUDIO_INVOKED
-

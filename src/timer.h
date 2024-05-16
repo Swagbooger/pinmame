@@ -13,6 +13,8 @@
 #pragma once
 #endif
 
+#include "osd_cpu.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -30,7 +32,25 @@ extern double sec_to_cycles[];
 #define TIME_NOW              (0.0)
 #define TIME_NEVER            (1.0e30)
 
-#define TIME_TO_CYCLES(cpu,t) ((int)((t) * sec_to_cycles[cpu]))
+#define TIME_TO_CYCLES(cpu,t) ((int)((t) * sec_to_cycles[cpu] + 0.5)) // round
+
+/*-------------------------------------------------
+	internal timer structure
+-------------------------------------------------*/
+
+struct _mame_timer
+{
+	struct _mame_timer *next;
+	struct _mame_timer *prev;
+	void (*callback)(int);
+	int callback_param;
+	int tag;
+	UINT8 enabled;
+	UINT8 temporary;
+	double period;
+	double start;
+	double expire;
+};
 
 typedef struct _mame_timer mame_timer;
 
@@ -51,6 +71,12 @@ double timer_timeleft(mame_timer *which);
 double timer_get_time(void);
 double timer_starttime(mame_timer *which);
 double timer_firetime(mame_timer *which);
+
+#ifdef PINMAME
+double timer_expire(mame_timer *which);
+int timer_param(mame_timer *which);
+int timer_enabled(mame_timer *which);
+#endif
 
 #ifdef __cplusplus
 }

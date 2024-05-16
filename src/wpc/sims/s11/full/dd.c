@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /*******************************************************************************
  Dr. Dude (Bally,1990) Pinball Simulator
 
@@ -255,17 +257,16 @@ static sim_tState dd_stateDef[] = {
 static int dd_handleBallState(sim_tBallStatus *ball, int *inports) {
   switch (ball->state)
 	{
-
 	/* Ball in Shooter Lane */
-    	case stBallLane:
+		case stBallLane:
 		if (ball->speed < 15)
 			return setState(stNotEnough,40);	/*Ball not plunged hard enough*/
 		if (ball->speed < 30)
 			return setState(stRLoopFall,60);	/*Ball falls from Right Loop*/
 		if (ball->speed < 51)
 			return setState(stRLoop,40);		/*Ball Hits I Test Target*/
-			break;
-       }
+		break;
+	}
     return 0;
   }
 
@@ -356,6 +357,7 @@ static core_tLampDisplay dd_lampPos = {
   }
 
 /* Solenoid-to-sample handling */
+#ifdef ENABLE_MECHANICAL_SAMPLES
 static wpc_tSamSolMap dd_samsolmap[] = {
  /*Channel #0*/
  {sKnocker,0,SAM_KNOCKER}, {sTrough,0,SAM_BALLREL},
@@ -372,15 +374,30 @@ static wpc_tSamSolMap dd_samsolmap[] = {
  /*Channel #3*/
  {sLPopper,3,SAM_POPPER},  {sRPopper,3,SAM_POPPER},{-1}
 };
+#endif
 
 /*-----------------
 /  ROM definitions
 /------------------*/
+S11_ROMSTART48(dd,lu1,"dude_u26.lu1", CRC(6f6a6e22) SHA1(2d8a1b472eb06a9f7aeea4b2f9a82f83eb4ee08a),
+                     "dude_u27.lu1", CRC(43c2d4f3) SHA1(d61d855fa06394bdc1142e21624bdaac1ee9ca20))
+S11CS_SOUNDROM000(   "dude_u4.l1",  CRC(3eeef714) SHA1(74dcc83958cb62819e0ac36ca83001694faafec7),
+                     "dude_u19.l1", CRC(dc7b985b) SHA1(f672d1f1fe1d1d887113ea6ccd745a78f7760526),
+                     "dude_u20.l1", CRC(a83d53dd) SHA1(92a81069c42c7760888201fb0787fa7ddfbf1658))
+S11_ROMEND
+
 S11_ROMSTART48(dd,l2,"dude_u26.l2", CRC(d1e19fc2) SHA1(800329b5fd563fcd27add14da4522082c01eb86e),
                      "dude_u27.l2", CRC(654b5d4c) SHA1(e73834dbb35cf78eab68a5966e4049640e16dddf))
 S11CS_SOUNDROM000(   "dude_u4.l1",  CRC(3eeef714) SHA1(74dcc83958cb62819e0ac36ca83001694faafec7),
                      "dude_u19.l1", CRC(dc7b985b) SHA1(f672d1f1fe1d1d887113ea6ccd745a78f7760526),
                      "dude_u20.l1", CRC(a83d53dd) SHA1(92a81069c42c7760888201fb0787fa7ddfbf1658))
+S11_ROMEND
+
+S11_ROMSTART48(dd,l3c,"dude_u26.l3c", CRC(08192d8b) SHA1(9a2f0347a611663fdc12dcd9f952a6b8415add04),
+                      "dude_u27.l3c", CRC(95976170) SHA1(a35f6d64edf922bd018199601f0a8f407cc89031))
+S11CS_SOUNDROM000(    "dude_u4.l1",   CRC(3eeef714) SHA1(74dcc83958cb62819e0ac36ca83001694faafec7),
+                      "dude_u19.l1",  CRC(dc7b985b) SHA1(f672d1f1fe1d1d887113ea6ccd745a78f7760526),
+                      "dude_u20.l1",  CRC(a83d53dd) SHA1(92a81069c42c7760888201fb0787fa7ddfbf1658))
 S11_ROMEND
 
 S11_ROMSTART48(dd,p6,"u26-pa6.11c", CRC(6f6a6e22) SHA1(2d8a1b472eb06a9f7aeea4b2f9a82f83eb4ee08a),
@@ -398,8 +415,11 @@ static MACHINE_DRIVER_START(s11c_one)
   MDRV_SCREEN_SIZE(640, 400)
   MDRV_VISIBLE_AREA(0, 639, 0, 399)
 MACHINE_DRIVER_END
-CORE_GAMEDEF(dd, l2, "Dr. Dude (LA-2)", 1990, "Bally", s11c_one,0)
-CORE_CLONEDEF(dd,p6,l2, "Dr. Dude (PA-6)", 1990, "Bally", s11c_one,0)
+
+CORE_GAMEDEF (dd,    l2, "Dr. Dude (LA-2)", 1990, "Bally", s11c_one,0)
+CORE_CLONEDEF(dd,lu1,l2, "Dr. Dude (LU-1 Europe)", 1990, "Bally", s11c_one,0)
+CORE_CLONEDEF(dd,l3c,l2, "Dr. Dude (LA-3C Competition MOD)", 2016,"Bally", s11c_one,0)
+CORE_CLONEDEF(dd,p6, l2, "Dr. Dude (PA-6 Prototype)", 1990, "Bally", s11c_one,0)
 
 /*-----------------------
 / Simulation Definitions
@@ -428,7 +448,10 @@ static core_tGameData ddGameData = {
     FLIP_SWNO(swLFlip,swRFlip),
     0,0,0,0,S11_LOWALPHA|S11_DISPINV,S11_MUXSW2,0,
     NULL, dd_handleMech, NULL, NULL,
-    &dd_lampPos, dd_samsolmap
+    &dd_lampPos
+#ifdef ENABLE_MECHANICAL_SAMPLES
+    , dd_samsolmap
+#endif
   },
   &ddSimData,
   {{ 0 }},

@@ -18,8 +18,8 @@ static core_tGameData name##GameData = {GEN_GTS1,dsp,{FLIP_SW(FLIP_L),0,0,0,SNDB
 static void init_##name(void) { \
 	core_gameData = &name##GameData; \
 } \
-GTS1_2_ROMSTART(name, "u5_cf.bin", CRC(e0d4b405) SHA1(17aadd79c0dcbb336aadd5d203bc6ca866492345), \
-                      "u4_ce.bin", CRC(4cd312dd) SHA1(31245daa9972ef8652caee69986585bb8239e86e))
+GTS1_2_ROMSTART(name, "A1752CF.bin", CRC(614a3bd9) SHA1(febca18fb6f96037ca82e515dd161dfcb0e4c776), \
+                      "A1753CE.bin", CRC(4cd312dd) SHA1(31245daa9972ef8652caee69986585bb8239e86e))
 
 #define INIT_S1S(name, dsp) \
 GTS1S_INPUT_PORTS_START(name, 1) GTS1_INPUT_PORTS_END \
@@ -27,8 +27,8 @@ static core_tGameData name##GameData = {GEN_GTS1,dsp,{FLIP_SW(FLIP_L),0,0,0,SNDB
 static void init_##name(void) { \
 	core_gameData = &name##GameData; \
 } \
-GTS1_2_ROMSTART(name, "u5_cf.bin", CRC(e0d4b405) SHA1(17aadd79c0dcbb336aadd5d203bc6ca866492345), \
-                      "u4_ce.bin", CRC(4cd312dd) SHA1(31245daa9972ef8652caee69986585bb8239e86e))
+GTS1_2_ROMSTART(name, "A1752CF.bin", CRC(614a3bd9) SHA1(febca18fb6f96037ca82e515dd161dfcb0e4c776), \
+                      "A1753CE.bin", CRC(4cd312dd) SHA1(31245daa9972ef8652caee69986585bb8239e86e))
 
 INIT_S1(gts1, sys1_disp) GTS1_ROMEND
 GAMEX(1977,gts1,0,GTS1C,gts1,gts1,ROT0,"Gottlieb","System 1",NOT_A_DRIVER)
@@ -197,22 +197,62 @@ CORE_CLONEDEFNV(astannie,gts1s,"Asteroid Annie and the Aliens",1980,"Gottlieb",g
 INIT_S1(sys1test, sys1_disp)
 GTS1_1_ROMSTART(sys1test,"test.cpu", CRC(8b0704bb) SHA1(5f0eb8d5af867b815b6012c9d078927398efe6d8))
 GTS1_ROMEND
-CORE_CLONEDEFNV(sys1test,gts1,"System 1 Test prom",19??,"Gottlieb",gl_mGTS1C,GAME_USES_CHIMES)
+CORE_CLONEDEFNV(sys1test,gts1,"System 1 'T' Test Fixture",19??,"Gottlieb",gl_mGTS1C,GAME_USES_CHIMES)
 
 // other manufacturers
 
-// Sahara Love (C. Tabart, 1984)
+/*-------------------------------------------------------------------
+/ Sahara Love (1984)
+/-------------------------------------------------------------------*/
+INPUT_PORTS_START(sahalove)
+  CORE_PORTS
+  SIM_PORTS(1)
+  GTS1_COMPORTS
+  COREPORT_DIPNAME( 0x0100, 0x0000, "Sound 1")
+    COREPORT_DIPSET(0x0000, " off" )
+    COREPORT_DIPSET(0x0100, " on" )
+  COREPORT_DIPNAME( 0x0200, 0x0200, "Sound 2")
+    COREPORT_DIPSET(0x0000, " off" )
+    COREPORT_DIPSET(0x0200, " on" )
+  COREPORT_DIPNAME( 0x0400, 0x0000, "Sound 3")
+    COREPORT_DIPSET(0x0000, " off" )
+    COREPORT_DIPSET(0x0400, " on" )
+  COREPORT_DIPNAME( 0x0800, 0x0800, "Sound 4")
+    COREPORT_DIPSET(0x0000, " off" )
+    COREPORT_DIPSET(0x0800, " on" )
+INPUT_PORTS_END
+static core_tGameData sahaloveGameData = {0,sys1_disp,{FLIP_SW(FLIP_L),0,0,0,SNDBRD_TABART2}};
+static void init_sahalove(void) {
+  core_gameData = &sahaloveGameData;
+}
+GTS1_2_ROMSTART(sahalove, "A1752CF.bin", CRC(614a3bd9) SHA1(febca18fb6f96037ca82e515dd161dfcb0e4c776),
+                          "A1753CE.bin", CRC(4cd312dd) SHA1(31245daa9972ef8652caee69986585bb8239e86e))
+GTS1_1_ROMSTART(sahalove, "412.cpu",   CRC(84a86b83) SHA1(f331f2ffd7d1b279b4ffbb939aa8649e723f5fac))
+SOUNDREGION(0x10000, REGION_CPU2)
+ROM_LOAD("sahalove.bin",  0,  0x2000,  CRC(3512840a) SHA1(eb36bb78bbf2f8610bc1d71a6651b937db3a5c69))
+GTS1_ROMEND
+CORE_CLONEDEFNV(sahalove,gts1,"Sahara Love",1984,"Christian Tabart (France)",gl_mGTS1TAB2,GAME_IMPERFECT_SOUND)
 
 /*-------------------------------------------------------------------
 / L'Hexagone (04/1986)
 /-------------------------------------------------------------------*/
-GTS1S_INPUT_PORTS_START(hexagone, 1) GTS1_INPUT_PORTS_END
+INPUT_PORTS_START(hexagone)
+  CORE_PORTS
+  SIM_PORTS(1)
+  GTS1_COMPORTS
+  COREPORT_DIPNAME( 0x1000, 0x1000, "Sound 1")
+    COREPORT_DIPSET(0x0000, " off" )
+    COREPORT_DIPSET(0x1000, " on" )
+  COREPORT_DIPNAME( 0x8000, 0x0000, "Sound 2")
+    COREPORT_DIPSET(0x0000, " off" )
+    COREPORT_DIPSET(0x8000, " on" )
+INPUT_PORTS_END
 static core_tGameData hexagoneGameData = {0,sys1_disp,{FLIP_SW(FLIP_L),0,0,0,SNDBRD_TABART}};
 static void init_hexagone(void) {
 	core_gameData = &hexagoneGameData;
 }
-GTS1_2_ROMSTART(hexagone, "u5_cf.bin", CRC(e0d4b405) SHA1(17aadd79c0dcbb336aadd5d203bc6ca866492345),
-                          "u4_ce.bin", CRC(4cd312dd) SHA1(31245daa9972ef8652caee69986585bb8239e86e))
+GTS1_2_ROMSTART(hexagone, "A1752CF.bin", CRC(614a3bd9) SHA1(febca18fb6f96037ca82e515dd161dfcb0e4c776),
+                          "A1753CE.bin", CRC(4cd312dd) SHA1(31245daa9972ef8652caee69986585bb8239e86e))
 GTS1_1_ROMSTART(hexagone, "435.cpu",   CRC(7749fd92) SHA1(9cd3e799842392e3939877bf295759c27f199e58))
 SOUNDREGION(0x10000, REGION_CPU2)
 ROM_LOAD("hexagone.bin",  0,  0x4000,  CRC(002b5464) SHA1(e2d971c4e85b4fb6580c2d3945c9946ea0cebc2e))

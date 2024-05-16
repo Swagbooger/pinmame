@@ -92,6 +92,9 @@ struct rc_option fileio_opts[] =
 	{ "Windows path and directory options", NULL, rc_seperator, NULL, NULL, 0, 0, NULL, NULL },
 	{ "rompath", "rp", rc_string, &pathlist[FILETYPE_ROM].rawpath, "roms", 0, 0, NULL, "path to romsets" },
 	{ "samplepath", "sp", rc_string, &pathlist[FILETYPE_SAMPLE].rawpath, "samples", 0, 0, NULL, "path to samplesets" },
+#if defined(PINMAME) && defined(PROC_SUPPORT)
+	{ "procpath", NULL, rc_string, &pathlist[FILETYPE_PROC].rawpath, "proc", 0, 0, NULL, "path to P-ROC files" },
+#endif /* PINMAME && PROC_SUPPORT */
 #ifdef __WIN32__
 	{ "inipath", NULL, rc_string, &pathlist[FILETYPE_INI].rawpath, ".;ini", 0, 0, NULL, "path to ini files" },
 #else
@@ -113,10 +116,6 @@ struct rc_option fileio_opts[] =
 	{ "cheat_file", NULL, rc_string, &cheatfile, "cheat.dat", 0, 0, NULL, "cheat filename" },
 	{ "history_file", NULL, rc_string, &history_filename, "history.dat", 0, 0, NULL, NULL },
 	{ "mameinfo_file", NULL, rc_string, &mameinfo_filename, "mameinfo.dat", 0, 0, NULL, NULL },
-#ifdef MMSND
-	{ "MMSND directory options", NULL, rc_seperator, NULL, NULL, 0, 0, NULL, NULL },
-	{ "waveout", NULL, rc_string, &wavebasename, "waveout", 0, 0, NULL, "wave out path" },
-#endif
 
 	{ NULL,	NULL, rc_end, NULL, NULL, 0, 0,	NULL, NULL }
 };
@@ -197,7 +196,7 @@ INLINE int is_variablechar(char c)
 
 static const char *parse_variable(const char **start, const char *end)
 {
-	const char *src = *start, *var;
+	const char *src, *var;
 	char variable[1024];
 	char *dest = variable;
 
@@ -228,7 +227,7 @@ static char *copy_and_expand_variables(const char *path, int len)
 {
 	char *dst, *result;
 	const char *src;
-	int length = 0;
+	size_t length = 0;
 
 	/* first determine the length of the expanded string */
 	for (src = path; src < path + len; )
@@ -304,7 +303,7 @@ static void expand_pathlist(struct pathdata *list)
 			goto out_of_memory;
 
 		// copy the path in
-		list->path[list->pathcount++] = copy_and_expand_variables(rawpath, token - rawpath);
+		list->path[list->pathcount++] = copy_and_expand_variables(rawpath, (int)(token - rawpath));
 #if VERBOSE
 		printf("  %s\n", list->path[list->pathcount - 1]);
 #endif
@@ -348,6 +347,12 @@ static const char *get_path_for_filetype(int filetype, int pathindex, DWORD *cou
 			list = &pathlist[FILETYPE_ROM];
 			break;
 #endif
+
+#if defined(PINMAME) && defined(PROC_SUPPORT)
+		case FILETYPE_PROC_YAML:
+			list = &pathlist[FILETYPE_PROC];
+			break;
+#endif /* PINMAME && PROC_SUPPORT */
 
 		default:
 			list = &pathlist[filetype];
@@ -504,6 +509,11 @@ osd_file *osd_fopen(int pathtype, int pathindex, const char *filename, const cha
 	return file;
 }
 
+
+UINT64 osd_fsize(osd_file *file)
+{
+	return file->end;
+}
 
 
 //============================================================
@@ -684,7 +694,7 @@ int osd_display_loading_rom_message(const char *name,struct rom_load_data *romda
 	if (name)
 		fprintf(stdout, "loading %-12s\r", name);
 	else
-		fprintf(stdout, "                    \r");
+		fprintf(stdout, "                                                            \r");
 	fflush(stdout);
 
 	return 0;
@@ -715,7 +725,7 @@ void set_pathlist(int file_type, const char *new_rawpath)
 	// by default, start with an empty list
 	list->path = NULL;
 	list->pathcount = 0;
-		
+
 	list->rawpath = new_rawpath;
 
 }

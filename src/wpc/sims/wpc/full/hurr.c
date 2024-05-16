@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /*******************************************************************************
  Hurricane (Williams, 1991) Pinball Simulator
 
@@ -300,6 +302,7 @@ static core_tLampDisplay hurr_lampPos = {
   }
 
 /* Solenoid-to-sample handling */
+#ifdef ENABLE_MECHANICAL_SAMPLES
 static wpc_tSamSolMap hurr_samsolmap[] = {
  /*Channel #0*/
  {sKnocker,0,SAM_KNOCKER}, {sTrough,0,SAM_BALLREL},
@@ -316,7 +319,7 @@ static wpc_tSamSolMap hurr_samsolmap[] = {
  /*Channel #3*/
  {sLeftJuggler,3,SAM_POPPER}, {sRightJuggler,3,SAM_SOLENOID},{-1}
 };
-
+#endif
 
 /*-----------------
 /  ROM definitions
@@ -337,19 +340,19 @@ WPC_ROMEND
 /  Game drivers
 /---------------*/
 CORE_GAMEDEF(hurr,l2,"Hurricane (L-2)",1991, "Williams",wpc_mFliptronS,0)
-CORE_CLONEDEF(hurr,d2,l2,"Hurricane (D-2) LED Ghost Fix",1991, "Williams",wpc_mFliptronS,0)
+CORE_CLONEDEF(hurr,d2,l2,"Hurricane (D-2 LED Ghost Fix)",1991, "Williams",wpc_mFliptronS,0)
 
 /*-----------------------
 / Simulation Definitions
 /-----------------------*/
 static sim_tSimData hurrSimData = {
-  2,    				/* 2 game specific input ports */
-  hurr_stateDef,			/* Definition of all states */
-  hurr_inportData,			/* Keyboard Entries */
+  2,					/* 2 game specific input ports */
+  hurr_stateDef,		/* Definition of all states */
+  hurr_inportData,		/* Keyboard Entries */
   { stRTrough, stCTrough, stLTrough, stDrain, stDrain, stDrain, stDrain },	/*Position where balls start.. Max 7 Balls Allowed*/
   NULL, 				/* no init */
-  hurr_handleBallState,		/*Function to handle ball state changes*/
-  hurr_drawStatic,			/*Function to handle mechanical state changes*/
+  hurr_handleBallState,	/*Function to handle ball state changes*/
+  hurr_drawStatic,		/*Function to handle mechanical state changes*/
   TRUE, 				/* Simulate manual shooter? */
   NULL  				/* Custom key conditions? */
 };
@@ -363,7 +366,10 @@ static core_tGameData hurrGameData = {
     FLIP_SWNO(12,11),
     0,0,0,0,0,0,0,
     NULL, hurr_handleMech, NULL, NULL,
-    &hurr_lampPos, hurr_samsolmap
+    &hurr_lampPos
+#ifdef ENABLE_MECHANICAL_SAMPLES
+    , hurr_samsolmap
+#endif
   },
   &hurrSimData,
   {
@@ -380,6 +386,7 @@ static core_tGameData hurrGameData = {
 /----------------*/
 static void init_hurr(void) {
   core_gameData = &hurrGameData;
+  hc55516_set_sample_clock(0, 22372);
 }
 
 static void hurr_handleMech(int mech) {

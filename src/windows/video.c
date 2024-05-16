@@ -7,7 +7,9 @@
 // standard windows headers
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <ddraw.h>
+#ifndef DISABLE_DX7
+ #include <ddraw.h>
+#endif
 
 // standard C headers
 #include <math.h>
@@ -39,6 +41,11 @@ extern int verbose;
 // from wind3dfx.c
 extern struct rc_option win_d3d_opts[];
 
+// from ticker.c
+extern void uSleep(const UINT64 u);
+extern void uOverSleep(const UINT64 u);
+extern void uUnderSleep(const UINT64 u);
+
 //============================================================
 //	PARAMETERS
 //============================================================
@@ -63,6 +70,7 @@ int autoframeskip;
 // speed throttling
 int throttle = 1;
 int fastfrms = 0;
+int g_low_latency_throttle = 0;
 
 // palette lookups
 UINT8 palette_lookups_invalid;
@@ -142,7 +150,7 @@ static const int skiptable[FRAMESKIP_LEVELS][FRAMESKIP_LEVELS] =
 	{ 0,1,1,1,1,1,1,1,1,1,1,1 }
 };
 
-static const int waittable[FRAMESKIP_LEVELS][FRAMESKIP_LEVELS] =
+/*static const int waittable[FRAMESKIP_LEVELS][FRAMESKIP_LEVELS] =
 {
 	{ 1,1,1,1,1,1,1,1,1,1,1,1 },
 	{ 2,1,1,1,1,1,1,1,1,1,1,0 },
@@ -156,7 +164,7 @@ static const int waittable[FRAMESKIP_LEVELS][FRAMESKIP_LEVELS] =
 	{ 4,0,0,0,4,0,0,0,4,0,0,0 },
 	{ 6,0,0,0,0,0,6,0,0,0,0,0 },
 	{12,0,0,0,0,0,0,0,0,0,0,0 }
-};
+};*/
 
 
 
@@ -177,6 +185,8 @@ static char *resolution;
 static char *effect;
 static char *aspect;
 
+static int tmp;
+
 // options struct
 struct rc_option video_opts[] =
 {
@@ -189,7 +199,7 @@ struct rc_option video_opts[] =
 #ifdef VPINMAME
 	// default window mode for VPM is run inside a window
 	{ "window", "w", rc_bool, &win_window_mode, "1", 0, 0, NULL, "run in a window/run on full screen" },
-	{ "ddraw", "dd", rc_bool, &win_use_ddraw, "1", 0, 0, NULL, "use DirectDraw for rendering" },
+	{ "ddraw", "dd", rc_bool, &win_use_ddraw, "0", 0, 0, NULL, "use DirectDraw for rendering" },
 #else
 	// default window mode for PinMAME is full screen
 	{ "window", "w", rc_bool, &win_window_mode, "0", 0, 0, NULL, "run in a window/run on full screen" },
@@ -215,9 +225,12 @@ struct rc_option video_opts[] =
 	{ "effect", NULL, rc_string, &effect, "none", 0, 0, decode_effect, "specify the blitting effect" },
 	{ "screen_aspect", NULL, rc_string, &aspect, "4:3", 0, 0, decode_aspect, "specify an alternate monitor aspect ratio" },
 	{ "sleep", NULL, rc_bool, &allow_sleep, "1", 0, 0, NULL, "allow " APPNAME " to give back time to the system when it's not needed" },
-	{ "rdtsc", NULL, rc_bool, &win_force_rdtsc, "0", 0, 0, NULL, "prefer RDTSC over QueryPerformanceCounter for timing" },
-	{ "high_priority", NULL, rc_bool, &win_high_priority, "0", 0, 0, NULL, "increase thread priority" },
+
+	{ "rdtsc", NULL, rc_bool, &tmp, "0", 0, 0, NULL, "prefer RDTSC over QueryPerformanceCounter for timing" }, //unsupported
+	{ "high_priority", NULL, rc_bool, &tmp, "0", 0, 0, NULL, "increase thread priority" }, //unsupported
+#ifndef DISABLE_DX7
 	{ NULL, NULL, rc_link, win_d3d_opts, NULL, 0, 0, NULL, NULL },
+#endif
 	{ NULL,	NULL, rc_end, NULL, NULL, 0, 0,	NULL, NULL }
 };
 
@@ -337,7 +350,7 @@ static int decode_aspect(struct rc_option *option, const char *arg, int priority
 		fprintf(stderr, "error: invalid value for aspect ratio: %s\n", arg);
 		return -1;
 	}
-	win_screen_aspect = (double)num / (double)den;
+	win_screen_aspect = (float)((double)num / (double)den);
 
 	option->priority = priority;
 	return 0;
@@ -416,6 +429,7 @@ void win_disorient_rect(struct rectangle *rect)
 //============================================================
 //  devices_enum_callback
 //============================================================
+#ifndef DISABLE_DX7
 static BOOL WINAPI devices_enum_callback(GUID *lpGUID, LPSTR lpDriverDescription,
 										 LPSTR lpDriverName, LPVOID lpContext, HMONITOR hm)
 {
@@ -437,12 +451,14 @@ static BOOL WINAPI devices_enum_callback(GUID *lpGUID, LPSTR lpDriverDescription
 	// continue enumeration
 	return 1;
 }
-
-
+#endif
 
 //============================================================
 //	osd_create_display
 //============================================================
+#ifdef VPINMAME
+extern char g_fShowWinDMD;
+#endif
 
 int osd_create_display(const struct osd_create_params *params, UINT32 *rgb_components)
 {
@@ -478,8 +494,14 @@ int osd_create_display(const struct osd_create_params *params, UINT32 *rgb_compo
 	// proper screen
 
 	screen_guid_ptr = NULL;
- 	if (win_use_ddraw)
+#ifdef VPINMAME
+	if (g_fShowWinDMD == 0)
+		win_use_ddraw = 0;
+#endif 
+#ifndef DISABLE_DX7
+	if (win_use_ddraw)
 		DirectDrawEnumerateEx(devices_enum_callback, NULL, DDENUM_ATTACHEDSECONDARYDEVICES | DDENUM_DETACHEDSECONDARYDEVICES);
+#endif
 
 	// create the window
 	if (win_create_window(video_width, video_height, video_depth, video_attributes, aspect_ratio))
@@ -521,7 +543,7 @@ int osd_create_display(const struct osd_create_params *params, UINT32 *rgb_compo
 
 	// indicate for later that we're just beginning
 	warming_up = 1;
-    return 0;
+	return 0;
 }
 
 
@@ -673,30 +695,49 @@ static void check_inputs(void)
 //============================================================
 //	throttle_speed
 //============================================================
-#ifdef VPINMAME
-extern HANDLE g_hEnterThrottle;
-extern int    g_iSyncFactor;
-int           iCurrentSyncValue = 512;
+static int g_iThrottleAdj = 0;
+
+
+#ifdef DEBUG_SOUND
+void DebugSound(char *s)
+{
+	FILE *stream = fopen("C:\\temp\\sndlog.txt", "a");
+	fprintf(stream, "%s\n", s);
+	fclose(stream);
+}
 #endif
+
+void SetThrottleAdj(int adj)
+{
+#ifdef DEBUG_SOUND
+	char tmp[81];
+
+	static int last = 0;
+	if (adj != last)
+	{
+		snprintf(tmp, sizeof(tmp), "Set throttle adj: %d (cur %d)", adj, g_iThrottleAdjCur);
+		DebugSound(tmp);
+		last = adj;
+	}
+#endif
+	g_iThrottleAdj = adj;
+}
 
 static void throttle_speed(void)
 {
+	throttle_speed_part(1,1);
+}
+
+// Throttle code changed to support parital frame syncing.
+// The emulated machine can often read, and respond to input by firing flippers in less than 10ms, but
+// if the emulation only runs in 60hz "chunks", we may need multiple frames to read and respond 
+// to flipper input.  By distributing the emulation more evenly over a frame, it creates more opportunities
+// for the emulated machine to "see" the input and respond to it before the pinball simulator starts to draw its frame.
+
+void throttle_speed_part(int part, int totalparts)
+{
 	static double ticks_per_sleep_msec = 0;
 	cycles_t target, curr, cps;
-
-#ifdef VPINMAME
-	if ( (g_hEnterThrottle!=INVALID_HANDLE_VALUE) && g_iSyncFactor ) {
-		if ( g_iSyncFactor>=1024 )
-			SetEvent(g_hEnterThrottle);
-		else {
-			iCurrentSyncValue += g_iSyncFactor;
-			if ( iCurrentSyncValue>=1024 ) {
-				SetEvent(g_hEnterThrottle);
-				iCurrentSyncValue -= 1024;
-			}
-		}
-	}
-#endif
 
 	// if we're only syncing to the refresh, bail now
 	if (win_sync_refresh)
@@ -708,20 +749,50 @@ static void throttle_speed(void)
 	// get the current time and the target time
 	curr = osd_cycles();
 	cps = osd_cycles_per_second();
+
 	target = this_frame_base + (int)((double)frameskip_counter * (double)cps / video_fps);
 
+	// If we are throttling to a fractional vsync, adjust target to the partial target.
+	if (totalparts!=1)
+	{
+		// Meh.  The points in the code where frameskip counter gets updated is different from where the frame base is
+		// reset.  Makes this delay computation complicated.
+		if (frameskip_counter == 0)
+			target += (int)((double)(FRAMESKIP_LEVELS) * (double)cps / video_fps);
+		// MAGIC: Experimentation with actual resuts show the most even distribution if I throttle to 1/7th increments at each 25% timestep.
+		target -= ((cycles_t)((double)cps / (video_fps * (totalparts+3)))) * (totalparts - part + 3);
+	}
+
+	// initialize the ticks per sleep
+	if (ticks_per_sleep_msec == 0)
+		ticks_per_sleep_msec = (double)cps / 1000.;
+
+	// Adjust target for sound catchup
+	if (g_iThrottleAdj)
+	{
+		target -= (cycles_t)(g_iThrottleAdj*ticks_per_sleep_msec);
+	}
 	// sync
 	if (curr - target < 0)
 	{
-		// initialize the ticks per sleep
-		if (ticks_per_sleep_msec == 0)
-			ticks_per_sleep_msec = (double)(cps / 1000);
+#ifdef DEBUG_THROTTLE
+		{
+			char tmp[91];
+			snprintf(tmp, sizeof(tmp), "Throt: part %d of %d FS: %d Delta: %lld\n",part, totalparts, frameskip_counter, curr - target);
+			OutputDebugString(tmp);
+		}
+#endif
 
 		// loop until we reach the target time
 		while (curr - target < 0)
 		{
-#ifdef VPINMAME
-			Sleep((target-curr)/ticks_per_sleep_msec);
+#if 1 // VPINMAME
+			//if((INT64)((target - curr)/(ticks_per_sleep_msec*1.1))-1 > 0) // pessimistic estimate of stuff below, but still stutters then
+			//	uSleep((UINT64)((target - curr)*1000/(ticks_per_sleep_msec*1.1))-1);
+			if (totalparts > 1)
+				uUnderSleep((UINT64)((target - curr) * 1000 / ticks_per_sleep_msec)); // will sleep too short
+			else
+				uOverSleep((UINT64)((target - curr) * 1000 / ticks_per_sleep_msec)); // will sleep too long
 #else
 			// if we have enough time to sleep, do it
 			// ...but not if we're autoframeskipping and we're behind
@@ -731,7 +802,7 @@ static void throttle_speed(void)
 				cycles_t next;
 
 				// keep track of how long we actually slept
-				Sleep(1);
+				uSleep(100); //1000?
 				next = osd_cycles();
 				ticks_per_sleep_msec = (ticks_per_sleep_msec * 0.90) + ((double)(next - curr) * 0.10);
 				curr = next;
@@ -743,6 +814,30 @@ static void throttle_speed(void)
 				curr = osd_cycles();
 			}
 		}
+	}
+	else if (curr - target >= (int)(cps/video_fps) && totalparts == 1)
+	{
+		// We're behind schedule by a frame or more.  Something must
+		// have taken longer than it should have (e.g., a CPU emulator
+		// time slice must have gone on too long).  We don't have a
+		// time machine, so we can't go back and sync this frame to a
+		// time in the past, but we can at least sync up the current
+		// frame with the current real time.
+		//
+		// Note that the 12-frame "skip" cycle would eventually get
+		// things back in sync even without this adjustment, but it
+		// can cause audio glitching if we wait until then.  The skip
+		// cycle will try to make up for the lost time by giving shorter
+		// time slices to the next batch of 12 frames, but the way it
+		// does its calculation, the time taken out of those short
+		// frames will pile up in the *next next* skip cycle, causing
+		// a long (order of 100ms) pause that can manifset as an audio
+		// glitch and/or video hiccup.
+		//
+		// The adjustment here is simply the amount of real time by
+		// which we're behind schedule.  Add this to the base time,
+		// since the real time for this frame is later than we expected.
+		this_frame_base += curr - target;
 	}
 
 	// idle time done
@@ -757,7 +852,7 @@ static void throttle_speed(void)
 
 static void update_palette(struct mame_display *display)
 {
-	int i, j;
+	UINT32 i, j;
 
 	// loop over dirty colors in batches of 32
 	for (i = 0; i < display->game_palette_entries; i += 32)
@@ -856,7 +951,7 @@ void update_autoframeskip(void)
 		{
 			// if below 80% speed, be more aggressive
 			if (performance->game_speed_percent < 80)
-				frameskipadjust -= (90 - performance->game_speed_percent) / 5;
+				frameskipadjust -= (int)((90. - performance->game_speed_percent) / 5.);
 
 			// if we're close, only force it up to frameskip 8
 			else if (frameskip < 8)

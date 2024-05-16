@@ -73,7 +73,7 @@ static void writeword_a24_d32(offs_t address, data16_t data)
 		return;
 	}
 	cpu_writemem24bedw(address, data >> 8);
-	cpu_writemem24bedw(address + 1, data);
+	cpu_writemem24bedw(address + 1, (data8_t)data);
 }
 
 /* potentially misaligned 32-bit reads with a 32-bit data bus (and 24-bit address bus) */
@@ -158,7 +158,7 @@ static void writeword_a32_d32(offs_t address, data16_t data)
 		return;
 	}
 	cpu_writemem32bedw(address, data >> 8);
-	cpu_writemem32bedw(address + 1, data);
+	cpu_writemem32bedw(address + 1, (data8_t)data);
 }
 
 /* potentially misaligned 32-bit reads with a 32-bit data bus (and 32-bit address bus) */
@@ -217,9 +217,6 @@ static const struct m68k_memory_interface interface_a32_d32 =
 };
 #endif
 
-/* global access */
-struct m68k_memory_interface m68k_memory_intf;
-
 #endif // A68K2
 
 /****************************************************************************
@@ -229,15 +226,15 @@ struct m68k_memory_interface m68k_memory_intf;
 #ifndef A68K0
 
 static UINT8 m68000_reg_layout[] = {
-	M68K_PC, M68K_ISP, -1,
-	M68K_SR, M68K_USP, -1,
-	M68K_D0, M68K_A0, -1,
-	M68K_D1, M68K_A1, -1,
-	M68K_D2, M68K_A2, -1,
-	M68K_D3, M68K_A3, -1,
-	M68K_D4, M68K_A4, -1,
-	M68K_D5, M68K_A5, -1,
-	M68K_D6, M68K_A6, -1,
+	M68K_PC, M68K_ISP, 0xFF,
+	M68K_SR, M68K_USP, 0xFF,
+	M68K_D0, M68K_A0, 0xFF,
+	M68K_D1, M68K_A1, 0xFF,
+	M68K_D2, M68K_A2, 0xFF,
+	M68K_D3, M68K_A3, 0xFF,
+	M68K_D4, M68K_A4, 0xFF,
+	M68K_D5, M68K_A5, 0xFF,
+	M68K_D6, M68K_A6, 0xFF,
 	M68K_D7, M68K_A7, 0
 };
 
@@ -425,22 +422,22 @@ const char *m68000_info(void *context, int regnum)
 		case CPU_INFO_FLAGS:
 			sr = m68k_get_reg(context, M68K_REG_SR);
 			sprintf(buffer[which], "%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c",
-				sr & 0x8000 ? 'T':'.',
-				sr & 0x4000 ? '?':'.',
-				sr & 0x2000 ? 'S':'.',
-				sr & 0x1000 ? '?':'.',
-				sr & 0x0800 ? '?':'.',
-				sr & 0x0400 ? 'I':'.',
-				sr & 0x0200 ? 'I':'.',
-				sr & 0x0100 ? 'I':'.',
-				sr & 0x0080 ? '?':'.',
-				sr & 0x0040 ? '?':'.',
-				sr & 0x0020 ? '?':'.',
-				sr & 0x0010 ? 'X':'.',
-				sr & 0x0008 ? 'N':'.',
-				sr & 0x0004 ? 'Z':'.',
-				sr & 0x0002 ? 'V':'.',
-				sr & 0x0001 ? 'C':'.');
+				(sr & 0x8000) ? 'T':'.',
+				(sr & 0x4000) ? '?':'.',
+				(sr & 0x2000) ? 'S':'.',
+				(sr & 0x1000) ? '?':'.',
+				(sr & 0x0800) ? '?':'.',
+				(sr & 0x0400) ? 'I':'.',
+				(sr & 0x0200) ? 'I':'.',
+				(sr & 0x0100) ? 'I':'.',
+				(sr & 0x0080) ? '?':'.',
+				(sr & 0x0040) ? '?':'.',
+				(sr & 0x0020) ? '?':'.',
+				(sr & 0x0010) ? 'X':'.',
+				(sr & 0x0008) ? 'N':'.',
+				(sr & 0x0004) ? 'Z':'.',
+				(sr & 0x0002) ? 'V':'.',
+				(sr & 0x0001) ? 'C':'.');
 			break;
 		case CPU_INFO_NAME: return "68000";
 		case CPU_INFO_FAMILY: return "Motorola 68K";
@@ -679,22 +676,22 @@ const char *m68010_info(void *context, int regnum)
 		case CPU_INFO_FLAGS:
 			sr = m68k_get_reg(context, M68K_REG_SR);
 			sprintf(buffer[which], "%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c",
-				sr & 0x8000 ? 'T':'.',
-				sr & 0x4000 ? '?':'.',
-				sr & 0x2000 ? 'S':'.',
-				sr & 0x1000 ? '?':'.',
-				sr & 0x0800 ? '?':'.',
-				sr & 0x0400 ? 'I':'.',
-				sr & 0x0200 ? 'I':'.',
-				sr & 0x0100 ? 'I':'.',
-				sr & 0x0080 ? '?':'.',
-				sr & 0x0040 ? '?':'.',
-				sr & 0x0020 ? '?':'.',
-				sr & 0x0010 ? 'X':'.',
-				sr & 0x0008 ? 'N':'.',
-				sr & 0x0004 ? 'Z':'.',
-				sr & 0x0002 ? 'V':'.',
-				sr & 0x0001 ? 'C':'.');
+				(sr & 0x8000) ? 'T':'.',
+				(sr & 0x4000) ? '?':'.',
+				(sr & 0x2000) ? 'S':'.',
+				(sr & 0x1000) ? '?':'.',
+				(sr & 0x0800) ? '?':'.',
+				(sr & 0x0400) ? 'I':'.',
+				(sr & 0x0200) ? 'I':'.',
+				(sr & 0x0100) ? 'I':'.',
+				(sr & 0x0080) ? '?':'.',
+				(sr & 0x0040) ? '?':'.',
+				(sr & 0x0020) ? '?':'.',
+				(sr & 0x0010) ? 'X':'.',
+				(sr & 0x0008) ? 'N':'.',
+				(sr & 0x0004) ? 'Z':'.',
+				(sr & 0x0002) ? 'V':'.',
+				(sr & 0x0001) ? 'C':'.');
 			break;
 		case CPU_INFO_NAME: return "68010";
 		case CPU_INFO_FAMILY: return "Motorola 68K";
@@ -947,22 +944,22 @@ const char *m68ec020_info(void *context, int regnum)
 		case CPU_INFO_FLAGS:
 			sr = m68k_get_reg(context, M68K_REG_SR);
 			sprintf(buffer[which], "%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c",
-				sr & 0x8000 ? 'T':'.',
-				sr & 0x4000 ? 't':'.',
-				sr & 0x2000 ? 'S':'.',
-				sr & 0x1000 ? 'M':'.',
-				sr & 0x0800 ? '?':'.',
-				sr & 0x0400 ? 'I':'.',
-				sr & 0x0200 ? 'I':'.',
-				sr & 0x0100 ? 'I':'.',
-				sr & 0x0080 ? '?':'.',
-				sr & 0x0040 ? '?':'.',
-				sr & 0x0020 ? '?':'.',
-				sr & 0x0010 ? 'X':'.',
-				sr & 0x0008 ? 'N':'.',
-				sr & 0x0004 ? 'Z':'.',
-				sr & 0x0002 ? 'V':'.',
-				sr & 0x0001 ? 'C':'.');
+				(sr & 0x8000) ? 'T':'.',
+				(sr & 0x4000) ? 't':'.',
+				(sr & 0x2000) ? 'S':'.',
+				(sr & 0x1000) ? 'M':'.',
+				(sr & 0x0800) ? '?':'.',
+				(sr & 0x0400) ? 'I':'.',
+				(sr & 0x0200) ? 'I':'.',
+				(sr & 0x0100) ? 'I':'.',
+				(sr & 0x0080) ? '?':'.',
+				(sr & 0x0040) ? '?':'.',
+				(sr & 0x0020) ? '?':'.',
+				(sr & 0x0010) ? 'X':'.',
+				(sr & 0x0008) ? 'N':'.',
+				(sr & 0x0004) ? 'Z':'.',
+				(sr & 0x0002) ? 'V':'.',
+				(sr & 0x0001) ? 'C':'.');
 			break;
 		case CPU_INFO_NAME: return "68EC020";
 		case CPU_INFO_FAMILY: return "Motorola 68K";
@@ -1209,22 +1206,22 @@ const char *m68020_info(void *context, int regnum)
 		case CPU_INFO_FLAGS:
 			sr = m68k_get_reg(context, M68K_REG_SR);
 			sprintf(buffer[which], "%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c",
-				sr & 0x8000 ? 'T':'.',
-				sr & 0x4000 ? 't':'.',
-				sr & 0x2000 ? 'S':'.',
-				sr & 0x1000 ? 'M':'.',
-				sr & 0x0800 ? '?':'.',
-				sr & 0x0400 ? 'I':'.',
-				sr & 0x0200 ? 'I':'.',
-				sr & 0x0100 ? 'I':'.',
-				sr & 0x0080 ? '?':'.',
-				sr & 0x0040 ? '?':'.',
-				sr & 0x0020 ? '?':'.',
-				sr & 0x0010 ? 'X':'.',
-				sr & 0x0008 ? 'N':'.',
-				sr & 0x0004 ? 'Z':'.',
-				sr & 0x0002 ? 'V':'.',
-				sr & 0x0001 ? 'C':'.');
+				(sr & 0x8000) ? 'T':'.',
+				(sr & 0x4000) ? 't':'.',
+				(sr & 0x2000) ? 'S':'.',
+				(sr & 0x1000) ? 'M':'.',
+				(sr & 0x0800) ? '?':'.',
+				(sr & 0x0400) ? 'I':'.',
+				(sr & 0x0200) ? 'I':'.',
+				(sr & 0x0100) ? 'I':'.',
+				(sr & 0x0080) ? '?':'.',
+				(sr & 0x0040) ? '?':'.',
+				(sr & 0x0020) ? '?':'.',
+				(sr & 0x0010) ? 'X':'.',
+				(sr & 0x0008) ? 'N':'.',
+				(sr & 0x0004) ? 'Z':'.',
+				(sr & 0x0002) ? 'V':'.',
+				(sr & 0x0001) ? 'C':'.');
 			break;
 		case CPU_INFO_NAME: return "68020";
 		case CPU_INFO_FAMILY: return "Motorola 68K";
@@ -1328,7 +1325,7 @@ static void m68306_duart_set_dusr(int which,int data);		//Set the DUSR register
 static void m68306_duart_set_duisr(int data);				//Set the DUISR register
 static void m68306_duart_set_duimr(int data);				//Set the DUIMR register
 static void m68306_duart_check_int(void);					//Check for a DUART interrupt
-static void duart_start_timer(void);						//Duart Start Timer
+static void duart_start_timer(int reset);						//Duart Start Timer
 static void duart_timer_callback (int param);				//Duart Timer Callback
 static void m68306_rx_cause_int(int which,int data);		//Generate a Receiver Interrupt
 #ifndef PINMAME_NO_UNUSED	// currently unused function (GCC 3.4)
@@ -1528,22 +1525,15 @@ static data16_t m68306_duart_reg_r(offs_t address, int word) {
 		case 0xf7fd:
 			LOG(("%8x:START COUNTER COMMAND Read = %x\n",activecpu_get_pc(),data));
 #if !DISABLE_68306_TIMER
-			//TIMER MODE?
-			if(m68306duartreg[dirDUACR] & 0x40) {
-				//Look for 1->0 transition in the output to trigger an interrupt!
-				if(m68306_duart.timer_output) {
-					//Set CTR/TMR RDY bit (3) in DUISR
-					m68306_duart_set_duisr(m68306duartreg[dirDUISR] | 0x08);
-				}
-				//Clear OP3 output
-				m68306_duart.timer_output = 0;
-				//Restart timer!
-				duart_start_timer();
+			//Look for 1->0 transition in the output to trigger an interrupt!
+			if(m68306_duart.timer_output) {
+				//Set CTR/TMR RDY bit (3) in DUISR
+				m68306_duart_set_duisr(m68306duartreg[dirDUISR] | 0x08);
 			}
-			//COUNTER MODE?
-			else {
-				//Start count down from preloaded value
-			}
+			//Clear OP3 output
+			m68306_duart.timer_output = 0;
+			//Start timer!
+			duart_start_timer(1);
 #endif
 			break;
 		//F7FF - STOP COUNTER COMMAND
@@ -1553,11 +1543,12 @@ static data16_t m68306_duart_reg_r(offs_t address, int word) {
 			//Clear CTR/TMR RDY bit (3) in DUISR - BOTH TIMER & COUNTER MODE
 			m68306duartreg[dirDUISR] &= (~0x08);
 
-			//COUNTER MODE? - NOT IMPLEMENTED
+			//COUNTER MODE
 			if((m68306duartreg[dirDUACR] & 0x40) == 0) {
 				//Clear OP3 output
 				m68306_duart.timer_output = 0;
-				//Stop the counter..
+				//Stop the counter
+				timer_enable(m68306_duart.timer, 0);
 			}
 #endif
 			break;
@@ -1702,7 +1693,7 @@ static void m68306_duart_reg_w(offs_t address, data16_t data, int word) {
 static void m68306_tx_byte_sent(int which)
 {
 	int check_cts = (m68306duartreg[dirDUMR2A+(which*0x10)]&0x10)>>4;
-	int get_rts = 0;
+	int get_rts;
 
 	//Are we clear to send the byte? ..check CTS if configured to check it first and if it's 1, try again!
 	if(check_cts) {
@@ -1822,7 +1813,7 @@ static void m68306_rx_cause_int(int which,int data)
 }
 
 //Duart Start Timer
-static void duart_start_timer(void)
+static void duart_start_timer(int reset)
 {
 	double time;
 	double clock_src;
@@ -1832,12 +1823,24 @@ static void duart_start_timer(void)
 	timer_enable(m68306_duart.timer, 0);
 
 	//For now, support only external clock src (but really we should check the clock source bits in auxillary register
-	clock_src = TIME_IN_HZ(3686400);	// Clock src is fixed @ 3.6864MHz
+	switch (m68306duartreg[dirDUACR] & 0x30)
+	{
+	case 0x00: clock_src = TIME_IN_HZ(3686400       );	break; // External-IP2: unsupported, use default clock of 3.6864MHz
+	case 0x10: clock_src = TIME_IN_HZ(3686400 / 16.0);	break; // External-IP2/16: unsupported, use default clock of 3.6864MHz / 16
+	case 0x20: clock_src = TIME_IN_HZ(3686400       );	break; // Crystal or External Clock: use fixed clock of 3.6864MHz
+	case 0x30: clock_src = TIME_IN_HZ(3686400 / 16.0);	break; // External Clock Divided by 16: use fixed clock of 3.6864MHz / 16
+	}
 	//Get preload  value
 	preload = (m68306duartreg[dirCNT_MSB] << 8) | m68306duartreg[dirCNT_LSB];
-	if(!preload) return;
-	//Restart the timer (period is clock source * (2 * preload value)
-	time = clock_src * 2 * preload;
+	if(preload < 2) return;
+	if (m68306duartreg[dirDUACR] & 0x40) { // Timer mode
+		//Restart the timer (period is clock source * preload value, hence the generated square wave has a period of 2 * clock source * preload value since it toggles the output)
+		time = clock_src * preload;
+	}
+	else { // Counter mode
+		//Restart the timer: period is clock source * preload value on reset, after that it continues counting from 0xFFFF (application is supposed to stop / restart it)
+		time = reset ? (clock_src * preload) : (clock_src * 0x0FFFF);
+	}
 	timer_adjust(m68306_duart.timer, time, 0, 0);
 }
 
@@ -1852,7 +1855,7 @@ static void duart_timer_callback (int param)
 		m68306_duart_set_duisr(m68306duartreg[dirDUISR] | 0x08);
 	}
 	//Restart timer!
-	duart_start_timer();
+	duart_start_timer(0);
 }
 
 //Can we generate an interrupt?
@@ -1913,8 +1916,8 @@ static void m68306_duart_set_duisr(int data)
 //Set DUSR status register
 static void m68306_duart_set_dusr(int which,int data)
 {
-	int txRDY=0;
-	int rxRDY=0;
+	int txRDY;
+	int rxRDY;
 	m68306duartreg[dirDUSRA+(which*0x10)] = data;
 	//txRDY is duplicated in DUISR
 	txRDY = (m68306duartreg[dirDUSRA+(which*0x10)] & 0x04)>>2;	//TxRDY in DUSR is bit 2)
@@ -1972,7 +1975,7 @@ static void trigger_duart_int(int which)
 /* DUART COMMAND REGISTER WRITE */
 static void duart_command_register_w(int which, int data)
 {
-	int cmd = 0;
+	int cmd;
 	//Bit 7   = 0
 	//Bit 6-4 = MISC Commands
 	//Bit 3-2 = TC Command (Transmitter Channel)
@@ -2101,7 +2104,7 @@ static void duart_command_register_w(int which, int data)
 //----------------------------
 static void m68306_intreg_w(offs_t address, data16_t data, int word) {
   if (word && (address & 1)) {
-    logerror("M68306reg_w odd word address %08x\n",address); return;
+    LOG(("M68306reg_w odd word address %08x\n",address)); return;
   }
   if (address >= 0xffffffc0) { /* internal regs */
     const int reg = (address & 0x3f)>>1;
@@ -2147,12 +2150,12 @@ static void m68306_intreg_w(offs_t address, data16_t data, int word) {
         m68306intreg[irICR] = data; m68306irq(0,0); // update irq level
         break;
       case irBUSERR: /* refresh + buserror */
-        logerror("buserror_w %04x\n",data);
+        LOG(("buserror_w %04x\n",data));
         break;
       case irSYSTEM: /* system */
 		LOG(("%8x:SYSTEM REG=%04x\n",activecpu_get_pc(),data));
         m68306intreg[irSYSTEM] = (oldval & 0x8000) | (data & 0x7fff); // BTERR bit ignored
-        if (data & 0x4000) logerror("Bus Timeout Error not implmented %x\n",data);
+        if (data & 0x4000) { LOG(("Bus Timeout Error not implmented %x\n",data)); }
         break;
     } /* switch */
   }
@@ -2166,7 +2169,7 @@ static void m68306_intreg_w(offs_t address, data16_t data, int word) {
 static data16_t m68306_intreg_r(offs_t address, int word) {
   data16_t data = 0;
   if (word && (address & 1)) {
-    logerror("M68306reg_r odd word address %08x\n",address); return 0;
+    LOG(("M68306reg_r odd word address %08x\n",address)); return 0;
   }
   if (address >= 0xffffffc0) { /* internal regs */
     const int reg = (address & 0x3f)>>1;
@@ -2194,9 +2197,8 @@ static data16_t m68306_intreg_r(offs_t address, int word) {
         data = m68306intreg[irISR]; break;
       case irICR: /* interrupt control */
         data = m68306intreg[irICR]; break;
-        break;
       case irBUSERR: /* refresh + buserror */
-        logerror("buserror_r\n");
+        LOG(("buserror_r\n"));
         break;
       case irSYSTEM: /* system */
         data = m68306intreg[irSYSTEM];
@@ -2239,8 +2241,9 @@ static int m68306ack(int int_level) {
     else { // no autovector, IACK is not emulated
       if (m68306intack)
         return m68306intack(int_level);
-      else
-        logerror("M68306 No-AutoVector but no callback IRQ=%d\n",int_level);
+      else {
+        LOG(("M68306 No-AutoVector but no callback IRQ=%d\n",int_level));
+      }
     }
   }
   return M68K_INT_ACK_AUTOVECTOR; // Whatever

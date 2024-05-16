@@ -83,20 +83,22 @@ typedef enum { AH,AL,CH,CL,DH,DL,BH,BL,SPH,SPL,BPH,BPL,SIH,SIL,DIH,DIL } BREGS;
 #define PutMemB(Seg,Off,x)		cpu_writemem20((DefaultBase(Seg) + (Off)) & AMASK, (x))
 #define PutMemW(Seg,Off,x)		{ PutMemB(Seg, Off, (x) & 0xff); PutMemB(Seg, (Off) + 1, ((x) >> 8) & 0xff); }
 
-#define PEEKBYTE(ea) 			(cpu_readmem20((ea) & AMASK))
-#define ReadByte(ea) 			(cpu_readmem20((ea) & AMASK))
+#define PEEKBYTE(ea)			(cpu_readmem20((ea) & AMASK))
+#define ReadByte(ea)			(cpu_readmem20((ea) & AMASK))
 #define ReadWord(ea)			(cpu_readmem20((ea) & AMASK) + (cpu_readmem20(((ea) + 1) & AMASK) << 8))
 #define WriteByte(ea,val)		cpu_writemem20((ea) & AMASK, val);
 #define WriteWord(ea,val)		{ cpu_writemem20((ea) & AMASK, (val) & 0xff); cpu_writemem20(((ea) + 1) & AMASK, ((val) >> 8) & 0xff); }
 
-#define read_port(port) 		cpu_readport16(port)
-#define write_port(port,val) 	cpu_writeport16(port,val)
+#define read_port_byte(port)		cpu_readport16(port)
+#define write_port_byte(port,val)	cpu_writeport16(port,val)
+#define read_port_word(port)		cpu_readport16bew_word(port)
+#define write_port_word(port,val)	cpu_writeport16bew_word(port,val)
 
 #define FETCH					(cpu_readop_arg(I.pc++))
 #define FETCHOP					(cpu_readop(I.pc++))
 #define PEEKOP(addr)			(cpu_readop(addr))
 #define FETCHWORD(var) 			{ var = cpu_readop_arg(I.pc); var += (cpu_readop_arg(I.pc + 1) << 8); I.pc += 2; }
-#define CHANGE_PC(addr)			change_pc20(addr)
+#define CHANGE_PC(addr)			change_pc16(addr)
 #define PUSH(val)				{ I.regs.w[SP] -= 2; WriteWord(((I.base[SS] + I.regs.w[SP]) & AMASK), val); }
 #define POP(var)				{ var = ReadWord(((I.base[SS] + I.regs.w[SP]) & AMASK)); I.regs.w[SP] += 2; }
 

@@ -3,7 +3,12 @@ extern "C" {
   #include "driver.h"
   #include "audit.h"
 }
-#include "alias.h"
+
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include "Alias.h"
 
 static const struct tAliasTable { const char* alias; const char* real; } aliasTable[] = {
   { "eshak_f1", "esha_pr4" },
@@ -40,17 +45,55 @@ static const struct tAliasTable { const char* alias; const char* real; } aliasTa
   { "harley", "harl_a10" },
   { "swtril", "swtril43" },
   { "jplstwld", "jplstw22" },
+  { "bnzai_p1", "bnzai_pa" },
+  { "gs_l4", "gs_lu4" },
+  { "gs_l3", "gs_la3" },
+  { "kpv106", "kpb105" },
+  { "mousn_lx", "mousn_l4" },
   { NULL, NULL }
 };
+
+static char alias_from_file[50];
 
 static const char* crcOfGamesNotSupported[] = {
 	NULL
 };
 
 const char* checkGameAlias(const char* aRomName) {
-  for (const tAliasTable* ii = aliasTable; ii->alias; ++ii)
-    if (_stricmp(aRomName, ii->alias) == 0) return ii->real;
-  return aRomName;
+	char AliasFilename[MAX_PATH];
+
+#ifndef _WIN64
+	const HINSTANCE hInst = GetModuleHandle("VPinMAME.dll");
+#else
+	const HINSTANCE hInst = GetModuleHandle("VPinMAME64.dll");
+#endif
+	GetModuleFileName(hInst, AliasFilename, MAX_PATH);
+	char* ptr = strrchr(AliasFilename, '\\');
+	if (ptr != NULL)
+	{
+		strcpy_s(ptr + 1, 13, "VPMAlias.txt");
+
+		FILE *f = fopen(AliasFilename, "r");
+
+		if (f != NULL)
+		{
+			char line[128];
+			while (fgets(line, sizeof(line), f) != NULL)
+			{
+				char *token = strtok(line, ", ");
+				if (_stricmp(token, aRomName) == 0)
+				{
+					strcpy_s(alias_from_file, sizeof(alias_from_file), strtok(NULL, " ,\n#;'"));
+					fclose(f);
+					return alias_from_file;
+				}
+			}
+			fclose(f);
+		}
+	}
+	for (const tAliasTable* ii = aliasTable; ii->alias; ++ii)
+		if (_stricmp(aRomName, ii->alias) == 0) return ii->real;
+	return aRomName;
 }
 
 bool checkGameNotSupported(const struct GameDriver* aGameDriver) {

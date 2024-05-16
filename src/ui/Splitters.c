@@ -32,11 +32,11 @@
 #include <windowsx.h>
 #include <commctrl.h>
 
-#include "splitters.h"
-#include "bitmask.h"
+#include "Splitters.h"
+#include "Bitmask.h"
 #include "options.h"
 #include "resource.h"
-#include "screenshot.h"
+#include "Screenshot.h"
 #include "win32ui.h"
 
 /* Local Variables */
@@ -202,7 +202,7 @@ void OnSizeSplitter(HWND hWnd)
 
 		if (bMustChange)
 		{
-			nSplitterOffset[i] = (rWindowRect.right - rWindowRect.left) * g_splitterInfo[i].dPosition;
+			nSplitterOffset[i] = (int)((rWindowRect.right - rWindowRect.left) * g_splitterInfo[i].dPosition);
 			changed = TRUE;
 		}
 	}

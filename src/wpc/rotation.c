@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /************************************************************************************************
  Midway Pinball games
  --------------------
@@ -10,11 +12,12 @@
 	Hardware:
 	---------
 		CPU:     Z80 @ 1.77 MHz
-			INT: NMI via 8156 timer output
+		    INT: NMI via 8156 timer output
 		IO:      Z80 Ports, 8156 PIA
 		DISPLAY: 5 x 6 Digit 7-Segment panels
-		SOUND:	 Astrocade sound chip (part no. 0066-117XX, marked as "K3-4" on schematic
+		SOUND:   Astrocade sound chip (part no. 0066-117XX, marked as "K3-4" on schematic
 ************************************************************************************************/
+
 #include <stdarg.h>
 #include "driver.h"
 #include "cpu/z80/z80.h"
@@ -35,6 +38,8 @@ static struct {
   UINT32 solenoids;
   UINT8  tmpLampData;
   core_tSeg pseg;
+
+  int oldCol;
 } locals;
 
 /*-----------------------------------------------
@@ -114,13 +119,12 @@ static READ_HANDLER(keypad_r) {
 }
 
 static WRITE_HANDLER(lamp_w) {
-  static int oldCol;
   locals.tmpLampData = data;
-  if (oldCol != locals.tmpSwCol) {
+  if (locals.oldCol != locals.tmpSwCol) {
     coreGlobals.tmpLampMatrix[locals.tmpSwCol] |= data;
     coreGlobals.lampMatrix[locals.tmpSwCol] = coreGlobals.tmpLampMatrix[locals.tmpSwCol];
   }
-  oldCol = locals.tmpSwCol;
+  locals.oldCol = locals.tmpSwCol;
 }
 
 static WRITE_HANDLER(sol_w) {
@@ -192,13 +196,13 @@ MEMORY_END
 
 static struct astrocade_interface sndIntf = {
   1,
-  14138000/8,
+  14138000./8.,
   { 75 }
 };
 
 MACHINE_DRIVER_START(MIDWAY)
   MDRV_IMPORT_FROM(PinMAME)
-  MDRV_CPU_ADD_TAG("mcpu", Z80, 14138000/8)
+  MDRV_CPU_ADD_TAG("mcpu", Z80, 14138000./8.)
   MDRV_CPU_MEMORY(MIDWAY_readmem, MIDWAY_writemem)
   MDRV_CPU_PORTS(midway_readport,midway_writeport)
   MDRV_CPU_VBLANK_INT(MIDWAY_vblank, 1)
@@ -273,7 +277,7 @@ ROM_START(rotation)
     ROM_LOAD("rot-b117.dat", 0x0800, 0x0800, CRC(538e37b2) SHA1(d283ac4d0024388b92b6494fcde63957b705bf48))
     ROM_LOAD("rot-c117.dat", 0x1000, 0x0800, CRC(3321ff08) SHA1(d6d94fea27ef58ca648b2829b32d62fcec108c9b))
 ROM_END
-CORE_GAMEDEFNV(rotation,"Rotation VIII (v. 1.17)",1978,"Midway",MIDWAY,0)
+CORE_GAMEDEFNV(rotation,"Rotation VIII (1.17)",1978,"Midway",MIDWAY,0)
 
 ROM_START(rota_115)
   NORMALREGION(0x10000, REGION_CPU1)
@@ -283,7 +287,7 @@ ROM_START(rota_115)
 ROM_END
 #define init_rota_115 init_rotation
 #define input_ports_rota_115 input_ports_rotation
-CORE_CLONEDEFNV(rota_115,rotation,"Rotation VIII (v. 1.15)",1978,"Midway",MIDWAY,0)
+CORE_CLONEDEFNV(rota_115,rotation,"Rotation VIII (1.15)",1978,"Midway",MIDWAY,0)
 
 ROM_START(rota_101)
   NORMALREGION(0x10000, REGION_CPU1)
@@ -293,4 +297,4 @@ ROM_START(rota_101)
 ROM_END
 #define init_rota_101 init_rotation
 #define input_ports_rota_101 input_ports_rotation
-CORE_CLONEDEFNV(rota_101,rotation,"Rotation VIII (v. 1.01)",1978,"Midway",MIDWAY,0)
+CORE_CLONEDEFNV(rota_101,rotation,"Rotation VIII (1.01)",1978,"Midway",MIDWAY,0)

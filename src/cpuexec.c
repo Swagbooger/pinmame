@@ -10,6 +10,7 @@
 #include "driver.h"
 #include "timer.h"
 #include "state.h"
+#include "video.h"
 #include "mamedbg.h"
 #include "hiscore.h"
 
@@ -166,6 +167,9 @@ static int vblank;
 static int current_frame;
 static INT32 watchdog_counter;
 
+static int timetrig_spin = 0;
+static int timetrig_yield = 0;
+
 static int cycles_running;
 static int cycles_stolen;
 
@@ -176,6 +180,11 @@ static int cycles_stolen;
  *	Timer variables
  *
  *************************************/
+
+#define LOW_LATENCY_THROTTLE_PARTS 4
+
+static void *sync_timer;
+static int sync_countdown;
 
 static void *vblank_timer;
 static int vblank_countdown;
@@ -225,7 +234,11 @@ static void compute_perfect_interleave(void);
 
 static void handle_loadsave(void);
 
-
+#ifdef PINMAME
+void run_one_timeslice(void) {
+	cpu_timeslice();
+}
+#endif
 
 #if 0
 #pragma mark CORE CPU
@@ -339,13 +352,15 @@ static void cpu_pre_run(void)
 	/* now reset each CPU */
 	for (cpunum = 0; cpunum < cpu_gettotalcpu(); cpunum++)
 #ifdef PINMAME
-        	if (!(Machine->drv->cpu[cpunum].cpu_flags & CPU_AUDIO_CPU) || Machine->sample_rate != 0)
+		if (!(Machine->drv->cpu[cpunum].cpu_flags & CPU_AUDIO_CPU) || Machine->sample_rate != 0)
 #endif /* PINMAME */
 		cpunum_reset(cpunum, Machine->drv->cpu[cpunum].reset_param, cpu_irq_callbacks[cpunum]);
 
 	/* reset the globals */
 	cpu_vblankreset();
 	current_frame = 0;
+	timetrig_spin = 0;
+	timetrig_yield = 0;
 	state_save_dump_registry();
 }
 
@@ -467,13 +482,14 @@ void machine_reset(void)
 static void handle_save(void)
 {
 	mame_file *file;
-	int cpunum;
 
 	/* open the file */
 	file = mame_fopen(Machine->gamedrv->name, loadsave_schedule_name, FILETYPE_STATE, 1);
 
 	if (file)
 	{
+		int cpunum;
+
 		/* write the save state */
 		state_save_save_begin(file);
 
@@ -520,7 +536,6 @@ static void handle_save(void)
 static void handle_load(void)
 {
 	mame_file *file;
-	int cpunum;
 
 	/* open the file */
 	file = mame_fopen(Machine->gamedrv->name, loadsave_schedule_name, FILETYPE_STATE, 0);
@@ -531,6 +546,8 @@ static void handle_load(void)
 		/* start loading */
 		if (!state_save_load_begin(file))
 		{
+			int cpunum;
+
 			/* read tag 0 */
 			state_save_set_current_tag(0);
 			state_save_load_continue();
@@ -667,7 +684,7 @@ static void watchdog_reset(void)
 {
 	if (watchdog_counter == -1)
 		logerror("watchdog armed\n");
-	watchdog_counter = 3 * Machine->drv->frames_per_second;
+	watchdog_counter = (INT32)(3. * (double)Machine->drv->frames_per_second);
 }
 
 
@@ -1102,31 +1119,15 @@ int cycles_left_to_run(void)
 
 --------------------------------------------------------------*/
 
-UINT32 activecpu_gettotalcycles(void)
-{
-	VERIFY_EXECUTINGCPU(0, cpu_gettotalcycles);
-	return cpu[activecpu].totalcycles + cycles_currently_ran();
-}
-
-UINT32 cpu_gettotalcycles(int cpunum)
-{
-	VERIFY_CPUNUM(0, cpu_gettotalcycles);
-	if (cpunum == cpu_getexecutingcpu())
-		return cpu[cpunum].totalcycles + cycles_currently_ran();
-	else
-		return cpu[cpunum].totalcycles;
-}
-
-
 UINT64 activecpu_gettotalcycles64(void)
 {
-	VERIFY_EXECUTINGCPU(0, cpu_gettotalcycles);
+	VERIFY_EXECUTINGCPU(0, cpu_gettotalcycles64);
 	return cpu[activecpu].totalcycles + cycles_currently_ran();
 }
 
 UINT64 cpu_gettotalcycles64(int cpunum)
 {
-	VERIFY_CPUNUM(0, cpu_gettotalcycles);
+	VERIFY_CPUNUM(0, cpu_gettotalcycles64);
 	if (cpunum == cpu_getexecutingcpu())
 		return cpu[cpunum].totalcycles + cycles_currently_ran();
 	else
@@ -1163,7 +1164,7 @@ int activecpu_geticount(void)
 
 int cpu_scalebyfcount(int value)
 {
-	int result = (int)((double)value * timer_timeelapsed(refresh_timer) * refresh_period_inv);
+	int result = (int)((double)value * timer_timeelapsed(refresh_timer) * refresh_period_inv + 0.5);
 	if (value >= 0)
 		return (result < value) ? result : value;
 	else
@@ -1288,9 +1289,9 @@ double cpu_getscanlineperiod(void)
 int cpu_gethorzbeampos(void)
 {
 	double elapsed_time = timer_timeelapsed(refresh_timer);
-	int scanline = (int)(elapsed_time * scanline_period_inv);
+	int scanline = (int)(elapsed_time * scanline_period_inv + 0.5);
 	double time_since_scanline = elapsed_time - (double)scanline * scanline_period;
-	return (int)(time_since_scanline * scanline_period_inv * (double)Machine->drv->screen_width);
+	return (int)(time_since_scanline * scanline_period_inv * (double)Machine->drv->screen_width + 0.5);
 }
 
 
@@ -1470,21 +1471,17 @@ void cpu_yield(void)
 
 void cpu_spinuntil_time(double duration)
 {
-	static int timetrig = 0;
-
-	cpu_spinuntil_trigger(TRIGGER_SUSPENDTIME + timetrig);
-	cpu_triggertime(duration, TRIGGER_SUSPENDTIME + timetrig);
-	timetrig = (timetrig + 1) & 255;
+	cpu_spinuntil_trigger(TRIGGER_SUSPENDTIME + timetrig_spin);
+	cpu_triggertime(duration, TRIGGER_SUSPENDTIME + timetrig_spin);
+	timetrig_spin = (timetrig_spin + 1) & 255;
 }
 
 
 void cpu_yielduntil_time(double duration)
 {
-	static int timetrig = 0;
-
-	cpu_yielduntil_trigger(TRIGGER_YIELDTIME + timetrig);
-	cpu_triggertime(duration, TRIGGER_YIELDTIME + timetrig);
-	timetrig = (timetrig + 1) & 255;
+	cpu_yielduntil_trigger(TRIGGER_YIELDTIME + timetrig_yield);
+	cpu_triggertime(duration, TRIGGER_YIELDTIME + timetrig_yield);
+	timetrig_yield = (timetrig_yield + 1) & 255;
 }
 
 
@@ -1541,7 +1538,7 @@ static void cpu_vblankreset(void)
 	for (cpunum = 0; cpunum < cpu_gettotalcpu(); cpunum++)
 	{
 		if (!(cpu[cpunum].suspend & SUSPEND_REASON_DISABLE))
-			cpu[cpunum].iloops = Machine->drv->cpu[cpunum].vblank_interrupts_per_frame - 1;
+			cpu[cpunum].iloops = (int)(Machine->drv->cpu[cpunum].vblank_interrupts_per_frame - 1 + 0.5);
 		else
 			cpu[cpunum].iloops = -1;
 	}
@@ -1571,6 +1568,13 @@ static void cpu_firstvblankcallback(int param)
  *	VBLANK core handler
  *
  *************************************/
+
+static void cpu_synccallback(int param)
+{
+	throttle_speed_part(LOW_LATENCY_THROTTLE_PARTS-sync_countdown, LOW_LATENCY_THROTTLE_PARTS);
+	if(!--sync_countdown)
+		timer_adjust(sync_timer, TIME_NEVER, 0, TIME_NEVER);
+}
 
 static void cpu_vblankcallback(int param)
 {
@@ -1629,6 +1633,9 @@ static void cpu_vblankcallback(int param)
 
 		/* reset the counter */
 		vblank_countdown = vblank_multiplier;
+		sync_countdown = LOW_LATENCY_THROTTLE_PARTS - 1;
+		if(g_low_latency_throttle && frameskip == 0)
+			timer_adjust(sync_timer, TIME_IN_HZ(60 * LOW_LATENCY_THROTTLE_PARTS), 0, TIME_IN_HZ(60 * LOW_LATENCY_THROTTLE_PARTS));
 	}
 }
 
@@ -1707,14 +1714,14 @@ static void cpu_timedintcallback(int param)
 
 --------------------------------------------------------------*/
 
-static double cpu_computerate(int value)
+static double cpu_computerate(double value)
 {
 	/* values equal to zero are zero */
-	if (value <= 0)
+	if (value <= 0.0)
 		return 0.0;
 
 	/* values above between 0 and 50000 are in Hz */
-	if (value < 50000)
+	if (value < 50000.0)
 		return TIME_IN_HZ(value);
 
 	/* values greater than 50000 are in nanoseconds */
@@ -1797,12 +1804,13 @@ static void cpu_inittimers(void)
 {
 	double first_time;
 	int cpunum, max, ipf;
+	double ipfd;
 
 	/* allocate a dummy timer at the minimum frequency to break things up */
-	ipf = Machine->drv->cpu_slices_per_frame;
-	if (ipf <= 0)
-		ipf = 1;
-	timeslice_period = TIME_IN_HZ(Machine->drv->frames_per_second * ipf);
+	ipfd = Machine->drv->cpu_slices_per_frame;
+	if (ipfd <= 0.)
+		ipfd = 1.;
+	timeslice_period = TIME_IN_HZ(Machine->drv->frames_per_second * ipfd);
 	timeslice_timer = timer_alloc(cpu_timeslicecallback);
 	timer_adjust(timeslice_timer, timeslice_period, 0, timeslice_period);
 	
@@ -1820,18 +1828,20 @@ static void cpu_inittimers(void)
 	max = 1;
 	for (cpunum = 0; cpunum < cpu_gettotalcpu(); cpunum++)
 	{
-		ipf = Machine->drv->cpu[cpunum].vblank_interrupts_per_frame;
+		ipf = (int)(Machine->drv->cpu[cpunum].vblank_interrupts_per_frame+0.5);
 		if (ipf > max)
 			max = ipf;
 	}
 
 	/* now find the LCD with the rest of the CPUs (brute force - these numbers aren't huge) */
+
 	vblank_multiplier = max;
+
 	while (1)
 	{
 		for (cpunum = 0; cpunum < cpu_gettotalcpu(); cpunum++)
 		{
-			ipf = Machine->drv->cpu[cpunum].vblank_interrupts_per_frame;
+			ipf = (int)(Machine->drv->cpu[cpunum].vblank_interrupts_per_frame+0.5);
 			if (ipf > 0 && (vblank_multiplier % ipf) != 0)
 				break;
 		}
@@ -1843,7 +1853,7 @@ static void cpu_inittimers(void)
 	/* initialize the countdown timers and intervals */
 	for (cpunum = 0; cpunum < cpu_gettotalcpu(); cpunum++)
 	{
-		ipf = Machine->drv->cpu[cpunum].vblank_interrupts_per_frame;
+		ipf = (int)(Machine->drv->cpu[cpunum].vblank_interrupts_per_frame+0.5);
 		if (ipf > 0)
 			cpu[cpunum].vblankint_countdown = cpu[cpunum].vblankint_multiplier = vblank_multiplier / ipf;
 		else
@@ -1853,8 +1863,10 @@ static void cpu_inittimers(void)
 	/* allocate a vblank timer at the frame rate * the LCD number of interrupts per frame */
 	vblank_period = TIME_IN_HZ(Machine->drv->frames_per_second * vblank_multiplier);
 	vblank_timer = timer_alloc(cpu_vblankcallback);
+
 	vblank_countdown = vblank_multiplier;
 
+	sync_timer = timer_alloc(cpu_synccallback);
 	/*
 	 *		The following code creates individual timers for each CPU whose interrupts are not
 	 *		synced to the VBLANK, and computes the typical number of cycles per interrupt
@@ -1863,19 +1875,19 @@ static void cpu_inittimers(void)
 	/* start the CPU interrupt timers */
 	for (cpunum = 0; cpunum < cpu_gettotalcpu(); cpunum++)
 	{
-		ipf = Machine->drv->cpu[cpunum].vblank_interrupts_per_frame;
+		ipfd = Machine->drv->cpu[cpunum].vblank_interrupts_per_frame;
 
 		/* compute the average number of cycles per interrupt */
-		if (ipf <= 0)
-			ipf = 1;
-		cpu[cpunum].vblankint_period = TIME_IN_HZ(Machine->drv->frames_per_second * ipf);
+		if (ipfd <= 0.)
+			ipfd = 1.;
+		cpu[cpunum].vblankint_period = TIME_IN_HZ(Machine->drv->frames_per_second * ipfd);
 		cpu[cpunum].vblankint_timer = timer_alloc(NULL);
 
 		/* see if we need to allocate a CPU timer */
-		ipf = Machine->drv->cpu[cpunum].timed_interrupts_per_second;
-		if (ipf)
+		ipfd = Machine->drv->cpu[cpunum].timed_interrupts_per_second;
+		if (ipfd > 0.)
 		{
-			cpu[cpunum].timedint_period = cpu_computerate(ipf);
+			cpu[cpunum].timedint_period = cpu_computerate(ipfd);
 			cpu[cpunum].timedint_timer = timer_alloc(cpu_timedintcallback);
 			timer_adjust(cpu[cpunum].timedint_timer, cpu[cpunum].timedint_period, cpunum, cpu[cpunum].timedint_period);
 		}

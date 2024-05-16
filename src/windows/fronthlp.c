@@ -10,6 +10,11 @@
 #include <dirent.h>
 #include <unzip.h>
 #include <zlib.h>
+#ifdef _MSC_VER
+#if _MSC_VER < 1600
+#include "snprintf.c"
+#endif
+#endif
 
 #ifndef MESS
 enum { LIST_SHORT = 1, LIST_INFO, LIST_XML, LIST_FULL, LIST_SAMDIR, LIST_ROMS, LIST_SAMPLES,
@@ -42,10 +47,10 @@ enum { LIST_SHORT = 1, LIST_INFO, LIST_XML, LIST_FULL, LIST_SAMDIR, LIST_ROMS, L
 
 #ifndef MESS
 #define YEAR_BEGIN 1974
-#define YEAR_END   2010
+#define YEAR_END   2024
 #else
 #define YEAR_BEGIN 1950
-#define YEAR_END   2010
+#define YEAR_END   2024
 #endif
 
 static int list = 0;
@@ -126,7 +131,7 @@ static const struct GameDriver *gamedrv;
 int strwildcmp(const char *sp1, const char *sp2)
 {
 	char s1[9], s2[9];
-	int i, l1, l2;
+	size_t i, l1, l2;
 	char *p;
 
 	strncpy(s1, sp1, 8); s1[8] = 0; if (s1[0] == 0) strcpy(s1, "*");
@@ -222,7 +227,7 @@ void identify_rom(const char* name, const char* hash, int length)
 
 	/* remove directory name */
 	int i;
-	for (i = strlen(name)-1;i >= 0;i--)
+	for (i = (int)strlen(name)-1;i >= 0;i--)
 	{
 		if (name[i] == '/' || name[i] == '\\')
 		{
@@ -231,7 +236,7 @@ void identify_rom(const char* name, const char* hash, int length)
 		}
 	}
 	if (!silentident)
-		printf("%s ",&name[0]);
+		printf("%s ",name);
 
 	for (i = 0; drivers[i]; i++)
 		match_roms(drivers[i],hash,&found);
@@ -320,7 +325,7 @@ void identify_file(const char* name)
 	fclose(f);
 
 	/* Compute checksum of all the available functions. Since MAME for
-	   now carries inforamtions only for CRC and SHA1, we compute only
+	   now carries information only for CRC and SHA1, we compute only
 	   these */
 	if (options.crc_only)
 		hash_compute(hash, data, length, HASH_CRC);
@@ -352,7 +357,7 @@ void identify_zip(const char* zipname)
 			sprintf(buf,"%-12s",ent->name);
 
 			/* Decompress the ROM from the ZIP, and compute all the needed
-			   checksums. Since MAME for now carries informations only for CRC and
+			   checksums. Since MAME for now carries information only for CRC and
 			   SHA1, we compute only these (actually, CRC is extracted from the
 			   ZIP header) */
 			hash_data_clear(hash);
@@ -420,7 +425,7 @@ void romident(const char* name,int enter_dirs) {
 		if (enter_dirs)
 			identify_dir(name);
 	} else {
-		unsigned l = strlen(name);
+		size_t l = strlen(name);
 		if (l>=4 && _stricmp(name+l-4,".zip")==0)
 			identify_zip(name);
 		else
@@ -469,8 +474,16 @@ int frontend_help (const char *gamename)
 	{
 		#ifndef MESS
 #ifdef PINMAME
-		printf("PinMAME v%s\n Pinball's Multiple Arcade Machine Emulator\n"
-				"Copyright (C) 2000-2014 by the PinMAME Team\n\n",build_version);
+		char tmp[80];
+
+#if defined(__LP64__) || defined(_WIN64)
+		snprintf(tmp,sizeof(tmp), "%s (x64)", build_version);
+#else 
+		snprintf(tmp,sizeof(tmp), "%s", build_version);
+#endif
+	
+		printf("PinMAME v%s\nPinball's Multiple Arcade Machine Emulator\n"
+				"Copyright (C) 2000-2024 by the PinMAME Team\n\n",tmp);
 		showdisclaimer();
 		printf("Usage:  PINMAME gamename [options]\n\n"
 				"        -list         for a brief list of supported games\n"
@@ -1292,11 +1305,11 @@ int frontend_help (const char *gamename)
 				if (drivers[i]->clone_of == 0 || (drivers[i]->clone_of->flags & NOT_A_DRIVER))
 				{
 					const struct RomModule *region, *rom, *chunk;
-					int romtotal = 0,romcpu = 0,romgfx = 0,romsound = 0;
+					unsigned int romtotal = 0,romcpu = 0,romgfx = 0,romsound = 0;
 
 					for (region = rom_first_region(drivers[i]); region; region = rom_next_region(region))
 					{
-						int type = ROMREGION_GETTYPE(region);
+						size_t type = ROMREGION_GETTYPE(region);
 
 						for (rom = rom_first_file(region); rom; rom = rom_next_file(rom))
 						{
@@ -1321,9 +1334,9 @@ int frontend_help (const char *gamename)
 			{
 				int year;
 
-				for (year = 1975;year <= 2000;year++)
+				for (year = YEAR_BEGIN;year <= YEAR_END;year++)
 				{
-					int gamestotal = 0,romcpu = 0,romgfx = 0,romsound = 0;
+					unsigned int gamestotal = 0,romcpu = 0,romgfx = 0,romsound = 0;
 
 					for (i = 0; drivers[i]; i++)
 					{
@@ -1337,7 +1350,7 @@ int frontend_help (const char *gamename)
 
 								for (region = rom_first_region(drivers[i]); region; region = rom_next_region(region))
 								{
-									int type = ROMREGION_GETTYPE(region);
+									size_t type = ROMREGION_GETTYPE(region);
 
 									for (rom = rom_first_file(region); rom; rom = rom_next_file(rom))
 									{
@@ -1517,7 +1530,7 @@ j = 0;	// count only the main cpu
 			{
 				int year;
 
-				for (year = 1975;year <= 2000;year++)
+				for (year = YEAR_BEGIN;year <= YEAR_END;year++)
 				{
 					int games=0,nosound=0;
 
@@ -1597,7 +1610,7 @@ j = 0;	// count only the main cpu
 			{
 				int year;
 
-				for (year = 1975;year <= 2000;year++)
+				for (year = YEAR_BEGIN;year <= YEAR_END;year++)
 				{
 					int games=0,nvram=0;
 

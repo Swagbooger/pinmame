@@ -117,7 +117,20 @@
 #include "vidhrdw/vector.h"
 #include "palette.h"
 #include "harddisk.h"
+#if defined(PINMAME) && defined(PROC_SUPPORT)
+#include "p-roc/p-roc.h"
+#endif /* PINMAME && PROC_SUPPORT */
+#if defined(PINMAME) && defined(LISY_SUPPORT)
+ #include "lisy/utils.h"
+#endif /* PINMAME && LISY_SUPPORT */
+#include "../ext/vgm/vgmwrite.h"
+#if !defined(_MSC_VER) && !defined(LIBPINMAME) && !defined(XMAME) //!! as not included in PinMAMEs standard makefile build yet
+ #include "../ext/vgm/vgmwrite.c"
+#endif
 
+#ifdef LIBPINMAME
+extern void libpinmame_log_error(const char* format, ...);
+#endif
 
 /***************************************************************************
 
@@ -252,7 +265,11 @@ INLINE void bail_and_print(const char *message)
 	if (!bailing)
 	{
 		bailing = 1;
+#ifndef LIBPINMAME
 		printf("%s\n", message);
+#else
+		libpinmame_log_error("%s", message);
+#endif
 	}
 }
 
@@ -285,7 +302,7 @@ int run_game(int game)
 #endif
 
 	/* first give the machine a good cleaning */
-	memset(Machine, 0, sizeof(Machine));
+	memset(Machine, 0, sizeof(*Machine));
 
 	/* initialize the driver-related variables in the Machine */
 	Machine->gamedrv = gamedrv = drivers[game];
@@ -344,6 +361,10 @@ int run_game(int game)
 
 static int init_machine(void)
 {
+#if defined(PINMAME) && defined(PROC_SUPPORT)
+	char * yaml_filename = pmoptions.p_roc;
+#endif /* PINMAME && PROC_SUPPORT */
+
 	/* load the localization file */
 	if (uistring_init(options.language_file) != 0)
 	{
@@ -357,6 +378,13 @@ static int init_machine(void)
 		logerror("code_init failed\n");
 		goto cant_init_input;
 	}
+
+#if defined(PINMAME) && defined(PROC_SUPPORT)
+	procInitialize(yaml_filename);
+#endif /* PINMAME && PROC_SUPPORT */
+#if defined(PINMAME) && defined(LISY_SUPPORT)
+	lisy_init();
+#endif /* PINMAME && LISY_SUPPORT */
 
 	/* if we have inputs, process them now */
 	if (gamedrv->input_ports)
@@ -385,6 +413,9 @@ static int init_machine(void)
 	if (gamedrv->rom && rom_load(gamedrv->rom) != 0)
 	{
 		logerror("readroms failed\n");
+#if defined(PINMAME) && defined(LISY_SUPPORT)
+		lisy80_error(10);
+#endif /* PINMAME && LISY_SUPPORT */
 		goto cant_load_roms;
 	}
 
@@ -417,6 +448,8 @@ static int init_machine(void)
 		logerror("memory_init failed\n");
 		goto cant_init_memory;
 	}
+
+	vgm_start(Machine);
 
 	/* call the game driver's init function */
 	if (gamedrv->driver_init)
@@ -482,7 +515,7 @@ static int run_machine(void)
 				for (region = 0; region < MAX_MEMORY_REGIONS; region++)
 					if (Machine->memory_region[region].flags & ROMREGION_DISPOSE)
 					{
-						int i;
+						size_t i;
 
 						/* invalidate contents to avoid subtle bugs */
 						for (i = 0; i < memory_region_length(region); i++)
@@ -526,10 +559,10 @@ void run_machine_core(void)
 	/* if we didn't find a settings file, show the disclaimer */
 	if (settingsloaded || options.skip_disclaimer || showcopyright(artwork_get_ui_bitmap()) == 0)
 	{
-#ifndef VPINMAME
+#if !(defined(VPINMAME) || defined(LIBPINMAME))
 		/* show info about incorrect behaviour (wrong colors etc.) */
 		if (showgamewarnings(artwork_get_ui_bitmap()) == 0)
-#endif /* VPINMAME */
+#endif /* VPINMAME || LIBPINMAME */
 		{
 			/* show info about the game */
 			if (options.skip_gameinfo || showgameinfo(artwork_get_ui_bitmap()) == 0)
@@ -591,6 +624,8 @@ void run_machine_core(void)
 static void shutdown_machine(void)
 {
 	int i;
+
+	vgm_stop();
 
 #ifdef MESS
 	/* close down any devices */
@@ -695,7 +730,7 @@ static int vh_open(void)
 	compute_aspect_ratio(Machine->drv, &params.aspect_x, &params.aspect_y);
 	params.depth = Machine->color_depth;
 	params.colors = palette_get_total_colors_with_ui();
-	params.fps = Machine->drv->frames_per_second;
+	params.fps = (float)Machine->drv->frames_per_second;
 	params.video_attributes = Machine->drv->video_attributes;
 	params.orientation = Machine->orientation;
 
@@ -767,7 +802,7 @@ static int vh_open(void)
 
 	/* reset performance data */
 	last_fps_time = osd_cycles();
-	rendered_frames_since_last_fps = frames_since_last_fps = 0;
+	vfcount = rendered_frames_since_last_fps = frames_since_last_fps = 0;
 	performance.game_speed_percent = 100;
 	performance.frames_per_second = Machine->drv->frames_per_second;
 	performance.vector_updates_last_second = 0;
@@ -913,7 +948,7 @@ static int decode_graphics(const struct GfxDecodeInfo *gfxdecodeinfo)
 	/* loop over all elements */
 	for (i = 0; i < MAX_GFX_ELEMENTS && gfxdecodeinfo[i].memory_region != -1; i++)
 	{
-		int region_length = 8 * memory_region_length(gfxdecodeinfo[i].memory_region);
+		size_t region_length = 8 * memory_region_length(gfxdecodeinfo[i].memory_region);
 		UINT8 *region_base = memory_region(gfxdecodeinfo[i].memory_region);
 		struct GfxLayout glcopy;
 		int j;
@@ -923,14 +958,14 @@ static int decode_graphics(const struct GfxDecodeInfo *gfxdecodeinfo)
 
 		/* if the character count is a region fraction, compute the effective total */
 		if (IS_FRAC(glcopy.total))
-			glcopy.total = region_length / glcopy.charincrement * FRAC_NUM(glcopy.total) / FRAC_DEN(glcopy.total);
+			glcopy.total = (UINT32)(region_length / glcopy.charincrement * FRAC_NUM(glcopy.total) / FRAC_DEN(glcopy.total));
 
 		/* loop over all the planes, converting fractions */
 		for (j = 0; j < MAX_GFX_PLANES; j++)
 		{
 			int value = glcopy.planeoffset[j];
 			if (IS_FRAC(value))
-				glcopy.planeoffset[j] = FRAC_OFFSET(value) + region_length * FRAC_NUM(value) / FRAC_DEN(value);
+				glcopy.planeoffset[j] = (UINT32)(FRAC_OFFSET(value) + region_length * FRAC_NUM(value) / FRAC_DEN(value));
 		}
 
 		/* loop over all the X/Y offsets, converting fractions */
@@ -938,11 +973,11 @@ static int decode_graphics(const struct GfxDecodeInfo *gfxdecodeinfo)
 		{
 			int value = glcopy.xoffset[j];
 			if (IS_FRAC(value))
-				glcopy.xoffset[j] = FRAC_OFFSET(value) + region_length * FRAC_NUM(value) / FRAC_DEN(value);
+				glcopy.xoffset[j] = (UINT32)(FRAC_OFFSET(value) + region_length * FRAC_NUM(value) / FRAC_DEN(value));
 
 			value = glcopy.yoffset[j];
 			if (IS_FRAC(value))
-				glcopy.yoffset[j] = FRAC_OFFSET(value) + region_length * FRAC_NUM(value) / FRAC_DEN(value);
+				glcopy.yoffset[j] = (UINT32)(FRAC_OFFSET(value) + region_length * FRAC_NUM(value) / FRAC_DEN(value));
 		}
 
 		/* some games increment on partial tile boundaries; to handle this without reading */
@@ -951,7 +986,7 @@ static int decode_graphics(const struct GfxDecodeInfo *gfxdecodeinfo)
 		if (glcopy.planeoffset[0] == GFX_RAW)
 		{
 			int base = gfxdecodeinfo[i].start;
-			int end = region_length/8;
+			int end = (int)(region_length/8);
 			while (glcopy.total > 0)
 			{
 				int elementbase = base + (glcopy.total - 1) * glcopy.charincrement / 8;
@@ -1433,7 +1468,7 @@ int mame_find_cpu_index(const char *tag)
 	driver expansion
 -------------------------------------------------*/
 
-struct MachineCPU *machine_add_cpu(struct InternalMachineDriver *machine, const char *tag, int type, int cpuclock)
+struct MachineCPU *machine_add_cpu(struct InternalMachineDriver *machine, const char *tag, int type, double cpuclock)
 {
 	int cpunum;
 
@@ -1654,7 +1689,6 @@ static int validitychecks(void)
 	UINT8 a,b;
 	int error = 0;
 
-
 	a = 0xff;
 	b = a + 1;
 	if (b > a)	{ printf("UINT8 must be 8 bits\n"); error = 1; }
@@ -1687,7 +1721,9 @@ static int validitychecks(void)
 			if ((drivers[i]->clone_of->clone_of->flags & NOT_A_DRIVER) == 0)
 			{
 				printf("%s: %s is a clone of a clone\n",drivers[i]->source_file,drivers[i]->name);
+#ifndef SAM_INCLUDE_COLORED //!! fails for the color roms
 				error = 1;
+#endif
 			}
 		}
 
@@ -1775,6 +1811,7 @@ static int validitychecks(void)
 					const char *hash;
 
 					last_name = c = ROM_GETNAME(romp);
+#ifndef PINMAME
 					while (*c)
 					{
 						if (tolower(*c) != *c)
@@ -1784,7 +1821,7 @@ static int validitychecks(void)
 						}
 						c++;
 					}
-
+#endif
 					c = ROM_GETNAME(romp);
 					pre = 0;
 					post = 0;
@@ -1798,12 +1835,13 @@ static int validitychecks(void)
 						post++;
 						c++;
 					}
+#ifndef PINMAME
 					if (pre > 8 || post > 4)
 					{
 						printf("%s: %s has >8.3 ROM name %s\n",drivers[i]->source_file,drivers[i]->name,ROM_GETNAME(romp));
 						error = 1;
 					}
-
+#endif
 					hash = ROM_GETHASHDATA(romp);
 					if (!hash_verify_string(hash))
 					{
@@ -1999,7 +2037,6 @@ static int validitychecks(void)
 									printf("%s: %s wrong port read handler start = %08x, end = %08x ALIGN = %d\n",drivers[i]->source_file,drivers[i]->name,pra->start,pra->end,alignunit);
 									error = 1;
 								}
-							
 							}
 							pra++;
 						}
@@ -2055,7 +2092,6 @@ static int validitychecks(void)
 									printf("%s: %s wrong port write handler start = %08x, end = %08x ALIGN = %d\n",drivers[i]->source_file,drivers[i]->name,pwa->start,pwa->end,alignunit);
 									error = 1;
 								}
-						
 							}
 							pwa++;
 						}
@@ -2069,9 +2105,7 @@ static int validitychecks(void)
 			{
 				for (j = 0;j < MAX_GFX_ELEMENTS && drv.gfxdecodeinfo[j].memory_region != -1;j++)
 				{
-					int len,avail,k,start;
 					int type = drv.gfxdecodeinfo[j].memory_region;
-
 
 /*
 					if (type && (type >= REGION_MAX || type <= REGION_INVALID))
@@ -2083,7 +2117,8 @@ static int validitychecks(void)
 
 					if (!IS_FRAC(drv.gfxdecodeinfo[j].gfxlayout->total))
 					{
-						start = 0;
+						UINT32 len, avail, k;
+						UINT32 start = 0;
 						for (k = 0;k < MAX_GFX_PLANES;k++)
 						{
 							if (drv.gfxdecodeinfo[j].gfxlayout->planeoffset[k] > start)

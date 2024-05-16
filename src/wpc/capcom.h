@@ -7,7 +7,6 @@
 #include "core.h"
 #include "sim.h"
 
-extern PINMAME_VIDEO_UPDATE(cc_lamp16x8);
 extern PINMAME_VIDEO_UPDATE(cc_dmd128x32);
 extern PINMAME_VIDEO_UPDATE(cc_dmd256x64);
 extern void cap_UpdateSoundLEDS(int data);
@@ -80,5 +79,6 @@ extern void cap_UpdateSoundLEDS(int data);
 extern MACHINE_DRIVER_EXTERN(cc);
 extern MACHINE_DRIVER_EXTERN(cc1);
 extern MACHINE_DRIVER_EXTERN(cc2);
+extern MACHINE_DRIVER_EXTERN(romstar);
 
 #endif /* INC_CAPCOM */

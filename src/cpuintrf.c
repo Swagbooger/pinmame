@@ -16,7 +16,6 @@
 #include "mamedbg.h"
 
 
-
 /*************************************
  *
  *	Include headers from all CPUs
@@ -300,7 +299,7 @@
  *
  *************************************/
 
-struct cpuinfo
+struct cpuinfo_intf
 {
 	struct cpu_interface intf; 		/* copy of the interface data */
 	int cputype; 					/* type index of this CPU */
@@ -814,7 +813,7 @@ int activecpu;		/* index of active CPU (or -1) */
 int executingcpu;	/* index of executing CPU (or -1) */
 int totalcpu;		/* total number of CPUs */
 
-static struct cpuinfo cpu[MAX_CPU];
+static struct cpuinfo_intf cpu[MAX_CPU];
 
 static int cpu_active_context[CPU_COUNT];
 static int cpu_context_stack[4];
@@ -902,7 +901,7 @@ int cpuintrf_init(void)
 		/* make sure the index in the array matches the current index */
 		if (cpuintrf[cputype].cpu_num != cputype)
 		{
-			printf("CPU #%d [%s] wrong ID %d: check enum CPU_... in src/cpuintrf.h!\n", cputype, cputype_name(cputype), cpuintrf[cputype].cpu_num);
+			printf("CPU #%d [%s] wrong ID %u: check enum CPU_... in src/cpuintrf.h!\n", cputype, cputype_name(cputype), cpuintrf[cputype].cpu_num);
 			exit(1);
 		}
 
@@ -1160,7 +1159,7 @@ const char *activecpu_dump_state(void)
 	char *dst = buffer;
 	const char *src;
 	const INT8 *regs;
-	int width;
+	size_t width;
 
 	VERIFY_ACTIVECPU("", activecpu_dump_state);
 
@@ -1543,7 +1542,7 @@ static const char *dummy_info(void *context, int regnum)
 		case CPU_INFO_FAMILY: return "no CPU";
 		case CPU_INFO_VERSION: return "0.0";
 		case CPU_INFO_FILE: return __FILE__;
-		case CPU_INFO_CREDITS: return "The MAME team.";
+		case CPU_INFO_CREDITS: return "The PinMAME team.";
 	}
 	return "";
 }

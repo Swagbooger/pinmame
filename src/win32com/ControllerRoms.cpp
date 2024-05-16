@@ -1,6 +1,6 @@
 // ControllerRoms.cpp : Implementation of CRoms
-#include "stdafx.h"
-#include "VPinMAME_h.h"
+#include "StdAfx.h"
+#include "VPinMAME.h"
 #include "ControllerRom.h"
 #include "ControllerRoms.h"
 
@@ -61,7 +61,7 @@ END_COM_MAP()
 public:
 	STDMETHODIMP Next(ULONG celt,VARIANT __RPC_FAR *rgVar, ULONG __RPC_FAR *pCeltFetched)
 	{
-		HRESULT hr = S_FALSE;
+		HRESULT hr;
 
 		if ( pCeltFetched )
 			*pCeltFetched = 0;
@@ -222,7 +222,7 @@ STDMETHODIMP CRoms::Deinit()
 			i++;
 		}
 
-		delete m_pRomsList;
+		delete [] m_pRomsList;
 		m_pRomsList = NULL;
 	}
 

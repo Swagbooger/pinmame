@@ -26,28 +26,35 @@
 
 #define ATARI_VBLANKFREQ      60 /* VBLANK frequency in HZ*/
 #define ATARI_IRQFREQ        488 /* IRQ interval in HZ */
-#define ATARI_NMIFREQ        250 /* NMI frequency in HZ */
+#define ATARI_NMIFREQ        244 /* NMI frequency in HZ */
 
 /*----------------
 /  Local variables
 /-----------------*/
 static struct {
   int    vblankCount;
-  int    diagnosticLed;
+  UINT8  diagnosticLed;
   int    soldisable;
   UINT8  testSwBits;
   UINT32 solenoids;
   core_tSeg segments, pseg;
+  int    snd1Enable;
+
+  UINT8  dmaCount;
+  UINT8  toggle;
+  UINT8  enable_irq;
 } locals;
 
-static int toggle = 0;
+static UINT8 latch[] = {
+  0, 0, 0, 0, 0
+};
+
 static INTERRUPT_GEN(ATARI1_nmihi) {
-	static int dmaCount = 0;
 	cpu_set_nmi_line(ATARI_CPU, PULSE_LINE);
-	dmaCount++;
-	if (dmaCount > 3) {
-		dmaCount = 0;
-		toggle = !toggle;
+	locals.dmaCount++;
+	if (locals.dmaCount > 1) {
+		locals.dmaCount = 0;
+		locals.toggle = !locals.toggle;
 	}
 }
 
@@ -166,10 +173,10 @@ static READ_HANDLER(dipg1_r) {
 	}
 	if (offset)
 		return dipram[offset];
-	/* every fourth NMI pulse, a DMA interrupt is triggered.
+	/* every second NMI pulse, a DMA interrupt is triggered.
 	   Only if the 7th bit of dip switch 2/4 has changed when
 	   that dip is read, the game code will proceed! */
-	return toggle ? (dipram[offset] | 0x40) : (dipram[offset] & 0xbf);
+	return locals.toggle ? (dipram[offset] | 0x40) : (dipram[offset] & 0xbf);
 }
 static WRITE_HANDLER(dipg1_w) {
 	/* In fact, some games try to do that bit toggling stuff by themselves,
@@ -251,15 +258,25 @@ static WRITE_HANDLER(ram_w4) {
 }
 
 static READ_HANDLER(ram_r) {
+	if (offset == 0x80) return latch[0];
+	if (offset == 0x84) return latch[1];
+	if (offset == 0x88) return latch[2];
+	if (offset == 0x8C) return latch[3];
 	return ram[offset];
 }
+
+/*static READ_HANDLER(test_r) {
+	logerror("read 0x%04x\n", offset);
+	return 0xFF;
+}*/
+
 // Gen 2
 static WRITE_HANDLER(disp0_w) {
 	locals.pseg[offset].w = core_bcd2seg7a[data & 0x0f];
 }
 
 static WRITE_HANDLER(disp1_w) {
-	static int dispPos[] = { 49, 1, 9, 21, 29, 41, 61, 69 };
+	static const int dispPos[] = { 49, 1, 9, 21, 29, 41, 61, 69 };
 	int ii;
 	data &= 0x07;
 	for (ii = 0; ii < 7; ii++) {
@@ -269,12 +286,9 @@ static WRITE_HANDLER(disp1_w) {
 
 /* solenoids */
 // Gen 1
-static UINT8 latch[] = {
-	0, 0, 0, 0, 0
-};
 static void setLatch(int no, UINT8 data, UINT8 mask, int cnt) {
 	/* table to adjust for original Atari sol numbers */
-	static UINT32 solTable[] = {
+	static const UINT32 solTable[] = {
 		0x00001, 0x00010, 0x04000, 0x00040,
 		0x00002, 0x00020, 0x00008, 0x08000,
 		0x00800, 0x00004, 0x00080, 0x02000,
@@ -292,12 +306,15 @@ static void setLatch(int no, UINT8 data, UINT8 mask, int cnt) {
 }
 static WRITE_HANDLER(latch1080_w) {
 	setLatch(0, data, 0xf0, 4);
+	sndbrd_0_ctrl_w(0, (latch[0] & 0xF) | ((locals.snd1Enable & 1) << 4)); // Control line gets waveform and enable
 }
 static WRITE_HANDLER(latch1084_w) {
 	setLatch(1, data, 0xf0, 4);
+	sndbrd_0_data_w(0, (latch[2] & 0xF) | ((latch[1] & 0xF) << 4)); // Data line gets frequency and volume
 }
 static WRITE_HANDLER(latch1088_w) {
 	setLatch(2, data, 0xf0, 4);
+	sndbrd_0_data_w(0, (latch[2] & 0xF) | ((latch[1] & 0xF) << 4)); // Data line gets frequency and volume
 }
 static WRITE_HANDLER(latch108c_w) {
 	setLatch(3, data, 0xff, 8);
@@ -347,19 +364,18 @@ static WRITE_HANDLER(lamp_w) {
 
 /* sound */
 // Gen 1
-static WRITE_HANDLER(soundg1_w) {
-	logerror("Play sound %2x | %02x | %02x | %02x\n", data, latch[0], latch[1], latch[2]);
-	sndbrd_0_ctrl_w(0, ((latch[1] & 0x0f) << 4) | (latch[0] & 0x0f));
-	switch (core_gameData->hw.gameSpecific1) {
-	  case 1: sndbrd_0_data_w(0, latch[1] & 0x0f); break;
-	  case 2: sndbrd_0_data_w(0, latch[2] & 0x0f); break;
-	  default: sndbrd_0_data_w(0, data);
-  }
+static WRITE_HANDLER(soundg1_w) { // enable
+	if (core_gameData->hw.gameSpecific1 & 2) { // spcrider / midearth
+		locals.snd1Enable = 1;
+		sndbrd_0_ctrl_w(0, (latch[0] & 0xF) | 0x10);
+	}
 }
 
-static WRITE_HANDLER(audiog1_w) {
-//	logerror("Audio Reset %2x\n", data);
-	sndbrd_0_data_w(0, 0);
+static WRITE_HANDLER(audiog1_w) { // reset
+	locals.snd1Enable = (data) ? 1 : 0; 
+	if (core_gameData->hw.gameSpecific1 & 2) // spcrider / midearth
+		locals.snd1Enable = 0;
+	sndbrd_0_ctrl_w(0, (latch[0] & 0xF) | ((locals.snd1Enable & 1) << 4));
 }
 // Gen 2
 static WRITE_HANDLER(sound0_w) {
@@ -403,7 +419,7 @@ static MEMORY_WRITE_START(ATARI1_writemem)
 {0x3000,0x3000,	soundg1_w},		/* audio enable */
 {0x4000,0x4000,	watchdog_w},	/* watchdog reset? */
 {0x508c,0x508c,	latch508c_w},	/* additional solenoids, on Time 2000 only */
-{0x6000,0x6000,	audiog1_w},		/* audio reset */
+{0x6000,0x6fff,	audiog1_w},		/* audio reset */
 {0xffff,0xffff,	MWA_NOP},		/* Middle Earth writes here */
 MEMORY_END
 
@@ -453,17 +469,20 @@ MEMORY_END
 
 static void init_common(void) {
   memset(&locals, 0, sizeof locals);
+  locals.enable_irq = 1;
   sndbrd_0_init(core_gameData->hw.soundBoard, 1, memory_region(REGION_SOUND1), NULL, NULL);
 }
 
 static MACHINE_INIT(ATARI1) {
   init_common();
+  locals.snd1Enable = 0;
 }
 
 /* Middle Earth uses an unusual way of polling the test switch. */
 static MACHINE_INIT(ATARI1A) {
   init_common();
   locals.testSwBits = 0x0f;
+  locals.snd1Enable = 0;
 }
 
 static MACHINE_INIT(ATARI2) {
@@ -541,22 +560,22 @@ static MEMORY_WRITE_START(ATARI4_writemem)
   {0x3000,0x37ff,	MWA_RAM},
 MEMORY_END
 
-static int enable_irq = 1;
 static int irq_callback(int line) {
   cpu_set_irq_line(0, 0, CLEAR_LINE);
-  enable_irq = 1;
+  locals.enable_irq = 1;
   return 0;
 }
 
 static INTERRUPT_GEN(ATARI4_irq) {
-  if (enable_irq) {
+  if (locals.enable_irq) {
     cpu_set_irq_line(0, 0, ASSERT_LINE);
-    enable_irq = 0;
+    locals.enable_irq = 0;
   }
 }
 
 static MACHINE_INIT(ATARI4) {
   memset(&locals, 0, sizeof locals);
+  locals.enable_irq = 1;
   memset(memory_region(ATARI_MEMREG_CPU), 0, 0x2000);
   cpu_set_irq_callback(0, irq_callback);
 }

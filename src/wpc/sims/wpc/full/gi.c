@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /*******************************************************************************
  Gilligan's Island (Bally, 1991) Pinball Simulator
 
@@ -432,6 +434,7 @@ static core_tLampDisplay gi_lampPos = {
   }
 
 /* Solenoid-to-sample handling */
+#ifdef ENABLE_MECHANICAL_SAMPLES
 static wpc_tSamSolMap gi_samsolmap[] = {
  /*Channel #0*/
  {sKnocker,0,SAM_KNOCKER}, {sTrough,0,SAM_BALLREL},
@@ -452,6 +455,7 @@ static wpc_tSamSolMap gi_samsolmap[] = {
  /*Channel #4*/
  {sJungleMotor,4,SAM_MOTOR_1,WPCSAM_F_CONT},{-1}
 };
+#endif
 
 /*-----------------
 /  ROM definitions
@@ -469,30 +473,32 @@ WPC_ROMSTART(gi,l4,"gi_l4.u6",    0x40000,CRC(2313986d) SHA1(6e0dd293b869ea986ac
 WPC_ROMSTART(gi,d4,"gi_d4.u6",    0x40000,CRC(93d0cc30) SHA1(1a1fc8d4ddb0c0aebe9688a6bc750c90c7b22cad)) GI_SOUND WPC_ROMEND
 WPC_ROMSTART(gi,l6,"gi_l6.u6",    0x40000,CRC(7b73eef2) SHA1(fade23019600d84492d5a0fc6f4f5be52ec319be)) GI_SOUND WPC_ROMEND
 WPC_ROMSTART(gi,d6,"gi_d6.u6",    0x40000,CRC(44bc3aa6) SHA1(4450605331f8891d9415893f869e9b2f40938abe)) GI_SOUND WPC_ROMEND
+WPC_ROMSTART(gi,l8,"Gilligans_L8_U6.bin",0x40000,CRC(d21d3bf8) SHA1(d41447a35b710297786d35aefe235ebd8b354b29)) GI_SOUND WPC_ROMEND
 
 /*--------------
 /  Game drivers
 /---------------*/
-CORE_GAMEDEF(gi,l9,"Gilligan's Island (L-9)",1991,"Bally", wpc_mDMDS,0)
-CORE_CLONEDEF(gi,d9,l9,"Gilligan's Island (D-9) LED Ghost Fix",1991,"Bally", wpc_mDMDS,0)
+CORE_GAMEDEF(gi,l9,"Gilligan's Island (L-9)",1992,"Bally", wpc_mDMDS,0)
+CORE_CLONEDEF(gi,d9,l9,"Gilligan's Island (D-9 LED Ghost Fix)",1992,"Bally", wpc_mDMDS,0)
 CORE_CLONEDEF(gi,l3,l9,"Gilligan's Island (L-3)",1991,"Bally", wpc_mDMDS,0)
-CORE_CLONEDEF(gi,d3,l9,"Gilligan's Island (D-3) LED Ghost Fix",1991,"Bally", wpc_mDMDS,0)
+CORE_CLONEDEF(gi,d3,l9,"Gilligan's Island (D-3 LED Ghost Fix)",1991,"Bally", wpc_mDMDS,0)
 CORE_CLONEDEF(gi,l4,l9,"Gilligan's Island (L-4)",1991,"Bally", wpc_mDMDS,0)
-CORE_CLONEDEF(gi,d4,l9,"Gilligan's Island (D-4) LED Ghost Fix",1991,"Bally", wpc_mDMDS,0)
+CORE_CLONEDEF(gi,d4,l9,"Gilligan's Island (D-4 LED Ghost Fix)",1991,"Bally", wpc_mDMDS,0)
 CORE_CLONEDEF(gi,l6,l9,"Gilligan's Island (L-6)",1991,"Bally", wpc_mDMDS,0)
-CORE_CLONEDEF(gi,d6,l9,"Gilligan's Island (D-6) LED Ghost Fix",1991,"Bally", wpc_mDMDS,0)
+CORE_CLONEDEF(gi,d6,l9,"Gilligan's Island (D-6 LED Ghost Fix)",1991,"Bally", wpc_mDMDS,0)
+CORE_CLONEDEF(gi,l8,l9,"Gilligan's Island (L-8)",1992,"Bally", wpc_mDMDS,0)
 
 /*-----------------------
 / Simulation Definitions
 /-----------------------*/
 static sim_tSimData giSimData = {
-  2,    				/* 2 game specific input ports */
-  gi_stateDef,				/* Definition of all states */
-  gi_inportData,			/* Keyboard Entries */
+  2,					/* 2 game specific input ports */
+  gi_stateDef,			/* Definition of all states */
+  gi_inportData,		/* Keyboard Entries */
   { stRTrough, stLTrough, stDrain, stDrain, stDrain, stDrain },	/*Position where balls start.. Max 7 Balls Allowed*/
   NULL, 				/* no init */
-  gi_handleBallState,			/*Function to handle ball state changes*/
-  gi_drawStatic,			/*Function to handle mechanical state changes*/
+  gi_handleBallState,	/*Function to handle ball state changes*/
+  gi_drawStatic,		/*Function to handle mechanical state changes*/
   TRUE, 				/* Simulate manual shooter? */
   NULL  				/* Custom key conditions? */
 };
@@ -506,7 +512,10 @@ static core_tGameData giGameData = {
     FLIP_SWNO(12,11),
     0,0,0,0,0,0,0,
     NULL, gi_handleMech, NULL, gi_drawMech,
-    &gi_lampPos, gi_samsolmap
+    &gi_lampPos
+#ifdef ENABLE_MECHANICAL_SAMPLES
+    , gi_samsolmap
+#endif
   },
   &giSimData,
   {
@@ -523,6 +532,7 @@ static core_tGameData giGameData = {
 /----------------*/
 static void init_gi(void) {
   core_gameData = &giGameData;
+  hc55516_set_sample_clock(0, 22372);
 }
 
 static void gi_handleMech(int mech) {

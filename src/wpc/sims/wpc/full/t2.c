@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /********************************************************************************************
  Williams Terminator 2: Judgement Day (1991) Pinball Simulator
 
@@ -25,6 +27,9 @@
   12-05-2000: Modified custom playfield lamp layout to accomodate new structure.
               Added support for shared bulbs where necessary
   12-30-2000: Added Sample Support
+
+
+  Excessive documentation of the T2 ROM: https://www.flippermarkt.de/community/howto/cms/media/pages/pdfs/workshops/Terminator2_L8_3_(FINAL).pdf
 
  *********************************************************************************************************/
 
@@ -470,6 +475,7 @@ static core_tLampDisplay t2_lampPos = {
 }	/*End of lamps array*/
 };
 
+#ifdef ENABLE_MECHANICAL_SAMPLES
 static wpc_tSamSolMap t2_SamSolMap[] = {
  /*Channel #0*/
  {sKnocker,0,SAM_KNOCKER}, {sBallRel,0,SAM_BALLREL},
@@ -489,6 +495,7 @@ static wpc_tSamSolMap t2_SamSolMap[] = {
  {sDropTarget,3,SAM_SOLENOID},
  {-1}
 };
+#endif
 
 /*--------------------------------------------------------
   Code to draw the mechanical objects, and their states!
@@ -549,13 +556,27 @@ WPCS_SOUNDROM222("t2_u18.l3",CRC(2280bdd0) SHA1(ea94265cb8291ee427e0a2119d901ba1
                  "t2_u14.l3",CRC(9addc9dc) SHA1(847bb027f6b9167cbbaa13f1af50d61e0c69f01f))
 WPC_ROMEND
 
-/* Profanity speech ROM. Don't know if the sound rom works with L8 */
+/* Profanity speech ROM support. Sound rom does not work with plain L8 */
 WPC_ROMSTART(t2,p2f,"u6-nasty.rom",0x40000,CRC(add685a4) SHA1(d1ee7eb620864b017495e52ea8fe8db18508c3eb))
 WPCS_SOUNDROM222(   "t2_u18.l3",   CRC(2280bdd0) SHA1(ea94265cb8291ee427e0a2119d901ba1eb50d8ee),
                     "t2_u15.l3",   CRC(dad03ad1) SHA1(7c200f9a6564d751e5aa9b1ba84363b221502770),
                     "u14-nsty.rom",CRC(b4d64152) SHA1(03a828cef8b067d4da058fd3a1e972265a72f10a))
 WPC_ROMEND
 WPC_ROMSTART(t2,p2g,"u6-nastd.rom",0x40000,CRC(64790c37) SHA1(d22bd060f71c7021d2ebbd70834430b19cac287c))
+WPCS_SOUNDROM222(   "t2_u18.l3",   CRC(2280bdd0) SHA1(ea94265cb8291ee427e0a2119d901ba1eb50d8ee),
+                    "t2_u15.l3",   CRC(dad03ad1) SHA1(7c200f9a6564d751e5aa9b1ba84363b221502770),
+                    "u14-nsty.rom",CRC(b4d64152) SHA1(03a828cef8b067d4da058fd3a1e972265a72f10a))
+WPC_ROMEND
+
+/* L-8.3 MOD that supports Profanity, and more. BUT must enable profanity in the adjustments in order to work correctly. */
+WPC_ROMSTART(t2,l83,"T2_l83_7308.rom",0x80000,CRC(6780657f) SHA1(0eed3187bf9d10bdfdad7ede65a1cc6cbeb56284))
+WPCS_SOUNDROM222(   "t2_u18.l3",   CRC(2280bdd0) SHA1(ea94265cb8291ee427e0a2119d901ba1eb50d8ee),
+                    "t2_u15.l3",   CRC(dad03ad1) SHA1(7c200f9a6564d751e5aa9b1ba84363b221502770),
+                    "u14-nsty.rom",CRC(b4d64152) SHA1(03a828cef8b067d4da058fd3a1e972265a72f10a))
+WPC_ROMEND
+
+/* L-8.4 MOD that supports Profanity, and more. BUT must enable profanity in the adjustments in order to work correctly. */
+WPC_ROMSTART(t2,l84,"T2_l84_9A08.rom",0x80000,CRC(7617ae61) SHA1(d99df2bff73f808458e7512b91392160cf98b2ba))
 WPCS_SOUNDROM222(   "t2_u18.l3",   CRC(2280bdd0) SHA1(ea94265cb8291ee427e0a2119d901ba1eb50d8ee),
                     "t2_u15.l3",   CRC(dad03ad1) SHA1(7c200f9a6564d751e5aa9b1ba84363b221502770),
                     "u14-nsty.rom",CRC(b4d64152) SHA1(03a828cef8b067d4da058fd3a1e972265a72f10a))
@@ -616,35 +637,37 @@ WPC_ROMEND
 /  Game drivers
 /---------------*/
 CORE_GAMEDEF(t2,l8,"Terminator 2: Judgement Day (L-8)",1991,"Williams",wpc_mDMDS,0)
-CORE_CLONEDEF(t2,d8,l8,"Terminator 2: Judgement Day (D-8) LED Ghost Fix",1991,"Williams",wpc_mDMDS,0)
-CORE_CLONEDEF(t2,l81,l8,"Terminator 2: Judgement Day (L-81) Attract Sound Fix",1991,"Williams",wpc_mDMDS,0)
-CORE_CLONEDEF(t2,l82,l8,"Terminator 2: Judgement Day (L-82) Hacked Attract Routines",1991,"Williams",wpc_mDMDS,0)
+CORE_CLONEDEF(t2,d8,l8,"Terminator 2: Judgement Day (D-8 LED Ghost Fix)",1991,"Williams",wpc_mDMDS,0)
+CORE_CLONEDEF(t2,l81,l8,"Terminator 2: Judgement Day (L-81 Attract Sound patch)",1991,"Williams",wpc_mDMDS,0)
+CORE_CLONEDEF(t2,l82,l8,"Terminator 2: Judgement Day (L-82 Attract Score patch)",1991,"Williams",wpc_mDMDS,0)
+CORE_CLONEDEF(t2,l83,l8,"Terminator 2: Judgement Day (L-83 Profanity, bugfix/MOD, LED Ghost Fix)",2022,"Williams/MOD",wpc_mDMDS,0)
+CORE_CLONEDEF(t2,l84,l8,"Terminator 2: Judgement Day (L-84 Profanity, bugfix/MOD, LED Ghost Fix)",2023,"Williams/MOD",wpc_mDMDS,0)
 CORE_CLONEDEF(t2,l6,l8,"Terminator 2: Judgement Day (L-6)",1991,"Williams",wpc_mDMDS,0)
-CORE_CLONEDEF(t2,d6,l8,"Terminator 2: Judgement Day (D-6) LED Ghost Fix",1991,"Williams",wpc_mDMDS,0)
-CORE_CLONEDEF(t2,p2f,l8,"Terminator 2: Judgement Day (P-2F) Profanity",1991,"Williams",wpc_mDMDS,0)
-CORE_CLONEDEF(t2,p2g,l8,"Terminator 2: Judgement Day (P-2G) Profanity LED Ghost Fix",1991,"Williams",wpc_mDMDS,0)
+CORE_CLONEDEF(t2,d6,l8,"Terminator 2: Judgement Day (D-6 LED Ghost Fix)",1991,"Williams",wpc_mDMDS,0)
+CORE_CLONEDEF(t2,p2f,l8,"Terminator 2: Judgement Day (P-2F Profanity)",1991,"Williams",wpc_mDMDS,0) // Prototype ??
+CORE_CLONEDEF(t2,p2g,l8,"Terminator 2: Judgement Day (P-2G Profanity, LED Ghost Fix)",1991,"Williams",wpc_mDMDS,0)
 CORE_CLONEDEF(t2,l4,l8,"Terminator 2: Judgement Day (L-4)",1991,"Williams",wpc_mDMDS,0)
-CORE_CLONEDEF(t2,d4,l8,"Terminator 2: Judgement Day (D-4) LED Ghost Fix",1991,"Williams",wpc_mDMDS,0)
+CORE_CLONEDEF(t2,d4,l8,"Terminator 2: Judgement Day (D-4 LED Ghost Fix)",1991,"Williams",wpc_mDMDS,0)
 CORE_CLONEDEF(t2,l3,l8,"Terminator 2: Judgement Day (L-3)",1991,"Williams",wpc_mDMDS,0)
-CORE_CLONEDEF(t2,d3,l8,"Terminator 2: Judgement Day (D-3) LED Ghost Fix",1991,"Williams",wpc_mDMDS,0)
+CORE_CLONEDEF(t2,d3,l8,"Terminator 2: Judgement Day (D-3 LED Ghost Fix)",1991,"Williams",wpc_mDMDS,0)
 CORE_CLONEDEF(t2,l2,l8,"Terminator 2: Judgement Day (L-2)",1991,"Williams",wpc_mDMDS,0)
-CORE_CLONEDEF(t2,d2,l8,"Terminator 2: Judgement Day (D-2) LED Ghost Fix",1991,"Williams",wpc_mDMDS,0)
-CORE_CLONEDEF(t2,f19,l8,"Terminator 2: Judgement Day (FreeWPC 0.19)",1991,"Williams",wpc_mDMDS,0)
-CORE_CLONEDEF(t2,f20,l8,"Terminator 2: Judgement Day (FreeWPC 0.20)",1991,"Williams",wpc_mDMDS,0)
-CORE_CLONEDEF(t2,f32,l8,"Terminator 2: Judgement Day (FreeWPC 0.32)",1991,"Williams",wpc_mDMDS,0)
+CORE_CLONEDEF(t2,d2,l8,"Terminator 2: Judgement Day (D-2 LED Ghost Fix)",1991,"Williams",wpc_mDMDS,0)
+CORE_CLONEDEF(t2,f19,l8,"Terminator 2: Judgement Day (FreeWPC 0.19)",1991,"FreeWPC",wpc_mDMDS,0)
+CORE_CLONEDEF(t2,f20,l8,"Terminator 2: Judgement Day (FreeWPC 0.20)",1991,"FreeWPC",wpc_mDMDS,0)
+CORE_CLONEDEF(t2,f32,l8,"Terminator 2: Judgement Day (FreeWPC 0.32)",1991,"FreeWPC",wpc_mDMDS,0)
 
 /*-----------------------
 / Simulation Definitions
 /-----------------------*/
 static sim_tSimData t2SimData = {
-  2,    				/* 2 game specific input ports */
+  2,					/* 2 game specific input ports */
   t2_stateDef,			/* Definition of all states */
   t2_inportData,		/* Keyboard Entries */
   { stRTrough, stCTrough, stLTrough, stDrain, stDrain, stDrain, stDrain },	/*Position where balls start.. Max 7 Balls Allowed*/
   NULL, 				/* no init */
   t2_handleBallState,	/*Function to handle ball state changes*/
   t2_drawStatic,		/*Function to handle mechanical state changes*/
-  FALSE, 				/* Do Not Simulate manual shooter */
+  FALSE,				/* Do Not Simulate manual shooter */
   NULL  				/* no custom key conditions */
 };
 
@@ -657,7 +680,10 @@ static core_tGameData t2GameData = {
     FLIP_SWNO(12,11),
     0,0,0,0,0,0,0,
     NULL, t2_handleMech, t2_getMech, t2_drawMech,
-    &t2_lampPos, t2_SamSolMap
+    &t2_lampPos
+#ifdef ENABLE_MECHANICAL_SAMPLES
+    , t2_SamSolMap
+#endif
   },
   &t2SimData,
   {
@@ -674,7 +700,8 @@ static void init_t2(void) {
   static mech_tSwData gunSw[] = {{swGunHome, 0, 3},{swGunMark, 75, 85},{0}};
   core_gameData = &t2GameData;
   mech_addLong(0, sGunMotor, 0, MECH_NONLINEAR|MECH_REVERSE|MECH_ONESOL,
-               200,200, gunSw);
+               200,200, gunSw,0);
+  hc55516_set_sample_clock(0, 22372);
 }
 
 /***************************************************************************************************
@@ -702,10 +729,13 @@ static void t2_handleMech(int mech) {
       core_setSw(swDropTarget,1);		/*If Drop Target Down, Switch Must be Active*/
     }
     /*-- if DT is up, & Drop Target Switch Active, lower it!! --*/
-    /*-- NOTE: Here because for somereason, the sKnockDown solenoid does not fire during game play --*/
+    /*-- NOTE: Here because for some reason, the sKnockDown solenoid does not fire during game play --*/
     if (locals.droptargetPos == DT_UP && core_getSw(swDropTarget)) {
       locals.droptargetPos = DT_DOWN;
-      wpc_play_sample(2,SAM_FLAPCLOSE);
+#ifdef ENABLE_MECHANICAL_SAMPLES
+      if (coreGlobals.soundEn)
+        wpc_play_sample(2,SAM_FLAPCLOSE);
+#endif
     }
     /*-- if DT is down, & Drop Target Solenoid firing raise it! --*/
     if (locals.droptargetPos == DT_DOWN && core_getSol(sDropTarget)) {
@@ -744,11 +774,11 @@ static int GetGunPos(void) {
 
 
 #if 0
-/*Return A string depciting what the gun is pointing at*/
+/*Return a string depicting what the gun is pointing at*/
 static char * GetGunDescr()
 {
-switch (GetGunPos())
-        {
+    switch (GetGunPos())
+    {
         case GUNPOS_PF:
              return "PF";
         case GUNPOS_T1:
@@ -761,8 +791,8 @@ switch (GetGunPos())
              return "T4";
         case GUNPOS_T5:
              return "T5";
-	default:
-	     return "PF";
-        }
+        default:
+             return "PF";
+    }
 }
 #endif

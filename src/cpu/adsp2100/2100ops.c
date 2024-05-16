@@ -1,5 +1,7 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*===========================================================================
-	ASTAT -- ALU/MAC status register
+    ASTAT -- ALU/MAC status register
 ===========================================================================*/
 
 /* flag definitions */
@@ -46,30 +48,39 @@
 #define CLR_FLAGS		(adsp2100.astat &= adsp2100.astat_clear)
 
 /* compute flags */
-#define CALC_Z(r)		(adsp2100.astat |= ((r & 0xffff) == 0))
-#define CALC_N(r)		(adsp2100.astat |= (r >> 14) & 0x02)
-#define CALC_V(s,d,r)	(adsp2100.astat |= ((s ^ d ^ r ^ (r >> 1)) >> 13) & 0x04)
-#define CALC_C(r)		(adsp2100.astat |= (r >> 13) & 0x08)
-#define CALC_C_SUB(r)	(adsp2100.astat |= (~r >> 13) & 0x08)
-#define CALC_NZ(r) 		CLR_FLAGS; CALC_N(r); CALC_Z(r)
+#define CALC_Z(r)		(adsp2100.astat |= (((r) & 0xffff) == 0))
+#define CALC_N(r)		(adsp2100.astat |= ((r) >> 14) & 0x02)
+#define CALC_V(s,d,r)	(adsp2100.astat |= (((s) ^ (d) ^ (r) ^ ((r) >> 1)) >> 13) & 0x04)
+#define CALC_C(r)		(adsp2100.astat |= ((r) >> 13) & 0x08)
+#define CALC_C_SUB(r)	(adsp2100.astat |= (~(r) >> 13) & 0x08)
+#define CALC_NZ(r)		CLR_FLAGS; CALC_N(r); CALC_Z(r)
 #define CALC_NZV(s,d,r) CLR_FLAGS; CALC_N(r); CALC_Z(r); CALC_V(s,d,r)
 #define CALC_NZVC(s,d,r) CLR_FLAGS; CALC_N(r); CALC_Z(r); CALC_V(s,d,r); CALC_C(r)
 #define CALC_NZVC_SUB(s,d,r) CLR_FLAGS; CALC_N(r); CALC_Z(r); CALC_V(s,d,r); CALC_C_SUB(r)
 
+/* ADSP-218x constants */
+static const INT32 constants[] =
+{
+	0x0001, 0xfffe, 0x0002, 0xfffd, 0x0004, 0xfffb, 0x0008, 0xfff7,
+	0x0010, 0xffef, 0x0020, 0xffdf, 0x0040, 0xffbf, 0x0080, 0xff7f,
+	0x0100, 0xfeff, 0x0200, 0xfdff, 0x0400, 0xfbff, 0x0800, 0xf7ff,
+	0x1000, 0xefff, 0x2000, 0xdfff, 0x4000, 0xbfff, 0x8000, 0x7fff
+};
+
 
 
 /*===========================================================================
-	MSTAT -- ALU/MAC control register
+    MSTAT -- ALU/MAC control register
 ===========================================================================*/
 
 /* flag definitions */
-#define MSTAT_BANK		0x01			/* register bank select */
-#define MSTAT_REVERSE	0x02			/* bit-reverse addressing enable (DAG1) */
-#define MSTAT_STICKYV	0x04			/* sticky ALU overflow enable */
-#define MSTAT_SATURATE	0x08			/* AR saturation mode enable */
-#define MSTAT_INTEGER	0x10			/* MAC result placement; 0=fractional, 1=integer */
-#define MSTAT_TIMER		0x20			/* timer enable */
-#define MSTAT_GOMODE	0x40			/* go mode enable */
+#define MSTAT_BANK      0x01            /* register bank select */
+#define MSTAT_REVERSE   0x02            /* bit-reverse addressing enable (DAG1) */
+#define MSTAT_STICKYV   0x04            /* sticky ALU overflow enable */
+#define MSTAT_SATURATE  0x08            /* AR saturation mode enable */
+#define MSTAT_INTEGER   0x10            /* MAC result placement; 0=fractional, 1=integer */
+#define MSTAT_TIMER     0x20            /* timer enable */
+#define MSTAT_GOMODE    0x40            /* go mode enable */
 
 /* you must call this in order to change MSTAT */
 INLINE void set_mstat(int new_value)
@@ -89,23 +100,23 @@ INLINE void set_mstat(int new_value)
 
 
 /*===========================================================================
-	SSTAT -- stack status register
+    SSTAT -- stack status register
 ===========================================================================*/
 
 /* flag definitions */
-#define PC_EMPTY		0x01			/* PC stack empty */
-#define PC_OVER			0x02			/* PC stack overflow */
-#define COUNT_EMPTY		0x04			/* count stack empty */
-#define COUNT_OVER		0x08			/* count stack overflow */
-#define STATUS_EMPTY	0x10			/* status stack empty */
-#define STATUS_OVER		0x20			/* status stack overflow */
-#define LOOP_EMPTY		0x40			/* loop stack empty */
-#define LOOP_OVER		0x80			/* loop stack overflow */
+#define PC_EMPTY        0x01            /* PC stack empty */
+#define PC_OVER         0x02            /* PC stack overflow */
+#define COUNT_EMPTY     0x04            /* count stack empty */
+#define COUNT_OVER      0x08            /* count stack overflow */
+#define STATUS_EMPTY    0x10            /* status stack empty */
+#define STATUS_OVER     0x20            /* status stack overflow */
+#define LOOP_EMPTY      0x40            /* loop stack empty */
+#define LOOP_OVER       0x80            /* loop stack overflow */
 
 
 
 /*===========================================================================
-	PC stack handlers
+    PC stack handlers
 ===========================================================================*/
 
 INLINE UINT32 pc_stack_top(void)
@@ -172,7 +183,7 @@ INLINE UINT32 pc_stack_pop_val(void)
 
 
 /*===========================================================================
-	CNTR stack handlers
+    CNTR stack handlers
 ===========================================================================*/
 
 INLINE UINT32 cntr_stack_top(void)
@@ -208,7 +219,7 @@ INLINE void cntr_stack_pop(void)
 
 
 /*===========================================================================
-	LOOP stack handlers
+    LOOP stack handlers
 ===========================================================================*/
 
 INLINE UINT32 loop_stack_top(void)
@@ -254,7 +265,7 @@ INLINE void loop_stack_pop(void)
 
 
 /*===========================================================================
-	STAT stack handlers
+    STAT stack handlers
 ===========================================================================*/
 
 INLINE void stat_stack_push(void)
@@ -282,20 +293,20 @@ INLINE void stat_stack_pop(void)
 	set_mstat(adsp2100.stat_stack[adsp2100.stat_sp][0]);
 	adsp2100.imask = adsp2100.stat_stack[adsp2100.stat_sp][1];
 	adsp2100.astat = adsp2100.stat_stack[adsp2100.stat_sp][2];
- 	check_irqs();
+	check_irqs();
 }
 
 
 
 /*===========================================================================
-	condition code checking
+    condition code checking
 ===========================================================================*/
 
 INLINE int CONDITION(int c)
 {
 	if (c != 14)
 		return condition_table[((c) << 8) | adsp2100.astat];
-	else if (--adsp2100.cntr != 0)
+	else if ((INT32)--adsp2100.cntr > 0)
 		return 1;
 	else
 	{
@@ -307,7 +318,7 @@ INLINE int CONDITION(int c)
 
 
 /*===========================================================================
-	register writing
+    register writing
 ===========================================================================*/
 
 static void wr_inval(INT32 val) { logerror( "ADSP %04x: Writing to an invalid register!", adsp2100.ppc ); }
@@ -404,7 +415,7 @@ static void (*wr_reg[4][16])(INT32) =
 
 
 /*===========================================================================
-	register reading
+    register reading
 ===========================================================================*/
 
 static INT32 rd_inval(void) { logerror( "ADSP %04x: Writing to an invalid register!", adsp2100.ppc ); return 0; }
@@ -485,7 +496,7 @@ static INT32 (*rd_reg[4][16])(void) =
 
 
 /*===========================================================================
-	Modulus addressing logic
+    Modulus addressing logic
 ===========================================================================*/
 
 INLINE void modify_address(UINT32 ireg, UINT32 mreg)
@@ -494,7 +505,7 @@ INLINE void modify_address(UINT32 ireg, UINT32 mreg)
 	UINT32 i = adsp2100.i[ireg];
 	UINT32 l = adsp2100.l[ireg];
 
-	i += adsp2100.m[mreg];
+	i = (i + adsp2100.m[mreg]) & 0x3fff;
 	if (i < base) i += l;
 	else if (i >= base + l) i -= l;
 	adsp2100.i[ireg] = i;
@@ -503,7 +514,7 @@ INLINE void modify_address(UINT32 ireg, UINT32 mreg)
 
 
 /*===========================================================================
-	Data memory accessors
+    Data memory accessors
 ===========================================================================*/
 
 INLINE void data_write_dag1(UINT32 op, INT32 val)
@@ -522,9 +533,10 @@ INLINE void data_write_dag1(UINT32 op, INT32 val)
 	else
 		WWORD_DATA(i, val);
 
-	i += adsp2100.m[mreg];
+	i = (i + adsp2100.m[mreg]) & 0x3fff;
 	if (i < base) i += l;
 	else if (i >= base + l) i -= l;
+
 	adsp2100.i[ireg] = i;
 }
 
@@ -546,7 +558,7 @@ INLINE UINT32 data_read_dag1(UINT32 op)
 	else
 		res = RWORD_DATA(i);
 
-	i += adsp2100.m[mreg];
+	i = (i + adsp2100.m[mreg]) & 0x3fff;
 	if (i < base) i += l;
 	else if (i >= base + l) i -= l;
 	adsp2100.i[ireg] = i;
@@ -564,7 +576,7 @@ INLINE void data_write_dag2(UINT32 op, INT32 val)
 
 	WWORD_DATA(i, val);
 
-	i += adsp2100.m[mreg];
+	i = (i + adsp2100.m[mreg]) & 0x3fff;
 	if (i < base) i += l;
 	else if (i >= base + l) i -= l;
 	adsp2100.i[ireg] = i;
@@ -581,7 +593,7 @@ INLINE UINT32 data_read_dag2(UINT32 op)
 
 	UINT32 res = RWORD_DATA(i);
 
-	i += adsp2100.m[mreg];
+	i = (i + adsp2100.m[mreg]) & 0x3fff;
 	if (i < base) i += l;
 	else if (i >= base + l) i -= l;
 	adsp2100.i[ireg] = i;
@@ -590,7 +602,7 @@ INLINE UINT32 data_read_dag2(UINT32 op)
 }
 
 /*===========================================================================
-	Program memory accessors
+    Program memory accessors
 ===========================================================================*/
 
 INLINE void pgm_write_dag2(UINT32 op, INT32 val)
@@ -603,7 +615,7 @@ INLINE void pgm_write_dag2(UINT32 op, INT32 val)
 
 	WWORD_PGM(i, (val << 8) | adsp2100.px);
 
-	i += adsp2100.m[mreg];
+	i = (i + adsp2100.m[mreg]) & 0x3fff;
 	if (i < base) i += l;
 	else if (i >= base + l) i -= l;
 	adsp2100.i[ireg] = i;
@@ -623,7 +635,7 @@ INLINE UINT32 pgm_read_dag2(UINT32 op)
 	adsp2100.px = res;
 	res >>= 8;
 
-	i += adsp2100.m[mreg];
+	i = (i + adsp2100.m[mreg]) & 0x3fff;
 	if (i < base) i += l;
 	else if (i >= base + l) i -= l;
 	adsp2100.i[ireg] = i;
@@ -634,7 +646,7 @@ INLINE UINT32 pgm_read_dag2(UINT32 op)
 
 
 /*===========================================================================
-	ALU register reading
+    register reading
 ===========================================================================*/
 
 #define ALU_GETXREG_UNSIGNED(x) (*(UINT16 *)alu_xregs[x])
@@ -730,12 +742,12 @@ void alu_op_ar(int op)
 	switch (op & (15<<13))  /*JB*/
 	{
 		case 0x00<<13:
-			/* Y				Clear when y = 0 */
+			/* Y                Clear when y = 0 */
 			res = ALU_GETYREG_UNSIGNED(yop);
 			CALC_NZ(res);
 			break;
 		case 0x01<<13:
-			/* Y + 1			PASS 1 when y = 0 */
+			/* Y + 1            PASS 1 when y = 0 */
 			yop = ALU_GETYREG_UNSIGNED(yop);
 			res = yop + 1;
 			CALC_NZ(res);
@@ -751,7 +763,7 @@ void alu_op_ar(int op)
 			CALC_NZVC(xop, yop, res);
 			break;
 		case 0x03<<13:
-			/* X + Y			X when y = 0 */
+			/* X + Y            X when y = 0 */
 			xop = ALU_GETXREG_UNSIGNED(xop);
 			yop = ALU_GETYREG_UNSIGNED(yop);
 			res = xop + yop;
@@ -771,7 +783,7 @@ void alu_op_ar(int op)
 			if (yop == 0x0000) SET_C;
 			break;
 		case 0x06<<13:
-			/* X - Y + C - 1	X + C - 1 when y = 0 */
+			/* X - Y + C - 1    X + C - 1 when y = 0 */
 			xop = ALU_GETXREG_UNSIGNED(xop);
 			yop = ALU_GETYREG_UNSIGNED(yop);
 			res = xop - yop + (GET_C >> 3) - 1;
@@ -785,7 +797,7 @@ void alu_op_ar(int op)
 			CALC_NZVC_SUB(xop, yop, res);
 			break;
 		case 0x08<<13:
-			/* Y - 1			PASS -1 when y = 0 */
+			/* Y - 1            PASS -1 when y = 0 */
 			yop = ALU_GETYREG_UNSIGNED(yop);
 			res = yop - 1;
 			CALC_NZ(res);
@@ -793,14 +805,14 @@ void alu_op_ar(int op)
 			else if (yop == 0x0000) SET_C;
 			break;
 		case 0x09<<13:
-			/* Y - X			-X when y = 0 */
+			/* Y - X            -X when y = 0 */
 			xop = ALU_GETXREG_UNSIGNED(xop);
 			yop = ALU_GETYREG_UNSIGNED(yop);
 			res = yop - xop;
 			CALC_NZVC_SUB(yop, xop, res);
 			break;
 		case 0x0a<<13:
-			/* Y - X + C - 1	-X + C - 1 when y = 0 */
+			/* Y - X + C - 1    -X + C - 1 when y = 0 */
 			xop = ALU_GETXREG_UNSIGNED(xop);
 			yop = ALU_GETYREG_UNSIGNED(yop);
 			res = yop - xop + (GET_C >> 3) - 1;
@@ -836,13 +848,14 @@ void alu_op_ar(int op)
 			/* ABS X */
 			xop = ALU_GETXREG_UNSIGNED(xop);
 			res = (xop & 0x8000) ? -xop : xop;
+			CLR_FLAGS;
+			CLR_S;
 			if (xop == 0) SET_Z;
 			if (xop == 0x8000) SET_N, SET_V;
-			CLR_S;
 			if (xop & 0x8000) SET_S;
 			break;
 		default:
-			res = 0;	/* just to keep the compiler happy */
+			res = 0;    /* just to keep the compiler happy */
 			break;
 	}
 
@@ -869,12 +882,12 @@ void alu_op_af(int op)
 	switch (op & (15<<13))  /*JB*/
 	{
 		case 0x00<<13:
-			/* Y				Clear when y = 0 */
+			/* Y                Clear when y = 0 */
 			res = ALU_GETYREG_UNSIGNED(yop);
 			CALC_NZ(res);
 			break;
 		case 0x01<<13:
-			/* Y + 1			PASS 1 when y = 0 */
+			/* Y + 1            PASS 1 when y = 0 */
 			yop = ALU_GETYREG_UNSIGNED(yop);
 			res = yop + 1;
 			CALC_NZ(res);
@@ -890,7 +903,7 @@ void alu_op_af(int op)
 			CALC_NZVC(xop, yop, res);
 			break;
 		case 0x03<<13:
-			/* X + Y			X when y = 0 */
+			/* X + Y            X when y = 0 */
 			xop = ALU_GETXREG_UNSIGNED(xop);
 			yop = ALU_GETYREG_UNSIGNED(yop);
 			res = xop + yop;
@@ -910,7 +923,7 @@ void alu_op_af(int op)
 			if (yop == 0x0000) SET_C;
 			break;
 		case 0x06<<13:
-			/* X - Y + C - 1	X + C - 1 when y = 0 */
+			/* X - Y + C - 1    X + C - 1 when y = 0 */
 			xop = ALU_GETXREG_UNSIGNED(xop);
 			yop = ALU_GETYREG_UNSIGNED(yop);
 			res = xop - yop + (GET_C >> 3) - 1;
@@ -924,7 +937,7 @@ void alu_op_af(int op)
 			CALC_NZVC_SUB(xop, yop, res);
 			break;
 		case 0x08<<13:
-			/* Y - 1			PASS -1 when y = 0 */
+			/* Y - 1            PASS -1 when y = 0 */
 			yop = ALU_GETYREG_UNSIGNED(yop);
 			res = yop - 1;
 			CALC_NZ(res);
@@ -932,14 +945,14 @@ void alu_op_af(int op)
 			else if (yop == 0x0000) SET_C;
 			break;
 		case 0x09<<13:
-			/* Y - X			-X when y = 0 */
+			/* Y - X            -X when y = 0 */
 			xop = ALU_GETXREG_UNSIGNED(xop);
 			yop = ALU_GETYREG_UNSIGNED(yop);
 			res = yop - xop;
 			CALC_NZVC_SUB(yop, xop, res);
 			break;
 		case 0x0a<<13:
-			/* Y - X + C - 1	-X + C - 1 when y = 0 */
+			/* Y - X + C - 1    -X + C - 1 when y = 0 */
 			xop = ALU_GETXREG_UNSIGNED(xop);
 			yop = ALU_GETYREG_UNSIGNED(yop);
 			res = yop - xop + (GET_C >> 3) - 1;
@@ -975,9 +988,10 @@ void alu_op_af(int op)
 			/* ABS X */
 			xop = ALU_GETXREG_UNSIGNED(xop);
 			res = (xop & 0x8000) ? -xop : xop;
+			CLR_FLAGS;
+			CLR_S;
 			if (xop == 0) SET_Z;
 			if (xop == 0x8000) SET_N, SET_V;
-			CLR_S;
 			if (xop & 0x8000) SET_S;
 			break;
 		default:
@@ -992,7 +1006,7 @@ void alu_op_af(int op)
 
 
 /*===========================================================================
-	MAC operations (result in MR)
+    MAC operations (result in MR)
 ===========================================================================*/
 
 void mac_op_mr(int op)
@@ -1004,7 +1018,7 @@ void mac_op_mr(int op)
 	INT64 res;
 
 //	switch ((op >> 13) & 15)
-	switch (op & (15<<13))	/*JB*/
+	switch (op & (15<<13))  /*JB*/
 	{
 		case 0x00<<13:
 			/* no-op */
@@ -1058,7 +1072,7 @@ void mac_op_mr(int op)
 #endif
 			break;
 		case 0x04<<13:
-			/* X * Y (SS)		Clear when y = 0 */
+			/* X * Y (SS)       Clear when y = 0 */
 			xop = MAC_GETXREG_SIGNED(xop);
 			yop = MAC_GETYREG_SIGNED(yop);
 			temp = (xop * yop) << shift;
@@ -1142,7 +1156,7 @@ void mac_op_mr(int op)
 			res = adsp2100.core.mr.mr - (INT64)temp;
 			break;
 		default:
-			res = 0;	/* just to keep the compiler happy */
+			res = 0;    /* just to keep the compiler happy */
 			break;
 	}
 
@@ -1156,7 +1170,7 @@ void mac_op_mr(int op)
 
 
 /*===========================================================================
-	MAC operations (result in MF)
+    MAC operations (result in MF)
 ===========================================================================*/
 
 void mac_op_mf(int op)
@@ -1168,7 +1182,7 @@ void mac_op_mf(int op)
 	INT64 res;
 
 //	switch ((op >> 13) & 15)
-	switch (op & (15<<13))	/*JB*/
+	switch (op & (15<<13))  /*JB*/
 	{
 		case 0x00<<13:
 			/* no-op */
@@ -1222,7 +1236,7 @@ void mac_op_mf(int op)
 #endif
 			break;
 		case 0x04<<13:
-			/* X * Y (SS)		Clear when y = 0 */
+			/* X * Y (SS)       Clear when y = 0 */
 			xop = MAC_GETXREG_SIGNED(xop);
 			yop = MAC_GETYREG_SIGNED(yop);
 			temp = (xop * yop) << shift;
@@ -1306,7 +1320,7 @@ void mac_op_mf(int op)
 			res = adsp2100.core.mr.mr - (INT64)temp;
 			break;
 		default:
-			res = 0;	/* just to keep the compiler happy */
+			res = 0;    /* just to keep the compiler happy */
 			break;
 	}
 
@@ -1317,17 +1331,17 @@ void mac_op_mf(int op)
 
 
 /*===========================================================================
-	SHIFT operations (result in SR/SE/SB)
+    SHIFT operations (result in SR/SE/SB)
 ===========================================================================*/
 
 void shift_op(int op)
 {
-	INT8 sc = adsp2100.core.se.s;
+	INT8 sc = (INT8)adsp2100.core.se.s;
 	INT32 xop = (op >> 8) & 7;
 	UINT32 res;
 
 //	switch ((op >> 11) & 15)
-	switch (op & (15<<11))	/*JB*/
+	switch (op & (15<<11))  /*JB*/
 	{
 		case 0x00<<11:
 			/* LSHIFT (HI) */
@@ -1436,7 +1450,7 @@ void shift_op(int op)
 				xop |= 0x8000;
 				while ((xop & 0x40000000) == 0) res++, xop <<= 1;
 			}
-			adsp2100.core.se.s = -res;
+			adsp2100.core.se.s = -(INT16)res;
 			break;
 		case 0x0d<<11:
 			/* EXP (HIX) */
@@ -1461,7 +1475,7 @@ void shift_op(int op)
 					xop |= 0x8000;
 					while ((xop & 0x40000000) == 0) res++, xop <<= 1;
 				}
-				adsp2100.core.se.s = -res;
+				adsp2100.core.se.s = -(INT16)res;
 			}
 			break;
 		case 0x0e<<11:
@@ -1477,7 +1491,7 @@ void shift_op(int op)
 					xop = (xop << 1) | 1;
 					while ((xop & 0x10000) == 0) res++, xop <<= 1;
 				}
-				adsp2100.core.se.s = -res;
+				adsp2100.core.se.s = -(INT16)res;
 			}
 			break;
 		case 0x0f<<11:
@@ -1491,8 +1505,8 @@ void shift_op(int op)
 				xop |= 0x8000;
 				while ((xop & 0x40000000) == 0) res++, xop <<= 1;
 			}
-			if (res < -adsp2100.core.sb.s)
-				adsp2100.core.sb.s = -res;
+			if ((INT16)res < -adsp2100.core.sb.s)
+				adsp2100.core.sb.s = -(INT16)res;
 			break;
 	}
 }
@@ -1500,7 +1514,7 @@ void shift_op(int op)
 
 
 /*===========================================================================
-	Immediate SHIFT operations (result in SR/SE/SB)
+    Immediate SHIFT operations (result in SR/SE/SB)
 ===========================================================================*/
 
 void shift_op_imm(int op)
@@ -1510,7 +1524,7 @@ void shift_op_imm(int op)
 	UINT32 res;
 
 //	switch ((op >> 11) & 15)
-	switch (op & (15<<11))	/*JB*/
+	switch (op & (15<<11))  /*JB*/
 	{
 		case 0x00<<11:
 			/* LSHIFT (HI) */

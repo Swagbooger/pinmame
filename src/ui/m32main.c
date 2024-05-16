@@ -13,8 +13,10 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-#include "screenshot.h"
+#include "Screenshot.h"
 #include "win32ui.h"
+
+char g_szGameName[256] = "";		// String containing requested game name (may be different from ROM if aliased)
 
 int WINAPI WinMain(HINSTANCE    hInstance,
                    HINSTANCE    hPrevInstance,

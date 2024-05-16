@@ -61,7 +61,7 @@ static struct {
    The very first time, 0x88 is skipped, since an IRQ is only triggered from a 1->0 transition */
 static int tecno_irq_callback(int x)
 {
-	int vector_num = 0;
+	int vector_num;
 	if(locals.irq_count < 0x08)
 		vector_num = 0x88+locals.irq_count;
 	else
@@ -115,6 +115,11 @@ static MACHINE_INIT(tecno) {
   locals.irq_count = 1;
 
   sndbrd_0_init(core_gameData->hw.soundBoard, 1, memory_region(REGION_CPU2), NULL, NULL);
+}
+
+static MACHINE_STOP(tecno)
+{
+  sndbrd_0_exit();	
 }
 
 //Input Key - Return Switches (uses Lamp Column Strobe)
@@ -315,7 +320,7 @@ struct DACinterface tecno_dacInt =
 
 MACHINE_DRIVER_START(tecno)
   MDRV_IMPORT_FROM(PinMAME)
-  MDRV_CORE_INIT_RESET_STOP(tecno, NULL, NULL)
+  MDRV_CORE_INIT_RESET_STOP(tecno, NULL, tecno)
   MDRV_CPU_ADD_TAG("mcpu", M68000, TECNO_CPUFREQ)
   MDRV_CPU_MEMORY(readmem, writemem)
   MDRV_CPU_VBLANK_INT(vblank, 1)

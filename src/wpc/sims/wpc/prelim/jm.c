@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /*******************************************************************************
  Preliminary Johnny Mnemonic (Bally/Williams, 1995) Pinball Simulator
 
@@ -280,8 +282,8 @@ WPC_ROMEND
 /  Game drivers
 /---------------*/
 CORE_GAMEDEF(jm,12r,"Johnny Mnemonic (1.2R)",1995,"Williams",wpc_mSecurityS,0)
-CORE_CLONEDEF(jm,12b,12r,"Johnny Mnemonic (1.2B) Belgium",1995,"Williams",wpc_mSecurityS,0)
-CORE_CLONEDEF(jm,05r,12r,"Johnny Mnemonic (0.5R)",1995,"Williams",wpc_mSecurityS,0)
+CORE_CLONEDEF(jm,12b,12r,"Johnny Mnemonic (1.2B Belgian)",1995,"Williams",wpc_mSecurityS,0)
+CORE_CLONEDEF(jm,05r,12r,"Johnny Mnemonic (0.5R Prototype)",1995,"Williams",wpc_mSecurityS,0) // is this actually the 0.4 mentioned in the version history?
 
 static void jm_handleMech(int mech) {
 	static UINT8 twobits_x, twobits_y;
@@ -329,13 +331,13 @@ static void jm_drawMech(BMTYPE **line) {
 / Simulation Definitions
 /-----------------------*/
 static sim_tSimData jmSimData = {
-  2,    				/* 2 game specific input ports */
-  jm_stateDef,				/* Definition of all states */
-  jm_inportData,			/* Keyboard Entries */
+  2,					/* 2 game specific input ports */
+  jm_stateDef,			/* Definition of all states */
+  jm_inportData,		/* Keyboard Entries */
   { stTrough1, stTrough2, stTrough3, stTrough4, stDrain, stDrain, stDrain },	/*Position where balls start.. Max 7 Balls Allowed*/
   NULL, 				/* no init */
-  jm_handleBallState,			/*Function to handle ball state changes*/
-  jm_drawStatic,			/*Function to handle mechanical state changes*/
+  jm_handleBallState,	/*Function to handle ball state changes*/
+  jm_drawStatic,		/*Function to handle mechanical state changes*/
   FALSE, 				/* Simulate manual shooter? */
   NULL  				/* Custom key conditions? */
 };
@@ -349,7 +351,10 @@ static core_tGameData jmGameData = {
     FLIP_SW(FLIP_L | FLIP_U) | FLIP_SOL(FLIP_L) | FLIP_BUT(FLIP_L | FLIP_U),
     0,0,0,0,0,0,0,
     0, jm_handleMech,jm_getMech, jm_drawMech,
-    0, NULL
+    0
+#ifdef ENABLE_MECHANICAL_SAMPLES
+    , NULL
+#endif
   },
   &jmSimData,
   {
@@ -369,4 +374,3 @@ static void init_jm(void) {
   locals.xPos = -64;
   locals.yPos = -300;
 }
-

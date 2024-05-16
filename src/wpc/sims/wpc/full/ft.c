@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /********************************************************************************************
  Williams Fishtales (1992) Pinball Simulator
 
@@ -449,6 +451,16 @@ static void ft_drawStatic(BMTYPE **line) {
 WPC_ROMSTART(ft,l5,"fshtl_5.rom",0x80000,CRC(88847775) SHA1(ab323980b914678e1e3c9e2e4d92956e97dc32fa))
 WPCS_SOUNDROM8xx("ft_u18.l1",CRC(48d2760a) SHA1(701b0bbb68f99332493ee1276e5a1cef5c85d499))
 WPC_ROMEND
+
+// If you set "Add a ball" settings, in attract mode it will say "xtra balle" -> this fixes it to "extra ball"
+WPC_ROMSTART(ft,l5p,"fshtd_5p.rom",0x80000,CRC(177d2b0b) SHA1(d5a1397c4e8c5acb8656a80ee6b22116c504f8c8))
+WPCS_SOUNDROM8xx("ft_u18.l1",CRC(48d2760a) SHA1(701b0bbb68f99332493ee1276e5a1cef5c85d499))
+WPC_ROMEND
+
+WPC_ROMSTART(ft,d6,"fshtd_6.rom",0x80000,CRC(b21a3672) SHA1(9005237848f79d21ceefad112854c62cbc7e584a))
+WPCS_SOUNDROM8xx("ft_u18.l1",CRC(48d2760a) SHA1(701b0bbb68f99332493ee1276e5a1cef5c85d499))
+WPC_ROMEND
+
 WPC_ROMSTART(ft,d5,"fshtd_5.rom",0x80000,CRC(67f5def4) SHA1(7ce676bc305e8d2adf43f00e98aa9ea32b85922f))
 WPCS_SOUNDROM8xx("ft_u18.l1",CRC(48d2760a) SHA1(701b0bbb68f99332493ee1276e5a1cef5c85d499))
 WPC_ROMEND
@@ -461,9 +473,14 @@ WPC_ROMSTART(ft,l4,"fshtl_4.rom",0x80000,CRC(beb147b6) SHA1(543eea2e14283485221c
 WPCS_SOUNDROM8xx("ft_u18.l1",CRC(48d2760a) SHA1(701b0bbb68f99332493ee1276e5a1cef5c85d499))
 WPC_ROMEND
 
+WPC_ROMSTART(ft,p2,"ft_p2.u6",0x80000,CRC(e776ebb8) SHA1(9701291b991f62b705f6866f299429e668be0e33))
+WPCS_SOUNDROM8xx("ft_u18.l1",CRC(48d2760a) SHA1(701b0bbb68f99332493ee1276e5a1cef5c85d499))
+WPC_ROMEND
+
 WPC_ROMSTART(ft,p4,"ft_p4.u6",0x80000,CRC(386cbe45) SHA1(5cb4a32591121c4ed3da292fb50cec0d8d5dd44f))
 WPCS_SOUNDROM8xx("ft_u18.l1",CRC(48d2760a) SHA1(701b0bbb68f99332493ee1276e5a1cef5c85d499))
 WPC_ROMEND
+
 WPC_ROMSTART(ft,p5,"ft_p5.u6",0x80000,CRC(1f7c799b) SHA1(4880e05ae16fd08d76a30dcb4115ad4dff130849))
 WPCS_SOUNDROM8xx("ft_u18.l1",CRC(48d2760a) SHA1(701b0bbb68f99332493ee1276e5a1cef5c85d499))
 WPC_ROMEND
@@ -472,23 +489,26 @@ WPC_ROMEND
 /  Game drivers
 /---------------*/
 CORE_GAMEDEF(ft,l5,"Fish Tales (L-5)",1992, "Williams",wpc_mFliptronS,0)
-CORE_CLONEDEF(ft,d5,l5,"Fish Tales (D-5) LED Ghost Fix",1992, "Williams",wpc_mFliptronS,0)
+CORE_CLONEDEF(ft,l5p,l5,"Fish Tales (L-5 Text size patch)",1992, "Williams",wpc_mFliptronS,0)
+CORE_CLONEDEF(ft,d6,l5,"Fish Tales (D-6 Text size patch LED Ghost Fix)",2015,"Inkochnito / Williams",wpc_mFliptronS,0)
+CORE_CLONEDEF(ft,d5,l5,"Fish Tales (D-5 LED Ghost Fix)",1992, "Williams",wpc_mFliptronS,0)
 CORE_CLONEDEF(ft,l3,l5,"Fish Tales (L-3)",1992, "Williams",wpc_mFliptronS,0)
 CORE_CLONEDEF(ft,l4,l5,"Fish Tales (L-4)",1992, "Williams",wpc_mFliptronS,0)
-CORE_CLONEDEF(ft,p4,l5,"Fish Tales (P-4)",1992, "Williams",wpc_mFliptronS,0)
-CORE_CLONEDEF(ft,p5,l5,"Fish Tales (P-5) LED Ghost Fix",1992, "Williams",wpc_mFliptronS,0)
+CORE_CLONEDEF(ft,p2,l5,"Fish Tales (P-2 Prototype)",1992, "Williams",wpc_mFliptronS,0)
+CORE_CLONEDEF(ft,p4,l5,"Fish Tales (P-4 Prototype)",1992, "Williams",wpc_mFliptronS,0)
+CORE_CLONEDEF(ft,p5,l5,"Fish Tales (P-5 LED Ghost Fix)",1992, "Williams",wpc_mFliptronS,0)
 
 /*-----------------------
 / Simulation Definitions
 /-----------------------*/
 static sim_tSimData ftSimData = {
-  2,    			/* # game specific input ports */
-  ft_stateDef,                  /* Definition of all states */
-  ft_inportData,                /* Keyboard Entries */
+  2,				/* # game specific input ports */
+  ft_stateDef,		/* Definition of all states */
+  ft_inportData,	/* Keyboard Entries */
   { stRTrough, stCTrough, stLTrough, stDrain, stDrain, stDrain, stDrain },	/*Position where balls start.. Max 7 Balls Allowed*/
   NULL, 			/* no init */
-  ft_handleBallState,           /*Function to handle ball state changes*/
-  ft_drawStatic,                /*Function to handle mechanical state changes*/
+  ft_handleBallState,/*Function to handle ball state changes*/
+  ft_drawStatic,	/*Function to handle mechanical state changes*/
   FALSE, 			/* Do Not Simulate manual shooter */
   NULL  			/* no custom key conditions */
 };
@@ -502,7 +522,10 @@ static core_tGameData ftGameData = {
     FLIP_SW(FLIP_L | FLIP_UR) | FLIP_SOL(FLIP_L | FLIP_UR),	/* Which switches are the flippers */
     0,0,3,0,0,0,0,
     ft_getSol, ft_handleMech, ft_getMech, ft_drawMech,
-    NULL, NULL
+    NULL
+#ifdef ENABLE_MECHANICAL_SAMPLES
+    , NULL
+#endif
   },
   &ftSimData,
   {
@@ -521,6 +544,8 @@ static void init_ft(void) {
   core_gameData = &ftGameData;
   /*Gate starts as closed!*/
   locals.gatePos = CLOSED;
+  wpc_set_fastflip_addr(0x7b);
+  hc55516_set_sample_clock(0, 22372);
 }
 
 /*-- return status of custom solenoids --*/
@@ -568,18 +593,18 @@ static void ft_handleMech(int mech) {
   /*------ REEL LOGIC ----------------------
      Totally Guessed - with help from Ari
   ------------------------------------------
-   	Position: 00-10: Ball 1 Up: Opto #1: Closed: Opto #2: Closed
-	Position: 11-24: In Between: Opto #1: Open: Opto #2: Open
-   	Position: 25-35: Ball 3 Down: Opto #1: Closed: Opto #2: Open
-	Position: 36-49: In Between: Opto #1: Open: Opto #2: Open
-   	Position: 50-60: Ball 2 Up: Opto #1: Closed: Opto #2: Open
-	Position: 61-74: In Between: Opto #1: Open: Opto #2: Open
-   	Position: 75-85: Ball 1 Down: Opto #1: Closed: Opto #2: Open
-	Position: 86-99: In Between: Opto #1: Open: Opto #2: Open
-   	Position: 100-110: Ball 3 Up: Opto #1: Closed: Opto #2: Open
-	Position: 111-124: In Between: Opto #1: Open: Opto #2: Open
-   	Position: 125-135: Ball 2 Down: Opto #1: Closed: Opto #2: Open
-	Position: 136-149: In Between: Opto #1: Open: Opto #2: Open
+	Position: 00-10: Ball 1 Up:     Opto #1: Closed: Opto #2: Closed
+	Position: 11-24: In Between:    Opto #1: Open:   Opto #2: Open
+	Position: 25-35: Ball 3 Down:   Opto #1: Closed: Opto #2: Open
+	Position: 36-49: In Between:    Opto #1: Open:   Opto #2: Open
+	Position: 50-60: Ball 2 Up:     Opto #1: Closed: Opto #2: Open
+	Position: 61-74: In Between:    Opto #1: Open:   Opto #2: Open
+	Position: 75-85: Ball 1 Down:   Opto #1: Closed: Opto #2: Open
+	Position: 86-99: In Between:    Opto #1: Open:   Opto #2: Open
+	Position: 100-110: Ball 3 Up:   Opto #1: Closed: Opto #2: Open
+	Position: 111-124: In Between:  Opto #1: Open:   Opto #2: Open
+	Position: 125-135: Ball 2 Down: Opto #1: Closed: Opto #2: Open
+	Position: 136-149: In Between:  Opto #1: Open:   Opto #2: Open
 	Back to 00!
   ----------------------------------------------------------------*/
 
@@ -629,7 +654,7 @@ static const char * showReelPos(void)
 static int ft_getMech(int mechNo) {
   switch (mechNo) {
 	//Return Reel Position
-    case 0: return locals.reelPos;
+	case 0: return locals.reelPos;
 	//Return Which Ball Lock is UP in Reel Position!
 	case 1:
 		if(locals.reelPos>=BALL1UP && locals.reelPos<=BALL1UP+ERROR_RANGE)
@@ -639,6 +664,6 @@ static int ft_getMech(int mechNo) {
 		if(locals.reelPos>=BALL3UP && locals.reelPos<=BALL3UP+ERROR_RANGE)
 			return 3;
 		return 0;
-    }
+  }
   return 0;
 }

@@ -99,7 +99,7 @@ static int ymin, ymax;
 
 static int flip_x, flip_y, swap_xy;
 
-int vector_updates; /* avgdvg_go_w()'s per Mame frame, should be 1 */
+int vector_updates = 0; /* avgdvg_go_w()'s per Mame frame, should be 1 */
 
 
 #define BANK_SIZE (0x2000)
@@ -286,7 +286,7 @@ static int dvg_generate_vector_list(void)
 			case 9:
 
 				/* compute raw X and Y values */
-	  			y = firstwd & 0x03ff;
+				y = firstwd & 0x03ff;
 				x = secondwd & 0x3ff;
 				if (firstwd & 0x400)
 					y = -y;
@@ -301,16 +301,16 @@ static int dvg_generate_vector_list(void)
 				z = effective_z(z, z);
 
 				/* determine the scale factor; scale 9 means -1 */
-	  			temp = ((scale + opcode) & 0x0f);
-	  			if (temp > 9)
+				temp = ((scale + opcode) & 0x0f);
+				if (temp > 9)
 					temp = -1;
 
 				/* compute the deltas */
-	  			deltax = (x << 16) >> (9-temp);
+				deltax = (x << 16) >> (9-temp);
 				deltay = (y << 16) >> (9-temp);
 
 				/* adjust the current position and compute timing */
-	  			currentx += deltax;
+				currentx += deltax;
 				currenty -= deltay;
 				total_length += dvg_vector_timer(temp);
 
@@ -337,7 +337,7 @@ static int dvg_generate_vector_list(void)
 
 				/* determine the scale factor; scale 9 means -1 */
 				temp = 2 + ((firstwd >> 2) & 0x02) + ((firstwd >> 11) & 0x01);
-	  			temp = (scale + temp) & 0x0f;
+				temp = (scale + temp) & 0x0f;
 				if (temp > 9)
 					temp = -1;
 				VGLOG(("(%d,%d) z: %d scal: %d", x, y, z, temp));
@@ -347,7 +347,7 @@ static int dvg_generate_vector_list(void)
 				deltay = (y << 16) >> (9 - temp);
 
 				/* adjust the current position and compute timing */
-	  			currentx += deltax;
+				currentx += deltax;
 				currenty -= deltay;
 				total_length += dvg_vector_timer(temp);
 
@@ -363,9 +363,9 @@ static int dvg_generate_vector_list(void)
 				x = twos_comp_val(secondwd, 12);
 
 				/* global scale comes from upper 4 bits of second word */
-	  			scale = secondwd >> 12;
+				scale = secondwd >> 12;
 
-	  			/* set the current X,Y */
+				/* set the current X,Y */
 				currentx = (x - xmin) << 16;
 				currenty = (ymax - y) << 16;
 				VGLOG(("(%d,%d) scal: %d", x, y, secondwd >> 12));
@@ -376,8 +376,8 @@ static int dvg_generate_vector_list(void)
 
 				/* handle stack underflow */
 				if (sp == 0)
-	    		{
-					logerror("\n*** Vector generator stack underflow! ***\n");
+				{
+					VGLOG(("\n*** Vector generator stack underflow! ***\n"));
 					done = 1;
 					sp = MAXSTACK - 1;
 				}
@@ -398,7 +398,7 @@ static int dvg_generate_vector_list(void)
 
 				/* debugging */
 				if (firstwd & 0x1fff)
-      				VGLOG(("(%d?)", firstwd & 0x0fff));
+					VGLOG(("(%d?)", firstwd & 0x0fff));
 				break;
 
 			/* DJMPL: jump to a new program location */
@@ -421,8 +421,8 @@ static int dvg_generate_vector_list(void)
 
 				/* check for stack overflows */
 				if (sp == (MAXSTACK - 1))
-	    		{
-					logerror("\n*** Vector generator stack overflow! ***\n");
+				{
+					VGLOG(("\n*** Vector generator stack overflow! ***\n"));
 					done = 1;
 					sp = 0;
 				}
@@ -435,10 +435,10 @@ static int dvg_generate_vector_list(void)
 
 			/* anything else gets caught here */
 			default:
-				logerror("Unknown DVG opcode found\n");
+				VGLOG(("Unknown DVG opcode found\n"));
 				done = 1;
 		}
-   		VGLOG(("\n"));
+		VGLOG(("\n"));
 	}
 
 	/* return the total length of everything drawn */
@@ -572,13 +572,13 @@ static int avg_generate_vector_list(void)
 
 	int firstwd, secondwd = 0;
 	int opcode;
-	int x, y, z = 0, b, l, d, a;
+	int x, y, z, b, l, d, a;
 	int deltax, deltay;
 
 	/* check for zeroed vector RAM */
 	if (vector_word(pc) == 0 && vector_word(pc + 1) == 0)
 	{
-		logerror("VGO with zeroed vector memory\n");
+		VGLOG(("VGO with zeroed vector memory\n"));
 		return total_length;
 	}
 
@@ -743,7 +743,7 @@ static int avg_generate_vector_list(void)
 					if (firstwd & 0x0800)
 					{
 						int newymin = ymin;
-						logerror("CLIP %d\n", firstwd & 0x0800);
+						VGLOG(("CLIP %d\n", firstwd & 0x0800));
 
 						/* toggle the current state */
 						ywindow = !ywindow;
@@ -783,7 +783,7 @@ static int avg_generate_vector_list(void)
 				/* handle stack underflow */
 				if (sp == 0)
 				{
-					logerror("\n*** Vector generator stack underflow! ***\n");
+					VGLOG(("\n*** Vector generator stack underflow! ***\n"));
 					done = 1;
 					sp = MAXSTACK - 1;
 				}
@@ -835,7 +835,7 @@ static int avg_generate_vector_list(void)
 					/* check for stack overflows */
 					if (sp == (MAXSTACK - 1))
 					{
-						logerror("\n*** Vector generator stack overflow! ***\n");
+						VGLOG(("\n*** Vector generator stack overflow! ***\n"));
 						done = 1;
 						sp = 0;
 					}
@@ -849,7 +849,7 @@ static int avg_generate_vector_list(void)
 
 			/* anything else gets caught here */
 			default:
-				logerror("internal error\n");
+				VGLOG(("internal error\n"));
 		}
 		VGLOG(("\n"));
 	}
@@ -950,10 +950,12 @@ int avgdvg_init(int vector_type)
 {
 	int i;
 
+	vector_updates = 0;
+
 	/* 0 vector RAM size is invalid */
 	if (vectorram_size == 0)
 	{
-		logerror("Error: vectorram_size not initialized\n");
+		VGLOG(("Error: vectorram_size not initialized\n"));
 		return 1;
 	}
 
@@ -967,7 +969,7 @@ int avgdvg_init(int vector_type)
 	vector_engine = vector_type;
 	if (vector_engine < AVGDVG_MIN || vector_engine > AVGDVG_MAX)
 	{
-		logerror("Error: unknown Atari Vector Game Type\n");
+		VGLOG(("Error: unknown Atari Vector Game Type\n"));
 		return 1;
 	}
 

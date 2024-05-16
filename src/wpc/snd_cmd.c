@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /***************************************************************************
  Sound Command Mode & Wave Recording Functionality (SJE 301000)
  ---------------------------------------------------------------------------
@@ -12,12 +14,75 @@
  280101 Added '-' as digit to allow shorter commands
  ****************************************************************************/
 
+#include <sys/stat.h>
 #include <ctype.h>
+#include <limits.h>
 #include "driver.h"
 #include "core.h"
 #include "wmssnd.h"
 #include "sndbrd.h"
 #include "snd_cmd.h"
+
+#ifdef VPINMAME
+ //#define VPINMAME_ALTSOUND // pmoptions.sound_mode == 1
+ //#define VPINMAME_PINSOUND // pmoptions.sound_mode == 2 || 3
+#endif
+
+#ifdef LIBPINMAME
+  extern int g_fSoundMode;
+  extern void libpinmame_snd_cmd_log(int boardNo, int cmd);
+#endif
+
+#define VERBOSE 0
+
+#if VERBOSE
+#define LOG(x) logerror x
+#else
+#define LOG(x)
+#endif
+
+#ifndef _WIN32
+ #include <sys/time.h>
+ static unsigned int timeGetTime2()
+ {
+   struct timeval now;
+   gettimeofday(&now, NULL);
+   return now.tv_usec/1000;
+ }
+#else
+ #ifndef WIN32_LEAN_AND_MEAN
+ //#define WIN32_LEAN_AND_MEAN
+ #endif
+ #include <windows.h>
+ #include <direct.h>
+ #if !defined(__MINGW32__) || defined(VPINMAME)
+  #define timeGetTime2 timeGetTime
+ #else
+  static DWORD timeGetTime2(void) {
+    return (DWORD)(timer_get_time()*1000.); //!! meh!
+  }
+ #endif
+#endif
+
+#ifdef VPINMAME_ALTSOUND // for alternate/external sound processing
+ #include "altsound/snd_alt.h"
+#endif
+#ifdef VPINMAME_PINSOUND // for PinSound support
+ //#include <timeapi.h>
+ //#include <Shlwapi.h>
+ #include <tchar.h>
+
+ static BOOL init_pinsound;
+ static BOOL pinsound_studio_enabled;
+ static FILE *fp_pinsound_log;
+ static DWORD start_time_pinsound_log;
+ static BOOL sys11_patch;
+ static BOOL sys11_counter;
+ static HANDLE hFilePinSound;
+ static HANDLE hFilePinMAME;
+
+ void pinsound_exit();
+#endif
 
 #ifdef MAME_DEBUG
 extern UINT8 debugger_focus;
@@ -29,6 +94,7 @@ extern UINT8 debugger_focus;
 #define SMDCMD_DIGITTOGGLE SMDCMD_ZERO
 
 static int playCmd(int length, int *cmd);
+static void playNextCmd();
 static int checkName(const char *buf, const char *name);
 static void readCmds(int boardNo, const char *head);
 static void clrCmds(void);
@@ -56,9 +122,23 @@ static struct {
   int nextCmd[MAX_CMD_LENGTH+1];
 } locals;
 
+static struct {
+  void* file;
+  UINT32 offs;
+  int recording;
+  int dumping;
+  int spinner;
+  int nextWaveFileNo;
+  UINT32 startTick;
+  UINT32 silence;
+  int silentsamples;
+} wavelocals;
+
 static void wave_init(void);
 static void wave_exit(void);
 static void wave_handle(void);
+static void wave_next(void);
+
 /*---------------------------------*/
 /*-- init manual sound commands  --*/
 /*---------------------------------*/
@@ -83,17 +163,384 @@ void snd_cmd_init(void) {
 void snd_cmd_exit(void) {
   clrCmds();
   wave_exit();
+
+#ifdef VPINMAME_ALTSOUND
+  if (options.samplerate != 0 && pmoptions.sound_mode == 1)
+    alt_sound_exit();
+#endif
+#ifdef VPINMAME_PINSOUND
+  if (options.samplerate != 0 && (pmoptions.sound_mode == 2 || pmoptions.sound_mode == 3))
+    pinsound_exit();
+#endif
 }
+
+#ifdef VPINMAME_PINSOUND
+static void getPinSoundDirectory(char path_pinsound_cwd[2048])
+{
+	char * pos;
+	char tmp_path[2048];
+
+#ifndef _WIN64
+	const HINSTANCE hInst = GetModuleHandle("VPinMAME.dll");
+#else
+	const HINSTANCE hInst = GetModuleHandle("VPinMAME64.dll");
+#endif
+	GetModuleFileName(hInst, tmp_path, 2048);
+	pos = strrchr(tmp_path, '\\');
+	if(pos != NULL) {
+		*pos = '\0'; 
+	}
+	sprintf(path_pinsound_cwd,"%s\\PinSound\\", tmp_path);
+}
+
+static BOOL WriteSlot(const HANDLE hFile, const LPTSTR const lpszMessage)
+{
+	DWORD cbWritten;
+	const BOOL fResult = WriteFile(hFile,
+		lpszMessage,
+		(DWORD) ((lstrlen(lpszMessage)+1)*sizeof(TCHAR)),
+		&cbWritten,
+		(LPOVERLAPPED) NULL);
+
+	return fResult ? TRUE : FALSE;
+}
+
+static BOOL sendToSlot(const HANDLE hFile, const TCHAR msg_to_pinsound_studio[100])
+{
+	if (hFile != INVALID_HANDLE_VALUE && WriteSlot(hFile, TEXT(msg_to_pinsound_studio)))
+	{
+		return TRUE;
+	}
+	else
+	{
+		LOG(("PinSound: WriteSlot failed with %d.\n", GetLastError()));
+		return FALSE;
+	}
+}
+
+static HANDLE makeWriteSlot(const LPTSTR slotName)
+{
+	const HANDLE hFile = CreateFile(slotName, 
+		GENERIC_WRITE, 
+		FILE_SHARE_READ,
+		(LPSECURITY_ATTRIBUTES) NULL, 
+		OPEN_EXISTING, 
+		FILE_ATTRIBUTE_NORMAL, 
+		(HANDLE) NULL);
+
+	if(hFile == INVALID_HANDLE_VALUE)
+	{
+		LOG(("PinSound: Cannot open slot: %s. Error: %d.\n", slotName, GetLastError()));
+	}
+	else
+	{
+		LOG(("PinSound: Communication slot opened: %s.\n", slotName));
+	}
+	return hFile;
+}
+
+static HANDLE makeReadSlot(const LPTSTR slotName)
+{
+	const HANDLE hFile = CreateMailslot(slotName,
+		0,                             // no maximum message size
+		MAILSLOT_WAIT_FOREVER,         // no time-out for operations
+		(LPSECURITY_ATTRIBUTES) NULL); // default security
+
+	if(hFile == INVALID_HANDLE_VALUE)
+	{
+		LOG(("PinSound: Cannot open read slot: %s. Error: %d.\n", slotName, GetLastError()));
+	}
+	else
+	{
+		LOG(("PinSound: Communication read slot opened: %s.\n", slotName)); 
+	}
+	return hFile;
+}
+
+static BOOL readSlot(const HANDLE hFile, char * msg)
+{
+	DWORD	msgSize;
+	DWORD	numRead;
+	LPTSTR	buffer;
+
+	// Get the size of the next record
+	BOOL err = GetMailslotInfo(hFile, 0, &msgSize, 0, 0);
+
+	// Check for an error 
+	if (!err)
+	{
+		LOG(("PinSound: GetMailslotInfo failed: %s \n", GetLastError()));
+		return FALSE;
+	}
+
+	// if there are any data waiting to be read
+	if (msgSize > 0)
+	{
+		// Allocate buffer memory
+		buffer = (LPTSTR) GlobalAlloc(GPTR, msgSize); //Combines GMEM_FIXED and GMEM_ZEROINIT.
+		if( NULL == buffer )
+		{
+			LOG(("PinSound: readSlot / error GlobalAlloc: %d\n", GetLastError()));
+			return FALSE;
+		}
+		buffer[0] = '\0';
+
+		{
+			// Read the message
+			err = ReadFile(hFile, buffer, msgSize, &numRead, 0);
+
+			// See if an error occurred
+			if(!err)
+			{
+				LOG(("PinSound: readSlot / readFile error: %d\n", GetLastError()));
+			}
+			// Make sure all the bytes were read 
+			else if(msgSize != numRead) 
+			{
+				LOG(("PinSound: readSlot / readFile did not read the correct number of bytes!\n"));
+			}
+			else
+			{
+				LOG(("PinSound: Read from mailslot: %s \n",buffer));
+				sprintf(msg, "%s", buffer);
+				GlobalFree((HGLOBAL) buffer);
+				return TRUE;
+			}
+		}
+		GlobalFree((HGLOBAL) buffer);
+	}
+	return FALSE;
+}
+
+static void pinsound_exit()
+{
+	// send stop-all command to the PinSound Studio
+	if (pinsound_studio_enabled)
+	{
+		TCHAR cmd_to_pinsound_studio[3];
+		_stprintf( cmd_to_pinsound_studio, _T("00") );
+		// double because we don't know if we are talking 8bits or 16bits instructions
+		sendToSlot(hFilePinSound, cmd_to_pinsound_studio);
+		sendToSlot(hFilePinSound, cmd_to_pinsound_studio);
+	
+		CloseHandle(hFilePinSound);
+		CloseHandle(hFilePinMAME);
+
+		if (init_pinsound)
+		{
+			if (fp_pinsound_log)
+			{
+				fclose(fp_pinsound_log);
+				fp_pinsound_log = NULL;
+			}
+			init_pinsound = FALSE;
+		}
+
+		pinsound_studio_enabled = FALSE;
+	}
+}
+
+void reinit_pinSound(void)
+{
+	const LPTSTR PinMAMESlotName = TEXT("\\\\.\\mailslot\\PinSoundPinMAME");
+	const LPTSTR PinSoundStudioSlotName = TEXT("\\\\.\\mailslot\\PinSoundStudio");
+
+	char	game_rom_system[100];
+	BOOL	response;
+	char	buffer_msg[100];
+
+	if (!(pmoptions.sound_mode == 2 || pmoptions.sound_mode == 3) || options.samplerate == 0) // if not internal or external pinsound enabled, or if sound in general is disabled -> return
+		return;
+
+	init_pinsound = FALSE;
+
+	// create a mail slot to talk to the PinSound Studio
+	hFilePinSound = makeWriteSlot(PinSoundStudioSlotName);
+
+	// DAR@20230901
+	// If PinSound Studio is not running, this will return a bad handle.
+	// If we allow the attempt to make a read slot to occur in this case,
+	// the table will fail to load and hang indefinitely.  Handling the
+	// failure here prevents that
+	if (hFilePinSound == INVALID_HANDLE_VALUE) {
+		LOG(("Error:  Failed to create PinSound write slot!"));
+		return;
+	}
+
+	// create slot to receive response from the PinSound Studio
+	hFilePinMAME = makeReadSlot(PinMAMESlotName);
+
+	// send game rom name and sound system to PSStudio
+	sprintf(game_rom_system, "#ROM%s#SYSTEM%s", Machine->gamedrv->name, sndbrd_typestr(0) ? sndbrd_typestr(0) : sndbrd_typestr(1));
+
+	sendToSlot(hFilePinSound, game_rom_system);
+
+	// wait for the answer from the PinSound Studio
+	Sleep(500);
+
+	// read response from PinSoundStudio
+	response = readSlot(hFilePinMAME, buffer_msg);
+	if(response != TRUE)
+	{
+		pinsound_studio_enabled = FALSE;
+		CloseHandle(hFilePinSound);
+		CloseHandle(hFilePinMAME);
+		LOG(("PinSound: Cannot communicate with PinSound Studio.\n"));
+	}
+	else
+	{
+		int responseValue;
+		sscanf(buffer_msg, "%d", &responseValue);
+
+		if(responseValue == 1)
+		{
+			//int	ch;
+
+			pinsound_studio_enabled = TRUE;
+			
+			// force internal PinMAME volume mixer to 0 to mute emulated sounds & musics
+			//for(ch = 0; ch < MIXER_MAX_CHANNELS; ch++)
+			//	if(mixer_get_name(ch) != NULL)
+			//		mixer_set_volume(ch, 0);
+			mixer_sound_enable_global_w(0);
+
+			LOG(("PinSound: PinSound Studio audio engine is ready to play the ROM requested. \n"));
+		}
+		else
+		{
+			pinsound_studio_enabled = FALSE;
+			CloseHandle(hFilePinSound); 
+			CloseHandle(hFilePinMAME); 
+			LOG(("PinSound: PinSound Studio cannot find any sound package relative to the ROM requested. \n"));
+		}
+	}
+}
+
+static void pinsound_handle(const int boardNo, const int cmd)
+{
+	if (pinsound_studio_enabled && init_pinsound == FALSE)
+	{
+		if (!strcmp(sndbrd_typestr(0) ? sndbrd_typestr(0) : sndbrd_typestr(1), "WMSS11C"))
+		{
+			sys11_patch = TRUE;
+			sys11_counter = TRUE;
+		}
+		else
+			sys11_patch = FALSE;
+
+		init_pinsound = TRUE;
+		fp_pinsound_log = NULL;
+
+		if (pmoptions.sound_mode == 3)
+		{
+			BOOL cd;
+			DWORD le;
+			char path_pinsound_cwd[2048];
+
+			getPinSoundDirectory(path_pinsound_cwd);
+			cd = CreateDirectory(path_pinsound_cwd, NULL);
+			if (!cd)
+				le = GetLastError();
+
+			if (cd || le == ERROR_ALREADY_EXISTS)
+			{
+				FILE *fp_check;
+				char machine_name[120];
+				sprintf(machine_name, "%s/%.8s.psrec", path_pinsound_cwd, Machine->gamedrv->name);
+
+				// check if this filename is not already used
+				fp_check = fopen(machine_name, "r");
+				if (fp_check)
+				{
+					//otherwise use "gamename-NNNN.psrec"
+					int cpt_filename = 0;
+					do
+					{
+						fclose(fp_check);
+						sprintf(machine_name, "%s/%.8s-%04d.psrec", path_pinsound_cwd, Machine->gamedrv->name, ++cpt_filename);
+						fp_check = fopen(machine_name, "r");
+					} while (fp_check);
+				}
+
+				fp_pinsound_log = fopen(machine_name, "ab+");
+				if (fp_pinsound_log)
+				{
+					fprintf(fp_pinsound_log, "#system %s\n", sndbrd_typestr(0) ? sndbrd_typestr(0) : sndbrd_typestr(1));
+				}
+				else
+				{
+					LOG(("PinSound: Cannot open PinSound PSREC file.\n"));
+				}
+			}
+			else
+			{
+				if (le != ERROR_ALREADY_EXISTS)
+				{
+					// Failed to create directory
+					LOG(("PinSound: Cannot create PinSound directory.\n"));
+				}
+			}
+		}
+		start_time_pinsound_log = timeGetTime2();
+	}
+
+	if (init_pinsound)
+	{
+		// skip instruction every 2 instr
+		if (!(sys11_patch && sys11_counter))
+		{
+			// send current sound cmd to PSStudio
+			//int	ch;
+			TCHAR cmd_to_pinsound_studio[100];
+			_stprintf( cmd_to_pinsound_studio, _T("%02x"), cmd );
+
+			// force internal PinMAME volume mixer to 0 to mute emulated sounds & musics
+			// required for WPC89 sound board
+			//for (ch = 0; ch < MIXER_MAX_CHANNELS; ch++) 
+			//	if (mixer_get_name(ch) != NULL)
+			//		mixer_set_volume(ch, 0);
+			mixer_sound_enable_global_w(0);
+
+			sendToSlot(hFilePinSound, cmd_to_pinsound_studio);
+
+			// write current sound cmd to PSREC file
+			if (fp_pinsound_log) {
+				fprintf(fp_pinsound_log, "%02x %lu\n", cmd, timeGetTime2() - start_time_pinsound_log);
+				fflush(fp_pinsound_log);
+			}
+		}
+
+		// skip instruction every 2 instr
+		sys11_counter = !sys11_counter;
+	}
+}
+#else
+void reinit_pinSound() {}
+#endif
 
 /*----------------
 / log handling
 /-----------------*/
 void snd_cmd_log(int boardNo, int cmd) {
+#ifdef VPINMAME_ALTSOUND
+  if (options.samplerate != 0 && pmoptions.sound_mode == 1)
+    alt_sound_handle(boardNo, cmd);
+#endif
+#ifdef LIBPINMAME
+  if (options.samplerate != 0 && g_fSoundMode == 1)
+    libpinmame_snd_cmd_log(boardNo, cmd);
+#endif
+#ifdef VPINMAME_PINSOUND
+  if (options.samplerate != 0 && (pmoptions.sound_mode == 2 || pmoptions.sound_mode == 3))
+    pinsound_handle(boardNo, cmd);
+#endif
+
   if (locals.soundMode || (locals.boards == 0)) return; // Don't log from within sound commander
   if (locals.boards == 3) {
     locals.cmdLog[locals.firstLog++] = boardNo;
     locals.firstLog %= MAX_CMD_LOG;
   }
+
   locals.cmdLog[locals.firstLog++] = cmd;
   locals.firstLog %= MAX_CMD_LOG;
 }
@@ -129,8 +576,14 @@ int manual_sound_commands(struct mame_bitmap *bitmap) {
 #endif
 
   /*-- handle recording --*/
-  if (keyboard_pressed_memory_repeat(SMDCMD_RECORDTOGGLE,REPEATKEY))
+  if (keyboard_pressed_memory_repeat(SMDCMD_RECORDTOGGLE, REPEATKEY))
     wave_handle();
+  if (keyboard_pressed_memory_repeat(SMDCMD_DUMPTOGGLE, REPEATKEY)) {
+    if (!wavelocals.dumping)
+      wave_next();
+    else
+      wave_exit();
+  }
 
   /* Toggle command mode */
   if (keyboard_pressed_memory_repeat(SMDCMD_MODETOGGLE, REPEATKEY) &&
@@ -249,12 +702,16 @@ int manual_sound_commands(struct mame_bitmap *bitmap) {
     else { /* command mode */
       /*-- specific help --*/
       core_textOutf(SND_XROW, 65, BLACK, "UP/DOWN     Next/Prev command");
+      core_textOutf(SND_XROW, 75, BLACK, "F5          Record");
+      core_textOutf(SND_XROW, 85, BLACK, "F6          Record Altsound and CSV");
+
       if      ((keyboard_pressed_memory_repeat(SMDCMD_DOWN, REPEATKEY)) && locals.currCmd->prev)
         { locals.currCmd = locals.currCmd->prev; }
       else if ((keyboard_pressed_memory_repeat(SMDCMD_UP, REPEATKEY)) && locals.currCmd->next)
         { locals.currCmd = locals.currCmd->next; }
       else if (keyboard_pressed_memory_repeat(SMDCMD_PLAY, REPEATKEY))
         playCmd(locals.currCmd->length, locals.currCmd->cmd);
+
       core_textOutf(SND_XROW, 95, BLACK, "%-30s",locals.currCmd->name);
       for (ii = 0; ii < MAX_CMD_LENGTH; ii++)
         core_textOutf(SND_XROW + 13*ii, 105, BLACK,
@@ -285,7 +742,7 @@ static void readCmds(int boardNo, const char *head) {
   if (f) {
     char buffer[MAX_LINE_LENGTH];
     while (mame_fgets(buffer, MAX_LINE_LENGTH, f)) {
-      /* logerror("line=%s",buffer); */
+      /* LOG(("line=%s",buffer)); */
       if (buffer[0] == ':') {
         if (getData) {
           struct cmds tmpCmd;
@@ -306,7 +763,7 @@ static void readCmds(int boardNo, const char *head) {
                 tmpCmd.cmd[tmpCmd.length/2-1] = boardNo; tmpCmd.length += 2;
               }
               tmpCmd.cmd[tmpCmd.length/2-1] = cmd;
-              /* logerror("cmd=%x\n",cmd); */
+              /* LOG(("cmd=%x\n",cmd)); */
               cmd = 0;
             }
             tmp += 1;
@@ -315,7 +772,7 @@ static void readCmds(int boardNo, const char *head) {
           strncpy(tmpCmd.name, &tmp[1], MAX_NAME_LENGTH);
 
           /*-- make sure name is less than MAX_NAME_LENGTH --*/
-          cmd = strlen(&tmp[1]) - 1;
+          cmd = (int)strlen(&tmp[1]) - 1;
           if (cmd >= MAX_NAME_LENGTH)
             cmd = MAX_NAME_LENGTH - 1;
           tmpCmd.name[cmd] = '\0';
@@ -372,6 +829,31 @@ static void clrCmds(void) {
   }
 }
 
+
+static void playNextCmd() {
+  int ii;
+  int command[MAX_CMD_LENGTH];
+  int count = 0;
+
+  if (++locals.digits[MAX_CMD_LENGTH * 2 - 1] >= 0x10) {
+    locals.digits[MAX_CMD_LENGTH * 2 - 1] = 0;
+    locals.digits[MAX_CMD_LENGTH * 2 - 2] = locals.digits[MAX_CMD_LENGTH * 2 - 2] + 1;
+    if (locals.digits[MAX_CMD_LENGTH * 2 - 2] == 0x10)
+      locals.digits[MAX_CMD_LENGTH * 2 - 2] = 0;
+  }
+
+  for (ii = 0; ii < MAX_CMD_LENGTH; ii++) {
+    if ((locals.digits[ii * 2] == 0x10) || (locals.digits[ii * 2 + 1] == 0x10)) {
+      locals.digits[ii * 2] = locals.digits[ii * 2 + 1] = 0x10;
+      continue;
+    }
+    command[count++] = locals.digits[ii * 2] * 16 + locals.digits[ii * 2 + 1];
+  }
+
+  wave_next();
+  playCmd(count, command);
+}
+
 static int playCmd(int length, int *cmd) {
   /*-- send a new command --*/
   if (length >= 0) {
@@ -402,13 +884,7 @@ static int playCmd(int length, int *cmd) {
 /* Local Functions */
 static int wave_open(char *filename);
 static void wave_close(void);
-static struct {
-  void  *file;
-  UINT32 offs;
-  int recording;
-  int spinner;
-  int nextWaveFileNo;
-} wavelocals;
+
 
 static void wave_init(void) {
   memset(&wavelocals, 0, sizeof(wavelocals));
@@ -416,6 +892,9 @@ static void wave_init(void) {
 static void wave_exit(void) {
   if (wavelocals.recording == 1) {
     wave_close(); wavelocals.recording = 0;
+  }
+  if (wavelocals.dumping == 1) {
+    wave_close(); wavelocals.dumping = 0;
   }
 }
 
@@ -439,6 +918,67 @@ static void wave_handle(void) {
   }
 }
 
+static void wave_next(void) {
+  FILE *csv;
+  char csvName[120];
+  struct stat stat_buffer;
+
+  if (stat("wave", &stat_buffer) != 0)
+#if defined(_WIN32)
+    _mkdir("wave");
+#else 
+    mkdir("wave", 0775);
+#endif
+
+  sprintf(csvName, "wave\\altsound-%s.csv", Machine->gamedrv->name);
+
+  // check if this filename is not already used
+  if ((csv = fopen(csvName, "r"))) {
+    fclose(csv);
+    csv = fopen(csvName, "a");
+  }
+  else {
+    csv = fopen(csvName, "w");
+    fprintf(csv, "ID,CHANNEL,DUCK,GAIN,LOOP,STOP,NAME,FNAME\n");
+  }
+
+  if (wavelocals.dumping == 1)
+  {
+    char dumpName[120];
+
+    wave_close(); 
+
+    sprintf(dumpName, "0x%01X%01X%01X%01X-%s", locals.digits[MAX_CMD_LENGTH * 2 - 4], locals.digits[MAX_CMD_LENGTH * 2 - 3], locals.digits[MAX_CMD_LENGTH * 2 - 2], locals.digits[MAX_CMD_LENGTH * 2 - 1], Machine->gamedrv->name);
+
+    if (locals.digits[MAX_CMD_LENGTH * 2 - 2] == 0x00 && locals.digits[MAX_CMD_LENGTH * 2 - 1] == 0x00)
+      wavelocals.dumping = 0;
+    else
+      if (mame_faccess(dumpName, FILETYPE_WAVE)) {
+        fclose(csv);
+        playNextCmd();
+      }
+      else {
+        fprintf(csv, "0x%01X%01X%01X%01X,", locals.digits[MAX_CMD_LENGTH * 2 - 4], locals.digits[MAX_CMD_LENGTH * 2 - 3], locals.digits[MAX_CMD_LENGTH * 2 - 2], locals.digits[MAX_CMD_LENGTH * 2 - 1]);
+        fprintf(csv, ",80,50,0,0,%s,%s.wav\n", dumpName, dumpName);
+        wavelocals.dumping = wave_open(dumpName);
+      }
+  }
+  else {
+    char dumpName[120];
+
+    sprintf(dumpName, "0x%01X%01X%01X%01X-%s", locals.digits[MAX_CMD_LENGTH * 2 - 4], locals.digits[MAX_CMD_LENGTH * 2 - 3], locals.digits[MAX_CMD_LENGTH * 2 - 2], locals.digits[MAX_CMD_LENGTH * 2 - 1], Machine->gamedrv->name);
+    if (mame_faccess(dumpName, FILETYPE_WAVE))
+      wavelocals.dumping = 0;
+    else {
+      fprintf(csv, "0x%01X%01X%01X%01X,", locals.digits[MAX_CMD_LENGTH * 2 - 4], locals.digits[MAX_CMD_LENGTH * 2 - 3], locals.digits[MAX_CMD_LENGTH * 2 - 2], locals.digits[MAX_CMD_LENGTH * 2 - 1]);
+      fprintf(csv, ",80,50,0,0,%s,%s.wav\n", dumpName, dumpName);
+      wavelocals.dumping = wave_open(dumpName);
+    }
+  }
+  if(csv)
+    fclose(csv);
+}
+
 #ifdef LSB_FIRST
 #define intel32(x) (x)
 #define intel16(x) (x)
@@ -455,6 +995,9 @@ static int wave_open(char *filename) {
   wavelocals.file = mame_fopen(Machine->gamedrv->name, filename, FILETYPE_WAVE, 1);
 
   if (!wavelocals.file) return -1;
+  wavelocals.startTick = timeGetTime2();
+  wavelocals.silence = timeGetTime2();
+  wavelocals.silentsamples = 0;
   /* write the core header for a WAVE file */
   wavelocals.offs = mame_fwrite(wavelocals.file, "RIFF", 4);
   /* filesize, updated when the file is closed */
@@ -474,10 +1017,10 @@ static int wave_open(char *filename) {
   temp16 = intel16(channels);
   wavelocals.offs += mame_fwrite(wavelocals.file, &temp16, 2);
   /* sample rate */
-  temp32 = intel32(Machine->sample_rate);
+  temp32 = intel32((int)(Machine->sample_rate+0.5));
   wavelocals.offs += mame_fwrite(wavelocals.file, &temp32, 4);
   /* byte rate */
-  temp32 = intel32(channels * Machine->sample_rate * 2);
+  temp32 = intel32(channels * (int)(Machine->sample_rate+0.5) * 2);
   wavelocals.offs += mame_fwrite(wavelocals.file, &temp32, 4);
   /* block align */
   temp16 = intel16(2*channels);
@@ -495,8 +1038,10 @@ static int wave_open(char *filename) {
 }
 
 static void wave_close(void) {
-  if (wavelocals.recording == 1) {
+  if (wavelocals.recording == 1 || wavelocals.dumping == 1) {
     UINT32 temp32;
+    if (wavelocals.file == NULL)
+      return;
     mame_fseek(wavelocals.file, 4, SEEK_SET);
     temp32 = intel32(wavelocals.offs);
     mame_fwrite(wavelocals.file, &temp32, 4);
@@ -509,13 +1054,79 @@ static void wave_close(void) {
     wavelocals.file = NULL;
   }
 }
+
 /*--------------------*/
 /* exported functions */
 /*--------------------*/
 /* called from mixer.c */
+
+static int is_silent(const INT16* const buf, const int size)
+{
+  int i;
+
+  static int old_value = INT_MAX;
+  if (old_value == INT_MAX && size > 0)
+    old_value = buf[0];
+
+  for (i = 0; i < size; i++)
+  {
+    if (abs((int)buf[i]-old_value) > 32767/1000) //!! magic value, do not just check for 0 due to dithering and other side effects of some sound cores
+    {
+      old_value = buf[size-1];
+      return 0;
+    }
+    old_value = buf[i];
+  }
+
+  return 1;
+}
+
 void pm_wave_record(INT16 *buffer, int samples) {
-  if (wavelocals.recording == 1) {
-    int written = mame_fwrite_lsbfirst(wavelocals.file, buffer, samples * 2 * CHANNELCOUNT);
+  int written;
+  if (wavelocals.dumping == 1) {
+		const UINT32 tick = timeGetTime2();
+		if (!is_silent(buffer, samples * CHANNELCOUNT))
+			wavelocals.silence = tick;
+
+		if (wavelocals.offs > 44) {
+			if (wavelocals.silence == tick) {
+				if (wavelocals.silentsamples > 0) {
+					int i;
+					INT16 * const silentBuffer = malloc(samples * 2 * CHANNELCOUNT);
+					memset(silentBuffer, 0x00, samples * 2 * CHANNELCOUNT);
+					for (i = 0; i < (wavelocals.silentsamples - 1); i++) {
+						written = mame_fwrite_lsbfirst(wavelocals.file, silentBuffer, samples * 2 * CHANNELCOUNT);
+						wavelocals.offs += written;
+					}
+					free(silentBuffer);
+					wavelocals.silentsamples = 0;
+				}
+				written = mame_fwrite_lsbfirst(wavelocals.file, buffer, samples * 2 * CHANNELCOUNT);
+				wavelocals.offs += written;
+				if (written < samples * 2) {
+					wave_close(); wavelocals.dumping = -1;
+				}
+			}
+			else {
+				wavelocals.silentsamples++;
+				if (wavelocals.silentsamples == 1) {
+					written = mame_fwrite_lsbfirst(wavelocals.file, buffer, samples * 2 * CHANNELCOUNT);
+					wavelocals.offs += written;
+				}
+			}
+		}
+		else if (wavelocals.offs == 44) {
+			written = mame_fwrite_lsbfirst(wavelocals.file, buffer, samples * 2 * CHANNELCOUNT);
+			wavelocals.offs += written;
+			if (written < samples * 2) {
+				wave_close(); wavelocals.dumping = -1;
+			}
+		}
+		if ((tick - wavelocals.silence > 2000) || (tick - wavelocals.startTick > 240000))
+			playNextCmd();
+  }
+  else if (wavelocals.recording == 1) {
+    written = mame_fwrite_lsbfirst(wavelocals.file, buffer, samples * 2 * CHANNELCOUNT);
     wavelocals.offs += written;
     if (written < samples * 2) {
       wave_close(); wavelocals.recording = -1;

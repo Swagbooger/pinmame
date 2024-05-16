@@ -49,26 +49,6 @@
 
 
 /*-------------------------------------------------
-	internal timer structure
--------------------------------------------------*/
-
-struct _mame_timer
-{
-	struct _mame_timer *next;
-	struct _mame_timer *prev;
-	void (*callback)(int);
-	int callback_param;
-	int tag;
-	UINT8 enabled;
-	UINT8 temporary;
-	double period;
-	double start;
-	double expire;
-};
-
-
-
-/*-------------------------------------------------
 	global variables
 -------------------------------------------------*/
 
@@ -210,7 +190,7 @@ INLINE void timer_list_remove(mame_timer *timer)
 		/* loop over the timer list */
 		for (t = timer_head; t && t != timer; t = t->next, tnum++) ;
 		if (t == NULL)
-			printf ("timer not found in list");
+			printf("Timer not found in list");
 	}
 	#endif
 
@@ -413,6 +393,10 @@ void timer_adjust(mame_timer *which, double duration, int param, double period)
 	which->callback_param = param;
 	which->enabled = 1;
 
+	/* clamp negative times to 0 */
+	if (duration < 0.)
+		duration = 0.;
+
 	/* set the start and expire times */
 	which->start = time;
 	which->expire = time + duration;
@@ -593,3 +577,18 @@ double timer_firetime(mame_timer *which)
 {
 	return global_offset + which->expire;
 }
+
+#ifdef PINMAME
+double timer_expire(mame_timer *which)
+{
+	return which->expire;
+}
+int timer_param(mame_timer *which)
+{
+	return which->callback_param;
+}
+int timer_enabled(mame_timer *which)
+{
+	return which->enabled;
+}
+#endif

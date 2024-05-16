@@ -133,6 +133,8 @@ struct discrete_module module_list[]=
 	{ DSS_INPUT       ,"DSS_INPUT"       ,dss_input_init       ,dss_input_kill       ,dss_input_reset       ,dss_input_step       },
 	{ DSS_INPUT_PULSE ,"DSS_INPUT_PULSE" ,dss_input_init       ,dss_input_kill       ,dss_input_reset       ,dss_input_pulse_step },
 	{ DSS_CONSTANT    ,"DSS_CONSTANT"    ,NULL                 ,NULL                 ,NULL                  ,dss_constant_step    },
+	{ DSS_INPUT_DATA  ,"DSS_INPUT_DATA"  ,dss_input_init       ,dss_input_kill       ,dss_input_reset       ,dss_input_step       },
+	{ DSS_INPUT_LOGIC ,"DSS_INPUT_LOGIC" ,dss_input_init       ,dss_input_kill       ,dss_input_reset       ,dss_input_step       },
 	{ DSS_ADJUSTMENT  ,"DSS_ADJUSTMENT"  ,dss_adjustment_init  ,dss_default_kill     ,dss_adjustment_reset  ,dss_adjustment_step  },
 	{ DSS_SQUAREWAVE  ,"DSS_SQUAREWAVE"  ,dss_squarewave_init  ,dss_default_kill     ,dss_squarewave_reset  ,dss_squarewave_step  },
 	{ DSS_SQUAREWFIX  ,"DSS_SQUAREWFIX"  ,dss_squarewfix_init  ,dss_default_kill     ,dss_squarewfix_reset  ,dss_squarewfix_step  },
@@ -152,11 +154,14 @@ struct discrete_module module_list[]=
 	{ DST_RCFILTER    ,"DST_RCFILTER"    ,dst_rcfilter_init    ,NULL                 ,dst_rcfilter_reset    ,dst_rcfilter_step    },
 	{ DST_RCDISC      ,"DST_RCDISC"      ,dst_rcdisc_init      ,dss_default_kill     ,dst_rcdisc_reset      ,dst_rcdisc_step      },
 	{ DST_RCDISC2     ,"DST_RCDISC2"     ,dst_rcdisc2_init     ,dss_default_kill     ,dst_rcdisc2_reset     ,dst_rcdisc2_step     },
+	{ DST_RCDISC5     ,"DST_RCDISC5"     ,dst_rcdisc5_init     ,dss_default_kill     ,dst_rcdisc5_reset     ,dst_rcdisc5_step     },
 	{ DST_RCFILTERN   ,"DST_RCFILTERN"   ,dst_rcfilterN_init   ,dss_default_kill     ,dst_filter1_reset     ,dst_filter1_step     },
-	{ DST_RCDISCN     ,"DST_RCDISCN"     ,dst_rcdiscN_init     ,dss_default_kill     ,dst_filter1_reset     ,dst_rcdiscN_step      },
-	{ DST_RCDISC2N    ,"DST_RCDISC2N"    ,dst_rcdisc2N_init    ,dss_default_kill     ,dst_rcdisc2N_reset    ,dst_rcdisc2N_step     },
+	{ DST_RCDISCN     ,"DST_RCDISCN"     ,dst_rcdiscN_init     ,dss_default_kill     ,dst_filter1_reset     ,dst_rcdiscN_step     },
+	{ DST_RCDISC2N    ,"DST_RCDISC2N"    ,dst_rcdisc2N_init    ,dss_default_kill     ,dst_rcdisc2N_reset    ,dst_rcdisc2N_step    },
 	{ DST_FILTER1     ,"DST_FILTER1"     ,dst_filter1_init     ,dss_default_kill     ,dst_filter1_reset     ,dst_filter1_step     },
 	{ DST_FILTER2     ,"DST_FILTER2"     ,dst_filter2_init     ,dss_default_kill     ,dst_filter2_reset     ,dst_filter2_step     },
+	{ DST_CRFILTER    ,"DST_CRFILTER"    ,dst_crfilter_init    ,dss_default_kill     ,dst_crfilter_reset    ,dst_crfilter_step    },
+	{ DST_OP_AMP_FILT ,"DST_OP_AMP_FILT" ,dst_op_amp_filt_init ,dss_default_kill     ,dst_op_amp_filt_reset ,dst_op_amp_filt_step },
 
 	{ DST_RAMP        ,"DST_RAMP"        ,dst_ramp_init        ,dss_default_kill     ,dst_ramp_reset        ,dst_ramp_step        },
 	{ DST_CLAMP       ,"DST_CLAMP"       ,NULL                 ,NULL                 ,NULL                  ,dst_clamp_step       },
@@ -171,6 +176,7 @@ struct discrete_module module_list[]=
 	{ DST_LOGIC_NOR   ,"DST_LOGIC_NOR"   ,NULL                 ,NULL                 ,NULL                  ,dst_logic_nor_step   },
 	{ DST_LOGIC_XOR   ,"DST_LOGIC_XOR"   ,NULL                 ,NULL                 ,NULL                  ,dst_logic_xor_step   },
 	{ DST_LOGIC_NXOR  ,"DST_LOGIC_NXOR"  ,NULL                 ,NULL                 ,NULL                  ,dst_logic_nxor_step  },
+	{ DST_MIXER       ,"DST_MIXER"       ,dst_mixer_init       ,dss_default_kill     ,dst_mixer_reset       ,dst_mixer_step       },
 
 	{ DSD_555_ASTBL   ,"DSD_555_ASTBL"   ,dsd_555_astbl_init   ,dss_default_kill     ,dsd_555_astbl_reset   ,dsd_555_astbl_step   },
 	{ DSD_SQUAREW555  ,"DSD_SQUAREW555"  ,dsd_squarew555_init  ,dss_default_kill     ,dsd_squarew555_reset  ,dsd_squarew555_step  },
@@ -182,7 +188,7 @@ struct discrete_module module_list[]=
 };
 
 
-static struct node_description* find_node(int node)
+struct node_description* find_node(int node)
 {
 	int loop;
 	for(loop=0;loop<node_count;loop++)
@@ -258,15 +264,15 @@ static void discrete_stream_update_mono(int ch,INT16 *buffer, int length)
 
 void discrete_sh_reset(void)
 {
-	struct node_description *node;
-
 	/* Reset all of the objects */
-	int loop=0,loop2=0;
+	int loop;
 
 	if(!init_ok) return;
 
 	for(loop=0;loop<node_count;loop++)
 	{
+		int loop2;
+		struct node_description *node;
 		/* Pick the first node to process */
 		node=running_order[loop];
 
@@ -296,10 +302,10 @@ void discrete_sh_reset(void)
 int discrete_sh_start (const struct MachineSound *msound)
 {
 	struct discrete_sound_block *intf;
-	int loop=0,loop2=0,search=0,failed=0;
+	int loop,loop2,search,failed;
 
 #ifdef DISCRETE_WAVELOG
-	wav_file = wav_open("discrete.wav", Machine->sample_rate, ((Machine->drv->sound_attributes&SOUND_SUPPORTS_STEREO) == SOUND_SUPPORTS_STEREO) ? 2: 1);
+	wav_file = wav_open("discrete.wav", (int)(Machine->sample_rate+0.5), ((Machine->drv->sound_attributes&SOUND_SUPPORTS_STEREO) == SOUND_SUPPORTS_STEREO) ? 2: 1);
 #endif
 #ifdef DISCRETE_DEBUGLOG
 	if(!disclogfile) disclogfile=fopen("discrete.log", "w");
@@ -477,8 +483,7 @@ int discrete_sh_start (const struct MachineSound *msound)
 	}
 	else
 	{
-		int vol;
-		vol = output_node->input[2];
+		int vol = (int)output_node->input[2];
 		/* Initialise a stereo, stream, we always use stereo even if only a mono system */
 		discrete_stream=stream_init("Discrete Sound",vol,Machine->sample_rate,0,discrete_stream_update_mono);
 		discrete_log("discrete_sh_start() - Mono Audio Stream Initialised", node_count);
@@ -502,7 +507,7 @@ int discrete_sh_start (const struct MachineSound *msound)
 
 void discrete_sh_stop (void)
 {
-	int loop=0;
+	int loop;
 	if(!init_ok) return;
 
 #ifdef DISCRETE_WAVELOG

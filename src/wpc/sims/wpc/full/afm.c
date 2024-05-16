@@ -1,9 +1,10 @@
+// license:BSD-3-Clause
+
 #include "driver.h"
 #include "core.h"
 #include "wpc.h"
 #include "sim.h"
 #include "wmssnd.h"
-#include "machine/4094.h"
 
 /* 150904 Added Saucer LEDs (GV) */
 /* 231100 Added Sound Support (SJE) */
@@ -332,7 +333,7 @@ static void afm_drawStatic(BMTYPE **line) {
 /  ROM definitions
 /------------------*/
 WPC_ROMSTART(afm,11, "mars1_1.rom",  0x080000,CRC(13b174d9) SHA1(57952f3184496b0316e4cf301e0181cb9de3519a))
-DCS_SOUNDROM3m(	"afm_s2.l1",CRC(6e39d96e) SHA1(b34e31bb1734c86614f153f7201163aaa9943cec),
+DCS_SOUNDROM3m(	"afm_1_00.s2",CRC(610ff107) SHA1(9590f809a05cb2bda4979fa16f165e2e994719a0),
 		"afm_s3.l1",CRC(1cbce9b1) SHA1(7f258bfe1904a879a2cb007419483f4fee91e072),
 		"afm_s4.l1",CRC(5ff7fbb7) SHA1(ebaf825d3b90b6acee1920e6703801a4bcddfc5b))
 WPC_ROMEND
@@ -343,8 +344,20 @@ DCS_SOUNDROM3m(	"afm_s2.l1",CRC(6e39d96e) SHA1(b34e31bb1734c86614f153f7201163aaa
 		"afm_s4.l1",CRC(5ff7fbb7) SHA1(ebaf825d3b90b6acee1920e6703801a4bcddfc5b))
 WPC_ROMEND
 
+WPC_ROMSTART(afm,11pfx, "marspfx1_1.rom",  0x080000,CRC(89cc2d47) SHA1(4cabebff151de62066c8c69458a66a5a3dbcbd4b))
+DCS_SOUNDROM3m(	"afm_s2.l1",CRC(6e39d96e) SHA1(b34e31bb1734c86614f153f7201163aaa9943cec),
+		"afm_s3.l1",CRC(1cbce9b1) SHA1(7f258bfe1904a879a2cb007419483f4fee91e072),
+		"afm_s4.l1",CRC(5ff7fbb7) SHA1(ebaf825d3b90b6acee1920e6703801a4bcddfc5b))
+WPC_ROMEND
+
 WPC_ROMSTART(afm,10, "afm_1_00.g11",  0x080000,CRC(1a30fe95) SHA1(218674e63ce4efeecb266f35f0f315758f7c72fc))
 DCS_SOUNDROM3m(	"afm_1_00.s2",CRC(610ff107) SHA1(9590f809a05cb2bda4979fa16f165e2e994719a0),
+		"afm_s3.l1",CRC(1cbce9b1) SHA1(7f258bfe1904a879a2cb007419483f4fee91e072),
+		"afm_s4.l1",CRC(5ff7fbb7) SHA1(ebaf825d3b90b6acee1920e6703801a4bcddfc5b))
+WPC_ROMEND
+
+WPC_ROMSTART(afm,03, "AFM_G11_03.bin", 0x080000,CRC(8c6d4026) SHA1(5061ffd8f60b1091b946ac64d9abd99f49700d1c))
+DCS_SOUNDROM3m(	"AFM_Sound_S2.bin",CRC(1a4d5457) SHA1(24319323d8f47e223c65b731e1c344835268688e),
 		"afm_s3.l1",CRC(1cbce9b1) SHA1(7f258bfe1904a879a2cb007419483f4fee91e072),
 		"afm_s4.l1",CRC(5ff7fbb7) SHA1(ebaf825d3b90b6acee1920e6703801a4bcddfc5b))
 WPC_ROMEND
@@ -382,14 +395,16 @@ WPC_ROMEND
 /*--------------
 /  Game drivers
 /---------------*/
-CORE_GAMEDEF( afm,113,   "Attack From Mars (1.13)",1995, "Bally",wpc_m95S,0)
-CORE_CLONEDEF(afm,113b,113,"Attack From Mars (1.13b)",1995, "Bally",wpc_m95S,0)
-CORE_CLONEDEF(afm,11,113,"Attack From Mars (1.1)", 1995, "Bally",wpc_m95S,0)
-CORE_CLONEDEF(afm,11u,113,"Attack From Mars (1.1 Ultrapin)", 1995, "Bally",wpc_m95S,0)
-CORE_CLONEDEF(afm,10,113,"Attack From Mars (1.0)", 1995, "Bally",wpc_m95S,0)
-CORE_CLONEDEF(afm,f10,113,"Attack From Mars (FreeWPC 0.10)", 1995, "Bally",wpc_m95S,0)
-CORE_CLONEDEF(afm,f20,113,"Attack From Mars (FreeWPC 0.20)", 1995, "Bally",wpc_m95S,0)
-CORE_CLONEDEF(afm,f32,113,"Attack From Mars (FreeWPC 0.32)", 1995, "Bally",wpc_m95S,0)
+CORE_GAMEDEF( afm,113,"Attack From Mars (1.13 / S1.1)", 1999, "Bally",wpc_m95S,0)
+CORE_CLONEDEF(afm,113b,113,"Attack From Mars (1.13b / S1.1)", 1999, "Bally",wpc_m95S,0)
+CORE_CLONEDEF(afm,11,113,"Attack From Mars (1.1 / S1.0)", 1996, "Bally",wpc_m95S,0)
+CORE_CLONEDEF(afm,11u,113,"Attack From Mars (1.1 Ultrapin / S1.1)", 2006, "Global VR",wpc_m95S,0)
+CORE_CLONEDEF(afm,11pfx,113,"Attack From Mars (1.1 Pinball FX / S1.1)", 2018, "Zen Studios",wpc_m95S,0)
+CORE_CLONEDEF(afm,10,113,"Attack From Mars (1.0 / S1.0)", 1996, "Bally",wpc_m95S,0)
+CORE_CLONEDEF(afm,03,113,"Attack From Mars (0.3 / S0.6 Prototype)", 1995, "Bally",wpc_m95S,0)
+CORE_CLONEDEF(afm,f10,113,"Attack From Mars (FreeWPC 0.10)", 1995, "FreeWPC",wpc_m95S,0)
+CORE_CLONEDEF(afm,f20,113,"Attack From Mars (FreeWPC 0.20)", 1995, "FreeWPC",wpc_m95S,0)
+CORE_CLONEDEF(afm,f32,113,"Attack From Mars (FreeWPC 0.32)", 1995, "FreeWPC",wpc_m95S,0)
 
 /*----------
 / Game Data
@@ -412,7 +427,10 @@ static core_tGameData afmGameData = {
     FLIP_SW(FLIP_L | FLIP_U) | FLIP_SOL(FLIP_L),
     0,2,3,0,0,1,0, // 2 extra lamp columns for the LEDs
     afm_getSol, afm_handleMech, afm_getMech, afm_drawMech,
-    NULL, NULL
+    NULL
+#ifdef ENABLE_MECHANICAL_SAMPLES
+    , NULL
+#endif
   },
   &afmSimData,
   {
@@ -425,29 +443,94 @@ static core_tGameData afmGameData = {
 };
 
 static WRITE_HANDLER(parallel_0_out) {
-  coreGlobals.lampMatrix[8] = coreGlobals.tmpLampMatrix[8] = data;
+  coreGlobals.tmpLampMatrix[8] = data;
 }
 static WRITE_HANDLER(parallel_1_out) {
-  coreGlobals.lampMatrix[9] = coreGlobals.tmpLampMatrix[9] = data;
+  coreGlobals.tmpLampMatrix[9] = data;
 }
-static WRITE_HANDLER(qspin_0_out) {
-  HC4094_data_w(1, data);
-}
-
-static HC4094interface hc4094afm = {
-  2, // 2 chips
-  { parallel_0_out, parallel_1_out },
-  { qspin_0_out }
-};
 
 static WRITE_HANDLER(afm_wpc_w) {
+  static UINT16 prev[64], lamps;
+  int i;
   wpc_w(offset, data);
   if (offset == WPC_SOLENOID1) {
-    HC4094_data_w (0, GET_BIT5);
-    HC4094_clock_w(0, GET_BIT4);
-    HC4094_clock_w(1, GET_BIT4);
+    if (GET_BIT4) {
+      lamps <<= 1;
+      if (GET_BIT5) {
+        lamps |= 1;
+      }
+      core_write_pwm_output_8b(CORE_MODOUT_LAMP0 + 8 * 8, lamps);
+      core_write_pwm_output_8b(CORE_MODOUT_LAMP0 + 9 * 8, lamps >> 8);
+    }
   }
+  for (i = 0; i < 64; i++) {
+    // if the lamp state is not stable for some minimal time, deny the update
+    if (prev[i] != lamps) break;
+    if (i >= 63) {
+      parallel_0_out(0, lamps & 0xff);
+      parallel_1_out(0, lamps >> 8);
+    }
+  }
+  for (i = 63; i > 0; i--) prev[i] = prev[i-1];
+  prev[0] = lamps;
 }
+
+#ifdef PROC_SUPPORT
+  #include "p-roc/p-roc.h"
+  #include "p-roc/proc_shift_reg.h"
+
+  /*
+    LEDs of saucer controlled by a serial shift register.  Game sets DATA and
+    then pulses clock HIGH for less than 1ms, about every 100ms.  Except for
+    when it's clearing the LEDs or pulsing a specific pattern and shifts with
+    sub-millisecond timing.  We use a 64-bit queue to track shift requests,
+    and a 12ms timer to shift them out at a rate the P-ROC can handle.
+    
+    Martians seem to be enabled for 0.5 to 1.1ms, disabled briefly (0.1ms),
+    enabled for about 15ms, and disabled for 133ms.  Then the pattern repeats.
+    
+    For solenoids with immediate handling, invert the `smoothed` value to allow
+    default handler to process the changes.
+  */
+  void afm_wpc_proc_solenoid_handler(int solNum, int enabled, int smoothed) {
+    static int saucer_data = 0;
+    switch (solNum) {
+      case  4:  // C05 Left Alien Low
+      case  5:  // C06 Left Alien High
+      case  7:  // C08 Right Alien High
+      case 13:  // C14 Right Alien Low
+
+      case 16:  // C17 to C23, C25 to C28 flashers
+      case 17:
+      case 18:
+      case 19:
+      case 20:
+      case 21:
+      case 22:
+      case 24:
+      case 25:
+      case 26:
+      case 27:
+      
+      case 23:  // C24 Bank Motor
+      case 38:  // C39 Strobe Light
+        smoothed = !smoothed;
+        break;
+
+      case 37:  // C38 data for saucer LEDs
+        if (!smoothed)
+          saucer_data = enabled;
+        return;
+
+      case 36:  // C37 clock for saucer LEDs
+        if (!smoothed && enabled) {
+          proc_shiftRegEnqueue(saucer_data);
+        }
+        return;
+    }
+    default_wpc_proc_solenoid_handler(solNum, enabled, smoothed);
+  }
+#endif
 
 /*---------------
 /  Game handling
@@ -455,10 +538,12 @@ static WRITE_HANDLER(afm_wpc_w) {
 static void init_afm(void) {
   core_gameData = &afmGameData;
   install_mem_write_handler(0, 0x3fb0, 0x3fff, afm_wpc_w);
-  HC4094_init(&hc4094afm);
-  HC4094_oe_w(0, 1);
-  HC4094_oe_w(1, 1);
-  HC4094_strobe_w(0, 1);
-  HC4094_strobe_w(1, 1);
+  wpc_set_fastflip_addr(0x80);
+#ifdef PROC_SUPPORT
+  wpc_proc_solenoid_handler = afm_wpc_proc_solenoid_handler;
+  if (coreGlobals.p_rocEn) {
+    // clock on C37, data on C38
+    proc_shiftRegInit(36 + 32, 37 + 32);
+  }
+#endif
 }
-

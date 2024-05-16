@@ -1,5 +1,7 @@
+// license:BSD-3-Clause
+
 /*******************************************************************************
- Indiana Jones (Williams) Pinball Simulator
+ Indiana Jones: The Pinball Adventure (Williams) Pinball Simulator
 
  by Tom Haukap (tom@rattle.de)
  Dec. 9, 2000
@@ -406,7 +408,7 @@ static int ij_handleBallState(sim_tBallStatus *ball, int *inports) {
 
     case stIdol4:
       if ( core_getSol(sIdolRelease) )
-      	return setState(stIdolExit,2);
+        return setState(stIdolExit,2);
       /* fall through */
 
     case stIdol1:
@@ -535,6 +537,7 @@ static core_tLampDisplay ij_lampPos = {
 }
 };
 
+#ifdef ENABLE_MECHANICAL_SAMPLES
 static wpc_tSamSolMap ij_SamSolMap[] = {
  /*Channel #0*/
  {sKnocker,0,SAM_KNOCKER},
@@ -564,6 +567,7 @@ static wpc_tSamSolMap ij_SamSolMap[] = {
 
  {sIdolRelease, 4, SAM_SOLENOID_ON}, {sIdolRelease, 4, SAM_SOLENOID_OFF, WPCSAM_F_ONOFF},{-1}
 };
+#endif
 
 static void ij_drawMech(BMTYPE **line) {
   core_textOutf(30, 0,BLACK,"Idol Position: %3d",locals.idolPos);
@@ -744,21 +748,21 @@ WPC_ROMEND
 /*--------------
 /  Game drivers
 /---------------*/
-CORE_GAMEDEF(ij,l7,"Indiana Jones (L-7)",1993,"Williams",wpc_mDCSS,0)
-CORE_CLONEDEF(ij,d7,l7,"Indiana Jones (D-7) LED Ghost Fix",1993,"Williams",wpc_mDCSS,0)
-CORE_CLONEDEF(ij,h1,l7,"Indiana Jones (HK-1) No Hate Speech",1993,"Williams",wpc_mDCSS,0)
-CORE_CLONEDEF(ij,i1,l7,"Indiana Jones (I-1) No Hate LED Ghost Fix",1993,"Williams",wpc_mDCSS,0)
-CORE_CLONEDEF(ij,lg7,l7,"Indiana Jones (LG-7)",1993,"Williams",wpc_mDCSS,0)
-CORE_CLONEDEF(ij,dg7,l7,"Indiana Jones (DG-7) LED Ghost Fix",1993,"Williams",wpc_mDCSS,0)
-CORE_CLONEDEF(ij,l6,l7,"Indiana Jones (L-6)",1993,"Williams",wpc_mDCSS,0)
-CORE_CLONEDEF(ij,d6,l7,"Indiana Jones (D-6) LED Ghost Fix",1993,"Williams",wpc_mDCSS,0)
-CORE_CLONEDEF(ij,l5,l7,"Indiana Jones (L-5)",1993,"Williams",wpc_mDCSS,0)
-CORE_CLONEDEF(ij,d5,l7,"Indiana Jones (D-5) LED Ghost Fix",1993,"Williams",wpc_mDCSS,0)
-CORE_CLONEDEF(ij,l4,l7,"Indiana Jones (L-4)",1993,"Williams",wpc_mDCSS,0)
-CORE_CLONEDEF(ij,d4,l7,"Indiana Jones (D-4) LED Ghost Fix",1993,"Williams",wpc_mDCSS,0)
-CORE_CLONEDEF(ij,l3,l7,"Indiana Jones (L-3)",1993,"Williams",wpc_mDCSS,0)
-CORE_CLONEDEF(ij,d3,l7,"Indiana Jones (D-3) LED Ghost Fix",1993,"Williams",wpc_mDCSS,0)
-CORE_CLONEDEF(ij,p2,l7,"Indiana Jones (P-2)",1993,"Williams",wpc_mDCSS,0)
+CORE_GAMEDEF(ij,l7,"Indiana Jones: The Pinball Adventure (L-7)",1993,"Williams",wpc_mDCSS,0)
+CORE_CLONEDEF(ij,d7,l7,"Indiana Jones: The Pinball Adventure (D-7 LED Ghost Fix)",1993,"Williams",wpc_mDCSS,0)
+CORE_CLONEDEF(ij,h1,l7,"Indiana Jones: The Pinball Adventure (HK-1 No Hate Speech)",1993,"Williams",wpc_mDCSS,0)
+CORE_CLONEDEF(ij,i1,l7,"Indiana Jones: The Pinball Adventure (I-1 No Hate Speech LED Ghost Fix)",1993,"Williams",wpc_mDCSS,0)
+CORE_CLONEDEF(ij,lg7,l7,"Indiana Jones: The Pinball Adventure (LG-7 German)",1993,"Williams",wpc_mDCSS,0)
+CORE_CLONEDEF(ij,dg7,l7,"Indiana Jones: The Pinball Adventure (DG-7 LED Ghost Fix)",1993,"Williams",wpc_mDCSS,0)
+CORE_CLONEDEF(ij,l6,l7,"Indiana Jones: The Pinball Adventure (L-6)",1993,"Williams",wpc_mDCSS,0)
+CORE_CLONEDEF(ij,d6,l7,"Indiana Jones: The Pinball Adventure (D-6 LED Ghost Fix)",1993,"Williams",wpc_mDCSS,0)
+CORE_CLONEDEF(ij,l5,l7,"Indiana Jones: The Pinball Adventure (L-5)",1993,"Williams",wpc_mDCSS,0)
+CORE_CLONEDEF(ij,d5,l7,"Indiana Jones: The Pinball Adventure (D-5 LED Ghost Fix)",1993,"Williams",wpc_mDCSS,0)
+CORE_CLONEDEF(ij,l4,l7,"Indiana Jones: The Pinball Adventure (L-4)",1993,"Williams",wpc_mDCSS,0)
+CORE_CLONEDEF(ij,d4,l7,"Indiana Jones: The Pinball Adventure (D-4 LED Ghost Fix)",1993,"Williams",wpc_mDCSS,0)
+CORE_CLONEDEF(ij,l3,l7,"Indiana Jones: The Pinball Adventure (L-3)",1993,"Williams",wpc_mDCSS,0)
+CORE_CLONEDEF(ij,d3,l7,"Indiana Jones: The Pinball Adventure (D-3 LED Ghost Fix)",1993,"Williams",wpc_mDCSS,0)
+CORE_CLONEDEF(ij,p2,l7,"Indiana Jones: The Pinball Adventure (P-2 Prototype)",1993,"Williams",wpc_mDCSS,0)
 
 /*----------
 / Game Data
@@ -781,7 +785,10 @@ static core_tGameData ijGameData = {
     FLIP_SW(FLIP_L) | FLIP_SOL(FLIP_L),
     1,0,7,0,0,0,0,
     ij_getSol, ij_handleMech, ij_getMech, ij_drawMech,
-    &ij_lampPos, ij_SamSolMap
+    &ij_lampPos
+#ifdef ENABLE_MECHANICAL_SAMPLES
+    , ij_SamSolMap
+#endif
   },
   &ijSimData,
   {
@@ -806,6 +813,7 @@ READ_HANDLER(ij_ijRowRead) {
 
 static void init_ij(void) {
   core_gameData = &ijGameData;
+  wpc_set_modsol_aux_board(1);
   install_mem_read_handler(WPC_CPUNO, WPC_SWROWREAD+WPC_BASE, WPC_SWROWREAD+WPC_BASE,
                            ij_ijRowRead);
 }

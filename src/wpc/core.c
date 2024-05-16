@@ -2,14 +2,49 @@
 /* PINMAME - Interface function (Input/Output) */
 /***********************************************/
 #include <stdarg.h>
+#include <math.h>
 #include "driver.h"
 #include "sim.h"
 #include "snd_cmd.h"
 #include "mech.h"
 #include "core.h"
+#include "video.h"
+#include "bulb.h"
 
-#ifdef VPINMAME
- #include "../pindmd/pindmd.h"
+#ifdef PROC_SUPPORT
+ #include "p-roc/p-roc.h"
+#endif
+
+#if defined(VPINMAME) || defined(LIBPINMAME)
+ #ifndef LIBPINMAME
+  #include <Windows.h>
+ #endif
+ #include "dmddevice.h"
+ #include "../../ext/dmddevice/usbalphanumeric.h"
+
+ UINT8  g_raw_dmdbuffer[DMD_MAXY*DMD_MAXX];
+ UINT32 g_raw_colordmdbuffer[DMD_MAXY*DMD_MAXX];
+ UINT32 g_raw_dmdx = ~0u;
+ UINT32 g_raw_dmdy = ~0u;
+
+ #ifdef LIBPINMAME
+  extern int g_fDmdMode;
+
+  int g_display_index = 0;
+ #endif
+
+ static UINT8 buffer1[DMD_MAXY*DMD_MAXX];
+ static UINT8 buffer2[DMD_MAXY*DMD_MAXX];
+ static UINT8 *currbuffer = buffer1;
+ static UINT8 *oldbuffer = NULL;
+ static UINT32 raw_dmdoffs = 0;
+ static UINT8 has_DMD_Video = 0;
+
+ #include "gts3dmd.h"
+ UINT8  g_raw_gtswpc_dmd[GTS3DMD_FRAMES_5C*0x200];
+ UINT32 g_raw_gtswpc_dmdframes = 0;
+
+ UINT8 g_needs_DMD_update = 1;
 #endif
 
 /* stuff to test VPINMAME */
@@ -24,26 +59,50 @@ int vp_getDip(int bank) { return 0; }
 void vp_setDIP(int bank, int value) { }
 #endif
 
-#ifdef VPINMAME
+#if defined(VPINMAME)
+  extern char g_szGameName[256];
+#endif
+
+#if defined(VPINMAME) || defined(LIBPINMAME)
   #include "vpintf.h"
   extern int g_fPause;
   extern int g_fHandleKeyboard, g_fHandleMechanics;
+  extern char g_fShowWinDMD;
   extern char g_fShowPinDMD; /* pinDMD */
   extern int time_to_reset;  /* pinDMD */
-  extern int g_fDumpFrames;  /* pinDMD */
+  extern int g_fDumpFrames;
   extern void OnSolenoid(int nSolenoid, int IsActive);
   extern void OnStateChange(int nChange);
-#else /* VPINMAME */
-  #define g_fHandleKeyboard  (TRUE)
-  #define g_fHandleMechanics (0xff)
+#else
+  int g_fHandleKeyboard = 1;
+  int g_fHandleMechanics = 0xff;
   #define OnSolenoid(nSolenoid, IsActive)
   #define OnStateChange(nChange)
   #define vp_getSolMask64() ((UINT64)(-1))
   #define vp_updateMech()
   #define vp_setDIP(x,y)
-#endif /* VPINMAME */
+#endif
 
-static void drawChar(struct mame_bitmap *bitmap, int row, int col, UINT32 bits, int type, int dimming);
+#ifdef LIBPINMAME
+  extern void libpinmame_update_display(const int index, const struct core_dispLayout* p_layout, const void* p_data);
+#endif
+
+#ifndef LIBPINMAME
+  #include "gts3.h"
+  extern tGTS3locals GTS3locals;
+#endif
+
+INLINE UINT8 saturatedByte(float v)
+{
+  v *= 255.f;
+  if(v < 0.f)
+    v = 0.f;
+  if(v > 255.f)
+    v = 255.f;
+  return (UINT8)v;
+}
+
+static void drawChar(struct mame_bitmap *bitmap, int row, int col, UINT16 seg_bits, int type, UINT8 dimming[16]);
 static UINT32 core_initDisplaySize(const struct core_dispLayout *layout);
 static VIDEO_UPDATE(core_status);
 
@@ -107,6 +166,46 @@ const int core_bcd2seg9a[16] = {
 #endif /* MAME_DEBUG */
 };
 
+// patterns taken from Rockwell 10939 datasheet and adjusted to match regular 16 segments layout
+const UINT16 core_ascii2seg16[] = {
+  /* 0x00-0x07 */ 0x0000, 0x0000, 0x44BF, 0x2280, 0x08DB, 0x08CF, 0x08E6, 0x08ED, //   012345 with commas
+  /* 0x08-0x0f */ 0x08FD, 0x0087, 0x08FF, 0x08EF, 0xC43F, 0xA200, 0x885B, 0x884F, // 67890123 with commas / dots
+  /* 0x10-0x17 */ 0x8866, 0x886D, 0x887D, 0x8007, 0x887F, 0x886F, 0xC4BF, 0xA280, // 45678901 with dots / semicolons
+  /* 0x18-0x1f */ 0x88DB, 0x88CF, 0x88E6, 0x88ED, 0x88FD, 0x8087, 0x88FF, 0x88EF, // 23456789 with semicolons
+  /* 0x20-0x27 */ 0x0000, 0x0309, 0x0220, 0x2A4E, 0x2A6D, 0x6E65, 0x135D, 0x0400, //  !"#$%&'
+  /* 0x28-0x2f */ 0x1400, 0x4100, 0x7F40, 0x2A40, 0x0080, 0x0840, 0x0008, 0x4400, // ()*+,-./
+  /* 0x30-0x37 */ 0x443F, 0x2200, 0x085B, 0x084F, 0x0866, 0x086D, 0x087D, 0x0007, // 01234567
+  /* 0x38-0x3f */ 0x087F, 0x086F, 0x0009, 0x4001, 0x4408, 0x0848, 0x1108, 0x2803, // 89:;<=>?
+  /* 0x40-0x47 */ 0x205F, 0x0877, 0x2A0F, 0x0039, 0x220F, 0x0079, 0x0071, 0x083D, // @ABCDEFG
+  /* 0x48-0x4f */ 0x0876, 0x2209, 0x001E, 0x1470, 0x0038, 0x0536, 0x1136, 0x003F, // HIJKLMNO
+  /* 0x50-0x57 */ 0x0873, 0x103F, 0x1873, 0x086D, 0x2201, 0x003E, 0x4430, 0x5036, // PRQSTUVW
+  /* 0x58-0x5f */ 0x5500, 0x2500, 0x4409, 0x0039, 0x1100, 0x000F, 0x5000, 0x0008, // XYZ[\]^_
+  /* 0x60-0x67 */ 0x0001, 0x0001, 0x0002, 0x0004, 0x0008, 0x0008, 0x0010, 0x0020, // all segments, singular
+  /* 0x68-0x6f */ 0x0200, 0x0400, 0x0800, 0x1000, 0x2000, 0x4000, 0x0040, 0x0100, // all segments, singular
+  /* 0x70-0x77 */ 0x0001, 0x0001, 0x0003, 0x0007, 0x000F, 0x000F, 0x001F, 0x003F, // all segments, accumulating
+  /* 0x78-0x7f */ 0x023F, 0x063F, 0x0E3F, 0x1E3F, 0x3E3F, 0x7E3F, 0x7E7F, 0x7F7F, // all segments, accumulating
+};
+
+// patterns taken from Rockwell 10939 datasheet and adjusted to match 16 segments layout with split top / bottom lines
+const UINT16 core_ascii2seg16s[] = {
+  /* 0x00-0x07 */ 0x0000, 0x0000, 0x44ff, 0x2200, 0x8877, 0x883f, 0x888c, 0x88bb, //   012345 with commas (no bits for these)
+  /* 0x08-0x0f */ 0x88fb, 0x000f, 0x88ff, 0x88bf, 0x44ff, 0x2200, 0x8877, 0x883f, // 67890123 with commas / dots (no bits for these)
+  /* 0x10-0x17 */ 0x888c, 0x88bb, 0x88fb, 0x000f, 0x88ff, 0x88bf, 0x44ff, 0x2200, // 45678901 with dots / semicolons (no bits for these)
+  /* 0x18-0x1f */ 0x8877, 0x883f, 0x888c, 0x88bb, 0x88fb, 0x000f, 0x88ff, 0x88bf, // 23456789 with semicolons (no bits for these)
+  /* 0x20-0x27 */ 0x0000, 0x0321, 0x0280, 0xaa3c, 0xaabb, 0xee99, 0x9379, 0x0400, //  !"#$%&'
+  /* 0x28-0x2f */ 0x1400, 0x4100, 0xff00, 0xaa00, 0x4000, 0x8800, 0x0020, 0x4400, // ()*+,-./
+  /* 0x30-0x37 */ 0x44ff, 0x2200, 0x8877, 0x883f, 0x888c, 0x88bb, 0x88fb, 0x000f, // 01234567
+  /* 0x38-0x3f */ 0x88ff, 0x88bf, 0x0021, 0x4001, 0x4430, 0x8830, 0x1130, 0x2807, // 89:;<=>?
+  /* 0x40-0x47 */ 0xa07f, 0x88cf, 0x2a3f, 0x00f3, 0x223f, 0x80f3, 0x80c3, 0x08fb, // @ABCDEFG
+  /* 0x48-0x4f */ 0x88cc, 0x2233, 0x007c, 0x94c0, 0x00f0, 0x05cc, 0x11cc, 0x00ff, // HIJKLMNO
+  /* 0x50-0x57 */ 0x88c7, 0x10ff, 0x98c7, 0x88bb, 0x2203, 0x00fc, 0x44c0, 0x50cc, // PRQSTUVW
+  /* 0x58-0x5f */ 0x5500, 0x2500, 0x4433, 0x00e1, 0x1100, 0x001e, 0x5000, 0x0030, // XYZ[\]^_
+  /* 0x60-0x67 */ 0x0001, 0x0002, 0x0004, 0x0008, 0x0010, 0x0020, 0x0040, 0x0080, // all segments, singular
+  /* 0x68-0x6f */ 0x0200, 0x0400, 0x0800, 0x1000, 0x2000, 0x4000, 0x8000, 0x0100, // all segments, singular
+  /* 0x70-0x77 */ 0x0001, 0x0003, 0x0007, 0x000f, 0x001f, 0x003f, 0x007f, 0x00ff, // all segments, accumulating
+  /* 0x78-0x7f */ 0x02ff, 0x06ff, 0x0eff, 0x1eff, 0x3eff, 0x7eff, 0xfeff, 0xffff, // all segments, accumulating
+};
+
 /* makes it easier to swap bits */
                               // 0  1  2  3  4  5  6  7  8  9 10,11,12,13,14,15
 const UINT8 core_swapNyb[16] = { 0, 8, 4,12, 2,10, 6,14, 1, 9, 5,13, 3,11, 7,15};
@@ -130,13 +229,15 @@ static const unsigned char core_palette[48+COL_COUNT][3] = {
 {/* 12 */ 0x9f,0x40,0xff}  /* lpurple*/
 };
 
+static UINT16 dim_LUT[3][257];
+
 /*------------------------------
 / Display segment drawing data
 /------------------------------*/
 typedef UINT32 tSegRow[17];
 typedef struct { int rows, cols; tSegRow *segs; } tSegData;
 
-static tSegRow segSize1C[6][20] = { /* with commas */
+static const tSegRow segSize1C[6][20] = { /* with commas */
 { /* alphanumeric display characters */
 /*                       all        0001       0002       0004       0008       0010       0020       0040       0080       0100       0200       0400       0800       1000       2000       4000       8000 */
 /*    11111111111  */{0x00555554,0x00555554,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000},
@@ -265,7 +366,7 @@ static tSegRow segSize1C[6][20] = { /* with commas */
 /*  11111111111 31 */{0x0555554d,0x00000000,0x00000000,0x00000000,0x05555540,0x00000000,0x00000000,0x00000000,0x0000000d,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x0000000d},
 /*                 */{0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000}
 }};
-static tSegRow segSize1[3][20] = { /* without commas */
+static const tSegRow segSize1[3][20] = { /* without commas */
 { /* alphanumeric display characters */
 /*                       all        0001       0002       0004       0008       0010       0020       0040       0080       0100       0200       0400       0800       1000       2000       4000 */
 /*    11111111111  */{0x00555554,0x00555554,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000},
@@ -331,7 +432,7 @@ static tSegRow segSize1[3][20] = { /* without commas */
 /*  11111111111    */{0x05555540,0x00000000,0x00000000,0x00000000,0x05555540,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000},
 /*                 */{0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000}
 }};
-static tSegRow segSize2C[6][12] = { /* with commas */
+static const tSegRow segSize2C[6][12] = { /* with commas */
 { /* alphanumeric display characters */
 /*                   all        0001       0002       0004       0008       0010       0020       0040       0080       0100       0200       0400       0800       1000       2000       4000       8000 */
 /*  xxxxxxx    */{0x05554000,0x05554000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000},
@@ -412,7 +513,7 @@ static tSegRow segSize2C[6][12] = { /* with commas */
 /*  xxxxxxx  x */{0x05554100,0x00000000,0x00000000,0x00000000,0x05554000,0x00000000,0x00000000,0x00000000,0x00000100,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000100},
 /*             */{0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000}
 }};
-static tSegRow segSize2[3][12] = { /* without commas */
+static const tSegRow segSize2[3][12] = { /* without commas */
 { /* alphanumeric display characters */
 /*                   all        0001       0002       0004       0008       0010       0020       0040       0080       0100       0200       0400       0800       1000       2000       4000       8000 */
 /*  xxxxxxx    */{0x05554000,0x05554000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000},
@@ -454,7 +555,7 @@ static tSegRow segSize2[3][12] = { /* without commas */
 /*  xxxxxxx    */{0x05554000,0x00000000,0x00000000,0x00000000,0x05554000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000},
 /*             */{0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000}
 }};
-static tSegRow segSize3C[3][8] = {
+static const tSegRow segSize3C[3][8] = {
 { /* alphanumeric display characters */
 {0} /* not possible */
 },{ /* 8 segment LED characters with commas */
@@ -477,7 +578,7 @@ static tSegRow segSize3C[3][8] = {
 /*  xxx  x */{0x05410000,0x00000000,0x00000000,0x00000000,0x05400000,0x00000000,0x00000000,0x00000000,0x00010000,0x00000000,0x00000000},
 /*      x  */{0x00040000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00040000,0x00000000,0x00000000}
 }};
-static tSegRow segSize3[3][8] = {
+static const tSegRow segSize3[3][8] = {
 { /* alphanumeric display characters */
 {0} /* not possible */
 },{ /* 8 segment LED characters without commas */
@@ -500,7 +601,7 @@ static tSegRow segSize3[3][8] = {
 /*  xxx    */{0x05400000,0x00000000,0x00000000,0x00000000,0x05400000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000},
 /*         */{0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000}
 }};
-static tSegRow segSize1S[1][20] = { /* 16 segment displays without commas but split top & bottom lines */
+static const tSegRow segSize1S[1][20] = { /* 16 segment displays without commas but split top & bottom lines */
 { /* alphanumeric display characters */
 /*                       all        0001       0002       0004       0008       0010       0020       0040       0080       0100       0200       0400       0800       1000       2000       4000       8000 */
 /*    11111311111  */{0x00557554,0x00557000,0x00003554,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000},
@@ -524,7 +625,7 @@ static tSegRow segSize1S[1][20] = { /* 16 segment displays without commas but sp
 /*  11111311111    */{0x05575540,0x00000000,0x00000000,0x00000000,0x00000000,0x00035540,0x05570000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000},
 /*                 */{0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000}
 }};
-static tSegRow segSize2S[1][12] = { /* 16 segment displays without commas but split top & bottom lines */
+static const tSegRow segSize2S[1][12] = { /* 16 segment displays without commas but split top & bottom lines */
 { /* alphanumeric display characters */
 /*                   all        0001       0002       0004       0008       0010       0020       0040       0080       0100       0200       0400       0800       1000       2000       4000       8000 */
 /*  xxxxxxx    */{0x05754000,0x05700000,0x00354000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000},
@@ -541,9 +642,15 @@ static tSegRow segSize2S[1][12] = { /* 16 segment displays without commas but sp
 /*             */{0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000}
 }};
 
-static tSegData segData[2][18] = {{
+// rows should not be larger than 20, cols not larger than 15, otherwise adapt all code that uses these fields!
+static const tSegData segData[2][18] = {{
   {20,15,&segSize1C[0][0]},/* SEG16 */
-  {20,15,&segSize1C[3][0]},/* SEG16R*/
+#ifdef PROC_SUPPORT	//TODO/PROC: Will this work in normal PinMAME build too?
+  /* Use segSize2C for P-ROC's alpha_on_dmd functionality as it maps better to the DMD. */
+  {20,15,&segSize2C[0][0]},/* SEG16R */
+#else
+  {20,15,&segSize1C[3][0]},/* SEG16R */
+#endif
   {20,15,&segSize1C[2][0]},/* SEG10 */
   {20,15,&segSize1[2][0]}, /* SEG9 */
   {20,15,&segSize1C[1][0]},/* SEG8 */
@@ -562,7 +669,7 @@ static tSegData segData[2][18] = {{
   {20,15,&segSize1C[5][0]} /* SEG16D */
 },{
   {12,11,&segSize2C[0][0]},/* SEG16 */
-  {12,11,&segSize2C[3][0]},/* SEG16R*/
+  {12,11,&segSize2C[3][0]},/* SEG16R */
   {12,11,&segSize2C[2][0]},/* SEG10 */
   {12,11,&segSize2[2][0]}, /* SEG9 */
   {12,11,&segSize2C[1][0]},/* SEG8 */
@@ -586,6 +693,7 @@ static tSegData segData[2][18] = {{
 /-------------------*/
 static struct {
   core_tSeg lastSeg;       // previous segments values
+  UINT8     lastSegDim[CORE_SEGCOUNT * 16]; // previous segment dimming level
   int       displaySize;   // 1=compact 2=normal
   tSegData  *segData;      // segments to use (normal/compact)
   void      *timers[5];    // allocated timers
@@ -594,7 +702,16 @@ static struct {
   int       firstSimRow, maxSimRows; // space available for simulator
   int       solLog[4];
   int       solLogCount;
+  /*-- Event reporting (used LibPinMAME and on screen display) --*/
+  UINT8     lastPhysicsOutput[CORE_MODOUT_MAX];
+  UINT8     lastLampMatrix[CORE_MAXLAMPCOL];
+  int       lastGI[CORE_MAXGI];
+  UINT64    lastSol;
+  /*-- Multithreaded synchronization of physics output --*/
+  int       pwmUpdateRequested; // Flag set to request an update of all physic outputs
 } locals;
+
+void core_update_pwm_outputs(int forceUpdate);
 
 /*-------------------------------
 /  Initialize the game palette
@@ -605,7 +722,6 @@ static PALETTE_INIT(core) {
   int rStart = 0xff, gStart = 0xe0, bStart = 0x20;
   int perc66 = 67, perc33 = 33, perc0  = 20;
   int ii;
-  float diff;
 
   if ((pmoptions.dmd_red > 0) || (pmoptions.dmd_green > 0) || (pmoptions.dmd_blue > 0)) {
     rStart = pmoptions.dmd_red; gStart = pmoptions.dmd_green; bStart = pmoptions.dmd_blue;
@@ -630,7 +746,7 @@ static PALETTE_INIT(core) {
   tmpPalette[COL_DMDON][2]    = bStart;
 
   /*-- If the "colorize" option is set, use the individual option colors for the shades --*/
-  if (pmoptions.dmd_colorize) { 
+  if (pmoptions.dmd_colorize) {
     if (pmoptions.dmd_red0 > 0 || pmoptions.dmd_green0 > 0 || pmoptions.dmd_blue0 > 0) {
       tmpPalette[COL_DMDOFF][0]   = pmoptions.dmd_red0;
       tmpPalette[COL_DMDOFF][1]   = pmoptions.dmd_green0;
@@ -647,40 +763,44 @@ static PALETTE_INIT(core) {
       tmpPalette[COL_DMD66][2]    = pmoptions.dmd_blue66;
     }
   }
-  
+
   /*-- segment display antialias colors --*/
-  tmpPalette[COL_SEGAAON1][0] = rStart * 72 / 100;
-  tmpPalette[COL_SEGAAON1][1] = gStart * 72 / 100;
-  tmpPalette[COL_SEGAAON1][2] = bStart * 72 / 100;
-  tmpPalette[COL_SEGAAON2][0] = rStart * 33 / 100;
-  tmpPalette[COL_SEGAAON2][1] = gStart * 33 / 100;
-  tmpPalette[COL_SEGAAON2][2] = bStart * 33 / 100;
-  tmpPalette[COL_SEGAAOFF1][0] = rStart * perc0 * 72 / 10000;
-  tmpPalette[COL_SEGAAOFF1][1] = gStart * perc0 * 72 / 10000;
-  tmpPalette[COL_SEGAAOFF1][2] = bStart * perc0 * 72 / 10000;
-  tmpPalette[COL_SEGAAOFF2][0] = rStart * perc0 * 33 / 10000;
-  tmpPalette[COL_SEGAAOFF2][1] = gStart * perc0 * 33 / 10000;
-  tmpPalette[COL_SEGAAOFF2][2] = bStart * perc0 * 33 / 10000;
+  tmpPalette[COL_SEGAAON1][0] = rStart * (perc66+5) / 100;
+  tmpPalette[COL_SEGAAON1][1] = gStart * (perc66+5) / 100;
+  tmpPalette[COL_SEGAAON1][2] = bStart * (perc66+5) / 100;
+  tmpPalette[COL_SEGAAON2][0] = rStart * perc33 / 100;
+  tmpPalette[COL_SEGAAON2][1] = gStart * perc33 / 100;
+  tmpPalette[COL_SEGAAON2][2] = bStart * perc33 / 100;
+  tmpPalette[COL_SEGAAOFF1][0] = rStart * perc0 * (perc66+5) / 10000;
+  tmpPalette[COL_SEGAAOFF1][1] = gStart * perc0 * (perc66+5) / 10000;
+  tmpPalette[COL_SEGAAOFF1][2] = bStart * perc0 * (perc66+5) / 10000;
+  tmpPalette[COL_SEGAAOFF2][0] = rStart * perc0 * perc33 / 10000;
+  tmpPalette[COL_SEGAAOFF2][1] = gStart * perc0 * perc33 / 10000;
+  tmpPalette[COL_SEGAAOFF2][2] = bStart * perc0 * perc33 / 10000;
 
   /*-- generate 16 shades of the segment color for all antialiased segments --*/
-  diff = (float)(100 - perc0) / 15.0;
   for (ii = 0; ii < 16; ii++) {
-    tmpPalette[palSize-16+ii][0]  = rStart * (perc0 + diff * ii) / 100;
-    tmpPalette[palSize-16+ii][1]  = gStart * (perc0 + diff * ii) / 100;
-    tmpPalette[palSize-16+ii][2]  = bStart * (perc0 + diff * ii) / 100;
-    tmpPalette[palSize-32+ii][0]  = rStart * (perc0 + diff * ii) * 72 / 10000;
-    tmpPalette[palSize-32+ii][1]  = gStart * (perc0 + diff * ii) * 72 / 10000;
-    tmpPalette[palSize-32+ii][2]  = bStart * (perc0 + diff * ii) * 72 / 10000;
-    tmpPalette[palSize-48+ii][0]  = rStart * (perc0 + diff * ii) * 33 / 10000;
-    tmpPalette[palSize-48+ii][1]  = gStart * (perc0 + diff * ii) * 33 / 10000;
-    tmpPalette[palSize-48+ii][2]  = bStart * (perc0 + diff * ii) * 33 / 10000;
+    const int tmp = 15 * perc0 + ii * (100 - perc0);
+    tmpPalette[palSize-16+ii][0] = (unsigned char)(rStart * tmp / 1500);
+    tmpPalette[palSize-16+ii][1] = (unsigned char)(gStart * tmp / 1500);
+    tmpPalette[palSize-16+ii][2] = (unsigned char)(bStart * tmp / 1500);
+    tmpPalette[palSize-32+ii][0] = (unsigned char)(rStart * tmp * (perc66+5) / 150000);
+    tmpPalette[palSize-32+ii][1] = (unsigned char)(gStart * tmp * (perc66+5) / 150000);
+    tmpPalette[palSize-32+ii][2] = (unsigned char)(bStart * tmp * (perc66+5) / 150000);
+    tmpPalette[palSize-48+ii][0] = (unsigned char)(rStart * tmp * perc33 / 150000);
+    tmpPalette[palSize-48+ii][1] = (unsigned char)(gStart * tmp * perc33 / 150000);
+    tmpPalette[palSize-48+ii][2] = (unsigned char)(bStart * tmp * perc33 / 150000);
+  }
+
+  /*-- generate segment colors for dimmed segments --*/
+  for (ii = 0; ii <= 256; ii++) {
+    const int tmp = 256 * perc0 + ii * (100 - perc0);
+    dim_LUT[0][ii] = ((bStart * tmp / 25600)>>3) | (((gStart * tmp / 25600)>>3)<<5) | (((rStart * tmp / 25600)>>3)<<10);
+    dim_LUT[1][ii] = ((bStart * tmp * (perc66+5) / 2560000)>>3) | (((gStart * tmp * (perc66+5) / 2560000)>>3)<<5) | (((rStart * tmp * (perc66+5)/ 2560000)>>3)<<10);
+    dim_LUT[2][ii] = ((bStart * tmp *  perc33    / 2560000)>>3) | (((gStart * tmp *  perc33    / 2560000)>>3)<<5) | (((rStart * tmp *  perc33   / 2560000)>>3)<<10);
   }
 
 //for (int i = 0; i < palSize; i++) printf("Col %d: %02x %02x %02x\n", i, tmpPalette[i][0],tmpPalette[i][1],tmpPalette[i][2]);
-
-  rStart = tmpPalette[COL_DMDOFF][0];
-  gStart = tmpPalette[COL_DMDOFF][1];
-  bStart = tmpPalette[COL_DMDOFF][2];
 
   /*-- Autogenerate Dark Playfield Lamp Colors --*/
   for (ii = 0; ii < COL_LAMPCOUNT; ii++) { /* Reduce by 75% */
@@ -693,6 +813,9 @@ static PALETTE_INIT(core) {
   { /*-- Autogenerate antialias colours --*/
     int rStep, gStep, bStep;
     rStart = gStart = bStart = 0;
+    //rStart = tmpPalette[COL_DMDOFF][0];
+    //gStart = tmpPalette[COL_DMDOFF][1];
+    //bStart = tmpPalette[COL_DMDOFF][2];
 
     rStep = (tmpPalette[COL_DMDON][0] * pmoptions.dmd_antialias / 100 - rStart) / 6;
     gStep = (tmpPalette[COL_DMDON][1] * pmoptions.dmd_antialias / 100 - gStart) / 6;
@@ -705,53 +828,141 @@ static PALETTE_INIT(core) {
       rStart += rStep; gStart += gStep; bStart += bStep;
     }
   }
-#if MAMEVER >= 6100
+
   for (ii = 0; ii < sizeof(tmpPalette)/3; ii++)
     palette_set_color(ii, tmpPalette[ii][0], tmpPalette[ii][1], tmpPalette[ii][2]);
-#else /* MAMEVER */
-  memcpy(palette, tmpPalette, sizeof(tmpPalette));
-#endif /* MAMEVER */
 }
 
 /*-----------------------------------
 /    Generic DMD display handler
 /------------------------------------*/
-void video_update_core_dmd(struct mame_bitmap *bitmap, const struct rectangle *cliprect, tDMDDot dotCol, const struct core_dispLayout *layout) {
-  UINT32 *dmdColor = &CORE_COLOR(COL_DMDOFF);
-  UINT32 *aaColor  = &CORE_COLOR(COL_DMDAA);
+void video_update_core_dmd(struct mame_bitmap *bitmap, const struct rectangle *cliprect, const struct core_dispLayout *layout) {
+  pen_t *dmdColor = &Machine->pens[COL_DMDOFF];
+  pen_t *aaColor  = &Machine->pens[COL_DMDAA];
   BMTYPE **lines = ((BMTYPE **)bitmap->line) + (layout->top*locals.displaySize);
   int noaa = !pmoptions.dmd_antialias || (layout->type & CORE_DMDNOAA);
   int ii, jj;
 
-#ifdef VPINMAME
-  static UINT8 buffer1[DMD_MAXY*DMD_MAXX];
-  static UINT8 buffer2[DMD_MAXY*DMD_MAXX];
-  static UINT8 *currbuffer = buffer1;
-  static UINT8 *oldbuffer = NULL;
+  // prepare all brightness & color/palette tables for mappings from internal DMD representation:
+  const int shade_16_enabled = ((core_gameData->gen & (GEN_SAM|GEN_SPA|GEN_ALVG_DMD2)) ||
+	  // extended handling also for some GTS3 games (SMB, SMBMW and CBW):
+	  (strncasecmp(Machine->gamedrv->name, "smb", 3) == 0) || (strncasecmp(Machine->gamedrv->name, "cueball", 7) == 0));
 
-  UINT8 dumpframe = 1;
+#if defined(VPINMAME) || defined(LIBPINMAME)
+
+  const UINT8 perc0 = (pmoptions.dmd_perc0  > 0) ? pmoptions.dmd_perc0  : 20;
+  const UINT8 perc1 = (pmoptions.dmd_perc33 > 0) ? pmoptions.dmd_perc33 : 33;
+  const UINT8 perc2 = (pmoptions.dmd_perc66 > 0) ? pmoptions.dmd_perc66 : 67;
+  const UINT8 perc3 = 100;
+
+  static const int levelgts3[16] = {0/*5*/, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100}; // GTS3 and AlvinG brightness seems okay
+  static const int levelsam[16]  = {0/*5*/, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 90, 100}; // SAM brightness seems okay
+
+  const int * const level = (core_gameData->gen & (GEN_SAM|GEN_SPA)) ? levelsam : levelgts3;
+
+  const UINT8 raw_4[4]   = {perc0,perc1,perc2,perc3};
+  const UINT8 raw_16[16] = {level[0],level[1],level[2],level[3],level[4],level[5],level[6],level[7],level[8],level[9],level[10],level[11],level[12],level[13],level[14],level[15]};
+
+  UINT32 palette32_4[4];
+  UINT32 palette32_16[16];
+  unsigned char palette[4][3];
+
+  has_DMD_Video = 1;
+
+  int rStart = 0xFF, gStart = 0xE0, bStart = 0x20;
+  if ((pmoptions.dmd_red > 0) || (pmoptions.dmd_green > 0) || (pmoptions.dmd_blue > 0)) {
+	  rStart = pmoptions.dmd_red; gStart = pmoptions.dmd_green; bStart = pmoptions.dmd_blue;
+  }
+
+  /*-- Autogenerate DMD Color Shades--*/
+  palette[0][0] = rStart * perc0 / 100;
+  palette[0][1] = gStart * perc0 / 100;
+  palette[0][2] = bStart * perc0 / 100;
+  palette[1][0] = rStart * perc1 / 100;
+  palette[1][1] = gStart * perc1 / 100;
+  palette[1][2] = bStart * perc1 / 100;
+  palette[2][0] = rStart * perc2 / 100;
+  palette[2][1] = gStart * perc2 / 100;
+  palette[2][2] = bStart * perc2 / 100;
+  palette[3][0] = rStart * perc3 / 100;
+  palette[3][1] = gStart * perc3 / 100;
+  palette[3][2] = bStart * perc3 / 100;
+
+  /*-- If the "colorize" option is set, use the individual option colors for the shades --*/
+  if (pmoptions.dmd_colorize) {
+	  if (pmoptions.dmd_red0 > 0 || pmoptions.dmd_green0 > 0 || pmoptions.dmd_blue0 > 0) {
+		  palette[0][0] = pmoptions.dmd_red0;
+		  palette[0][1] = pmoptions.dmd_green0;
+		  palette[0][2] = pmoptions.dmd_blue0;
+	  }
+	  if (pmoptions.dmd_red33 > 0 || pmoptions.dmd_green33 > 0 || pmoptions.dmd_blue33 > 0) {
+		  palette[1][0] = pmoptions.dmd_red33;
+		  palette[1][1] = pmoptions.dmd_green33;
+		  palette[1][2] = pmoptions.dmd_blue33;
+	  }
+	  if (pmoptions.dmd_red66 > 0 || pmoptions.dmd_green66 > 0 || pmoptions.dmd_blue66 > 0) {
+		  palette[2][0] = pmoptions.dmd_red66;
+		  palette[2][1] = pmoptions.dmd_green66;
+		  palette[2][2] = pmoptions.dmd_blue66;
+	  }
+  }
+
+  for (ii = 0; ii < 4; ++ii)
+     palette32_4[ii] = (UINT32)palette[ii][0] | (((UINT32)palette[ii][1]) << 8) | (((UINT32)palette[ii][2]) << 16);
+
+  for(ii = 0; ii < 16; ++ii)
+     palette32_16[ii] = (rStart*level[ii]/100) | ((gStart*level[ii]/100) << 8) | ((bStart*level[ii]/100) << 16);
+
+  //
+
+  if(layout->length >= 128) // Capcom hack
+  {
+      g_raw_dmdx = layout->length;
+      g_raw_dmdy = layout->start;
+
+      // Strikes N' Spares has 2 standard DMDs
+      if (strncasecmp(Machine->gamedrv->name, "snspare", 7) == 0)
+      {
+          g_raw_dmdy = 64;
+          // shift offset into the raw DMDs, depending on which display is updated in here
+          if (layout->top != 0)
+              raw_dmdoffs = 128 * 32;
+          else
+              raw_dmdoffs = 0;
+      }
+  }
 #endif
 
-  memset(&dotCol[layout->start+1][0], 0, sizeof(dotCol[0][0])*layout->length+1);
-  memset(&dotCol[0][0], 0, sizeof(dotCol[0][0])*layout->length+1); // clear above
+  memset(&coreGlobals.dotCol[layout->start+1][0], 0, sizeof(coreGlobals.dotCol[0][0])*layout->length+1);
+  memset(&coreGlobals.dotCol[0][0], 0, sizeof(coreGlobals.dotCol[0][0])*layout->length+1); // clear above
   for (ii = 0; ii < layout->start+1; ii++) {
     BMTYPE *line = (*lines++) + (layout->left*locals.displaySize);
-    dotCol[ii][layout->length] = 0;
+    coreGlobals.dotCol[ii][layout->length] = 0;
     if (ii > 0) {
       for (jj = 0; jj < layout->length; jj++) {
-        *line++ = dmdColor[dotCol[ii][jj]];
-#ifdef VPINMAME
-		currbuffer[(ii-1)*layout->length + jj] = dotCol[ii][jj];
+        const UINT8 col = coreGlobals.dotCol[ii][jj];
+#if defined(VPINMAME) || defined(LIBPINMAME)
+        const int offs = (ii-1)*layout->length + jj;
+        currbuffer[offs] = col;
+#ifdef LIBPINMAME
+        g_raw_dmdbuffer[offs] = (g_fDmdMode == 0) ? (shade_16_enabled ? raw_16[col] : raw_4[col]) : col;
+#else
+        if(layout->length >= 128) { // Capcom hack
+          g_raw_dmdbuffer[offs + raw_dmdoffs] = shade_16_enabled ? raw_16[col] : raw_4[col];
+          g_raw_colordmdbuffer[offs + raw_dmdoffs] = shade_16_enabled ? palette32_16[col] : palette32_4[col];
+        }
 #endif
+#endif
+        *line++ = shade_16_enabled ? dmdColor[col+63] : dmdColor[col];
         if (locals.displaySize > 1 && jj < layout->length-1)
-          *line++ = noaa ? 0 : aaColor[dotCol[ii][jj] + dotCol[ii][jj+1]];
+          *line++ = noaa ? 0 : aaColor[col + coreGlobals.dotCol[ii][jj+1]];
       }
     }
     if (locals.displaySize > 1) {
-      int col1 = dotCol[ii][0] + dotCol[ii+1][0];
+      int col1 = coreGlobals.dotCol[ii][0] + coreGlobals.dotCol[ii+1][0];
       line = (*lines++) + (layout->left*locals.displaySize);
       for (jj = 0; jj < layout->length; jj++) {
-        int col2 = dotCol[ii][jj+1] + dotCol[ii+1][jj+1];
+        int col2 = coreGlobals.dotCol[ii][jj+1] + coreGlobals.dotCol[ii+1][jj+1];
         *line++ = noaa ? 0 : aaColor[col1];
         if (jj < layout->length-1)
           *line++ = noaa ? 0 : aaColor[2*(col1 + col2)/5];
@@ -759,43 +970,117 @@ void video_update_core_dmd(struct mame_bitmap *bitmap, const struct rectangle *c
       }
     }
   }
-  osd_mark_dirty(layout->left*locals.displaySize,layout->top*locals.displaySize,
-                 (layout->left+layout->length)*locals.displaySize,(layout->top+layout->start)*locals.displaySize);
 
 #ifdef VPINMAME
-  if(g_fShowPinDMD) {
-    if(oldbuffer != NULL) {
-	  dumpframe = 0;
-	  for(jj = 0; jj < layout->start; jj++)
-		for(ii = 0; ii < layout->length; ii++)
-		{
-			if((currbuffer[jj*layout->length + ii] != oldbuffer[jj*layout->length + ii])&&
-			  ((currbuffer[jj*layout->length + ii] < 4) || (core_gameData->gen == GEN_SAM) || (core_gameData->gen == GEN_GTS3) || (core_gameData->gen == GEN_ALVG_DMD2))) {
-				dumpframe = 1;
-				break;
-			}
-		}
-    }
+  if ((layout->length == 128) || (layout->length == 192) || (layout->length == 256)) { // filter 16x8 output from Flipper Football
+	  //external dmd
+	  if (g_fShowPinDMD)
+	  {
+          if (strncasecmp(Machine->gamedrv->name, "snspare", 7) == 0)
+          {
+              if (layout->top != 0)
+                  renderDMDFrame(core_gameData->gen, layout->length, layout->start, currbuffer, g_fDumpFrames, Machine->gamedrv->name, g_raw_gtswpc_dmdframes, g_raw_gtswpc_dmd);
+              else
+                  render2ndDMDFrame(core_gameData->gen, layout->length, layout->start, currbuffer, g_fDumpFrames, Machine->gamedrv->name, g_raw_gtswpc_dmdframes, g_raw_gtswpc_dmd);
+          } else {
+              renderDMDFrame(core_gameData->gen, layout->length, layout->start, currbuffer, g_fDumpFrames, Machine->gamedrv->name, g_raw_gtswpc_dmdframes, g_raw_gtswpc_dmd);
+              render2ndDMDFrame(core_gameData->gen, layout->length, layout->start, currbuffer, g_fDumpFrames, Machine->gamedrv->name, g_raw_gtswpc_dmdframes, g_raw_gtswpc_dmd);
+          }
+	  }
 
-    if(dumpframe) {
-	    //usb dmd
-	    if(g_fShowPinDMD)
-		  if((layout->length == 128) || (layout->length == 192))
-		    renderDMDFrame(core_gameData->gen, layout->length, layout->start, currbuffer, g_fDumpFrames);
+	  if (oldbuffer != NULL) { // detect if same frame again
+		  if (memcmp(oldbuffer, currbuffer, (layout->length * layout->start)) != 0)
+		  {
+			  g_needs_DMD_update = 1;
 
-		if(currbuffer == buffer1) {
-			currbuffer = buffer2;
-			oldbuffer = buffer1;
-		} else {
-			currbuffer = buffer1;
-			oldbuffer = buffer2;
-		}
-    }
+			  if ((g_fShowPinDMD && g_fShowWinDMD) || g_fDumpFrames) // output dump frame to .txt
+			  {
+				  FILE *f;
+				  char *ptr;
+				  char DumpFilename[MAX_PATH];
 
-    frameClock();
+				  const DWORD tick = timeGetTime();
+#ifndef _WIN64
+				  const HINSTANCE hInst = GetModuleHandle("VPinMAME.dll");
+#else
+				  const HINSTANCE hInst = GetModuleHandle("VPinMAME64.dll");
+#endif
+				  GetModuleFileName(hInst, DumpFilename, MAX_PATH);
+				  ptr = strrchr(DumpFilename, '\\');
+				  strcpy_s(ptr + 1, 11, "DmdDump\\");
+				  strcat_s(DumpFilename, MAX_PATH, Machine->gamedrv->name);
+
+				  if (g_raw_gtswpc_dmdframes != 0) {
+					  FILE* fr;
+					  char RawFilename[MAX_PATH];
+					  strcpy_s(RawFilename, MAX_PATH, DumpFilename);
+					  strcat_s(RawFilename, MAX_PATH, ".raw");
+					  fr = fopen(RawFilename, "rb");
+					  if (fr) {
+						  fclose(fr);
+						  fr = fopen(RawFilename, "ab");
+					  }
+					  else {
+						  fr = fopen(RawFilename, "ab");
+						  if(fr)
+						  {
+							  fputc(0x52, fr);
+							  fputc(0x41, fr);
+							  fputc(0x57, fr);
+							  fputc(0x00, fr);
+							  fputc(0x01, fr);
+							  fputc(layout->length, fr);
+							  fputc(layout->start, fr);
+							  fputc(g_raw_gtswpc_dmdframes, fr);
+						  }
+					  }
+					  if(fr)
+					  {
+						  fwrite(&tick, 1, 4, fr);
+						  fwrite(g_raw_gtswpc_dmd, 1, (layout->length * layout->start / 8 * g_raw_gtswpc_dmdframes), fr);
+						  fclose(fr);
+					  }
+				  }
+
+				  strcat_s(DumpFilename, MAX_PATH, ".txt");
+				  f = fopen(DumpFilename, "a");
+				  if (f) {
+					  fprintf(f, "0x%08x\n", tick);
+					  for (jj = 0; jj < layout->start; jj++) {
+						  for (ii = 0; ii < layout->length; ii++)
+						  {
+							  const UINT8 col = currbuffer[jj*layout->length + ii];
+							  fprintf(f, "%01x", col);
+						  }
+						  fprintf(f, "\n");
+					  }
+					  fprintf(f, "\n");
+					  fclose(f);
+				  }
+			  }
+		  }
+	  }
+
+	  g_raw_gtswpc_dmdframes = 0;
+
+	  // swap buffers
+	  if (currbuffer == buffer1) {
+		  currbuffer = buffer2;
+		  oldbuffer = buffer1;
+	  }
+	  else {
+		  currbuffer = buffer1;
+		  oldbuffer = buffer2;
+	  }
   }
 #endif
+
+#ifdef LIBPINMAME
+  libpinmame_update_display(g_display_index, layout, g_raw_dmdbuffer);
+  g_display_index++;
+#endif
 }
+
 #ifdef VPINMAME
 #  define inRect(r,l,t,w,h) FALSE
 #else /* VPINMAME */
@@ -809,54 +1094,98 @@ INLINE int inRect(const struct rectangle *r, int left, int top, int width, int h
 /  Generic segment display handler
 /------------------------------------*/
 static void updateDisplay(struct mame_bitmap *bitmap, const struct rectangle *cliprect,
-                          const struct core_dispLayout *layout, int *pos) {
-
-#ifdef VPINMAME
-  static UINT16 seg_data[50];
-  static UINT8 disp_lens[50];
-  int idx=0;
+                          const struct core_dispLayout *layout, int *pos)
+{
+#if defined(VPINMAME) || defined(LIBPINMAME)
+  static UINT16 seg_data[CORE_SEGCOUNT]; // use static, in case a dmddevice.dll keeps the pointers around
+  static UINT8 seg_dim[CORE_SEGCOUNT];
+  static UINT8 disp_num_segs[64]; // actually max seen was 48 so far, but.. // segments per display
+  int seg_idx=0;
+#ifdef LIBPINMAME
+  UINT16* last_seg_data_ptr = seg_data;
+#endif
   int total_disp=0;
 #endif
 
   if (layout == NULL) { DBGLOG(("gen_refresh without LCD layout\n")); return; }
 
-#ifdef VPINMAME
-  memset(seg_data, 0, 50*sizeof(UINT16));
+#if defined(VPINMAME) || defined(LIBPINMAME)
+  memset(seg_data, 0, CORE_SEGCOUNT*sizeof(UINT16));
+  memset(seg_dim, 0, CORE_SEGCOUNT*sizeof(UINT8));
+  disp_num_segs[0] = 0;
 #endif
 
   for (; layout->length; layout += 1) {
     if (layout->type == CORE_IMPORT)
       { updateDisplay(bitmap, cliprect, layout->lptr, pos); continue; }
     if (layout->fptr)
-      if (((ptPinMAMEvidUpdate)(layout->fptr))(bitmap,cliprect,layout) == 0) continue;
+      if (((ptPinMAMEvidUpdate)(layout->fptr))(bitmap,cliprect,layout) == 0) {
+        if (layout->type == CORE_VIDEO) {
+#if defined(VPINMAME) || defined(LIBPINMAME)
+          has_DMD_Video = 1;
+#endif
+#ifdef LIBPINMAME
+          libpinmame_update_display(g_display_index, layout, bitmap);
+          g_display_index++;
+#endif
+        }
+        continue;
+      }
     {
-      int left  = layout->left * (locals.segData[layout->type & CORE_SEGMASK].cols+1) / 2;
-      int top   = layout->top  * (locals.segData[0].rows + 1) / 2;
-      int ii    = layout->length;
+      int left = layout->left * (locals.segData[layout->type & CORE_SEGMASK].cols+1) / 2;
+      int top  = layout->top  * (locals.segData[0].rows + 1) / 2;
+      int ii   = layout->length;
       UINT16 *seg     = &coreGlobals.segments[layout->start].w;
       UINT16 *lastSeg = &locals.lastSeg[layout->start].w;
-      int step     = (layout->type & CORE_SEGREV) ? -1 : 1;
+      UINT8  *lastSegDim = &locals.lastSegDim[layout->start * 16];
+      const int step  = (layout->type & CORE_SEGREV) ? -1 : 1;
 
-#ifdef VPINMAME
-	  disp_lens[total_disp] = ii;
-	  total_disp++;
+#if defined(VPINMAME) || defined(LIBPINMAME)
+      disp_num_segs[total_disp++] = ii;
 #endif
 
-      if (step < 0) { seg += ii-1; lastSeg += ii-1; }
+#ifdef PROC_SUPPORT
+      static UINT16 proc_top[16];
+      static UINT16 proc_bottom[16];
+      int char_width = locals.segData[layout->type & 0x0f].cols+1;
+#endif
+
+      if (step < 0) { seg += ii-1; lastSeg += ii-1; lastSegDim += (ii-1)*16; }
       while (ii--) {
         UINT16 tmpSeg = *seg;
+        UINT8  tmpSegDim[16] = { 0 }; // each of the 16 segments per character can be separately dimmed
+#if defined(VPINMAME) || defined(LIBPINMAME)
+        UINT8 maxSegDim = 0;
+#endif
         int tmpType = layout->type & CORE_SEGMASK;
 
+        if (options.usemodsol & (CORE_MODOUT_FORCE_ON | CORE_MODOUT_ENABLE_PHYSOUT_ALPHASEGS)) {
+          int bits = tmpSeg;
+          for (int kk = 0; bits; kk++, bits >>= 1) { // loop over max 16 segments of each character
+            if (bits & 0x01) {
+              UINT8 v = saturatedByte(coreGlobals.physicOutputState[CORE_MODOUT_SEG0 + (layout->start + layout->length - 1 - ii) * 16 + kk].value);
+#if defined(VPINMAME) || defined(LIBPINMAME)
+              //!! TODO this evaluates dimming as a whole for the alpha numeric display character while it should be per segment
+              if (v > maxSegDim) maxSegDim = v;
+#endif
+              tmpSegDim[kk] = 255 - v; // per segment
+            }
+          }
+        }
+
 #ifdef VPINMAME
-		//SJE: Force an update of the segments ALWAYS in VPM - corrects Pause Display Bugs
-		if(1) {
+        //SJE: Force an update of the segments ALWAYS in VPM - corrects Pause Display Bugs
+        if(1) {
 #else
-        if ((tmpSeg != *lastSeg) ||
+        if ((tmpSeg != *lastSeg) || memcmp(tmpSegDim, lastSegDim, sizeof(tmpSegDim)) != 0 ||
             inRect(cliprect,left,top,locals.segData[layout->type & CORE_SEGALL].cols,locals.segData[layout->type & CORE_SEGALL].rows)) {
 #endif
           tmpSeg >>= (layout->type & CORE_SEGHIBIT) ? 8 : 0;
 
+          memcpy(lastSegDim, tmpSegDim, sizeof(tmpSegDim));
+
           switch (tmpType) {
+
           case CORE_SEG87: case CORE_SEG87F:
             if ((ii > 0) && (ii % 3 == 0)) { // Handle Comma
               if ((tmpType == CORE_SEG87F) && tmpSeg) tmpSeg |= 0x80;
@@ -876,32 +1205,217 @@ static void updateDisplay(struct mame_bitmap *bitmap, const struct rectangle *cl
             tmpSeg |= (tmpSeg & 0x100)<<1;
             break;
           }
-
-#ifdef VPINMAME
-		  seg_data[idx++] = tmpSeg;
+#if defined(VPINMAME) || defined(LIBPINMAME)
+          seg_dim[seg_idx] = (255 - maxSegDim) >> 4;
+          seg_data[seg_idx++] = tmpSeg;
 #endif
-          if (!pmoptions.dmd_only || !(layout->fptr || layout->lptr))
-            drawChar(bitmap,  top, left, tmpSeg, tmpType, coreGlobals.segDim[*pos] > 15 ? 15 : coreGlobals.segDim[*pos]);
+          if (!pmoptions.dmd_only || !(layout->fptr || layout->lptr)) {
+            drawChar(bitmap, top, left, tmpSeg, tmpType, (options.usemodsol & (CORE_MODOUT_FORCE_ON | CORE_MODOUT_ENABLE_PHYSOUT_ALPHASEGS)) ? tmpSegDim : NULL);
+#ifdef PROC_SUPPORT
+            if (coreGlobals.p_rocEn) {
+              if ((core_gameData->gen & (GEN_WPCALPHA_1 | GEN_WPCALPHA_2 | GEN_ALLS11)) &&
+                  (!pmoptions.alpha_on_dmd)) {
+                switch (top) {
+                  case 0: proc_top[left/char_width + (doubleAlpha == 0)] = tmpSeg; break;
+                  case 21:  // This is the ball/credit display if fitted, so work out which position
+                    if (left == 12) proc_bottom[0] = tmpSeg;
+                    else if (left == 24) proc_bottom[8] = tmpSeg;
+                    else if (left == 48) proc_top[0] = tmpSeg;
+                    else proc_top[8] = tmpSeg;
+                    break;
+                  default: proc_bottom[left/char_width + (doubleAlpha == 0)] = tmpSeg; break;
+                }
+              }
+            }
+#endif
+          }
           coreGlobals.drawSeg[*pos] = tmpSeg;
         }
-		(*pos)++;
+        (*pos)++;
         left += locals.segData[layout->type & CORE_SEGALL].cols+1;
-        seg += step; lastSeg += step;
+        seg += step; lastSeg += step; lastSegDim += step;
       }
+#ifdef PROC_SUPPORT
+      if (coreGlobals.p_rocEn) {
+        if ((core_gameData->gen & (GEN_WPCALPHA_1 | GEN_WPCALPHA_2 | GEN_ALLS11)) &&
+            (!pmoptions.alpha_on_dmd)) {
+          procUpdateAlphaDisplay(proc_top, proc_bottom);
+        }
+      }
+#endif
     }
+
+#ifdef LIBPINMAME
+    libpinmame_update_display(g_display_index, layout, last_seg_data_ptr);
+    last_seg_data_ptr += layout->length;
+    g_display_index++;
+#endif
   }
 
 #ifdef VPINMAME
   //alpha frame
   if(g_fShowPinDMD)
-  	renderAlphanumericFrame(core_gameData->gen, seg_data, total_disp, disp_lens);
+    renderAlphanumericFrame(core_gameData->gen, seg_data, seg_dim, total_disp, disp_num_segs, Machine->gamedrv->name);
+#endif
+
+#if defined(VPINMAME) || defined(LIBPINMAME)
+  // blit segments into a DMD, too (at the moment only to pass easily to VP, e.g. tournament mode verification)
+
+  // Some GTS3 games like Teed Off update both empty alpha and real DMD.   If a DMD frame has been seen, 
+  // block this from running.
+  if(!has_DMD_Video)
+  {
+#ifdef LIBPINMAME
+    static struct core_dispLayout segDmdDispLayout = { 0, 0, 32, 128, CORE_DMD | CORE_DMDSEG, NULL, NULL };
+#endif
+
+    static UINT16 seg_data2[CORE_SEGCOUNT] = {0};
+    const layout_t alpha_layout = layoutAlphanumericFrame(core_gameData->gen, seg_data, seg_data2, total_disp, disp_num_segs, Machine->gamedrv->name);
+
+    if (alpha_layout != __Invalid) { // detect if same frame again
+      int i;
+
+      g_raw_dmdx = 128;
+      g_raw_dmdy = 32;
+
+      //
+
+#if defined(VPINMAME) || defined(LIBPINMAME)
+		memset(AlphaNumericFrameBuffer,0,sizeof(AlphaNumericFrameBuffer));
+#endif
+
+		switch (alpha_layout) {
+			case __2x16Alpha :
+				_2x16Alpha(seg_data);
+				break;
+			case __2x20Alpha :
+				_2x20Alpha(seg_data);
+				break;
+			case __2x7Alpha_2x7Num :
+				_2x7Alpha_2x7Num(seg_data);
+				break;
+			case __2x7Alpha_2x7Num_4x1Num :
+				_2x7Alpha_2x7Num_4x1Num(seg_data);
+				break;
+			case __2x7Num_2x7Num_4x1Num :
+				_2x7Num_2x7Num_4x1Num(seg_data);
+				break;
+			case __2x7Num_2x7Num_10x1Num :
+				_2x7Num_2x7Num_10x1Num(seg_data,seg_data2);
+				break;
+			case __2x7Num_2x7Num_4x1Num_gen7 :
+				_2x7Num_2x7Num_4x1Num_gen7(seg_data);
+				break;
+			case __2x7Num10_2x7Num10_4x1Num :
+				_2x7Num10_2x7Num10_4x1Num(seg_data);
+				break;
+			case __2x6Num_2x6Num_4x1Num :
+				_2x6Num_2x6Num_4x1Num(seg_data);
+				break;
+			case __2x6Num10_2x6Num10_4x1Num :
+				_2x6Num10_2x6Num10_4x1Num(seg_data);
+				break;
+			case __4x7Num10 :
+				_4x7Num10(seg_data);
+				break;
+			case __6x4Num_4x1Num :
+				_6x4Num_4x1Num(seg_data);
+				break;
+			case __2x7Num_4x1Num_1x16Alpha :
+				_2x7Num_4x1Num_1x16Alpha(seg_data);
+				break;
+			case __1x16Alpha_1x16Num_1x7Num :
+				_1x16Alpha_1x16Num_1x7Num(seg_data);
+				break;
+			case __1x7Num_1x16Alpha_1x16Num :
+				_1x7Num_1x16Alpha_1x16Num(seg_data);
+				break;
+			case __1x16Alpha_1x16Num_1x7Num_1x4Num :
+				_1x16Alpha_1x16Num_1x7Num_1x4Num(seg_data);
+				break;
+			default:
+				break;
+		}
+
+#ifdef VPINMAME
+		for (i = 0; i < 512; ++i) {
+			currbuffer[(i*8)]   = AlphaNumericFrameBuffer[i]    & 0x01 | AlphaNumericFrameBuffer[i+512]<<1 & 0x02 | AlphaNumericFrameBuffer[i+1024]<<2 & 0x04 | AlphaNumericFrameBuffer[i+1536]<<3 & 0x08;
+			currbuffer[(i*8)+1] = AlphaNumericFrameBuffer[i]>>1 & 0x01 | AlphaNumericFrameBuffer[i+512]    & 0x02 | AlphaNumericFrameBuffer[i+1024]<<1 & 0x04 | AlphaNumericFrameBuffer[i+1536]<<2 & 0x08;
+			currbuffer[(i*8)+2] = AlphaNumericFrameBuffer[i]>>2 & 0x01 | AlphaNumericFrameBuffer[i+512]>>1 & 0x02 | AlphaNumericFrameBuffer[i+1024]    & 0x04 | AlphaNumericFrameBuffer[i+1536]<<1 & 0x08;
+			currbuffer[(i*8)+3] = AlphaNumericFrameBuffer[i]>>3 & 0x01 | AlphaNumericFrameBuffer[i+512]>>2 & 0x02 | AlphaNumericFrameBuffer[i+1024]>>1 & 0x04 | AlphaNumericFrameBuffer[i+1536]    & 0x08;
+			currbuffer[(i*8)+4] = AlphaNumericFrameBuffer[i]>>4 & 0x01 | AlphaNumericFrameBuffer[i+512]>>3 & 0x02 | AlphaNumericFrameBuffer[i+1024]>>2 & 0x04 | AlphaNumericFrameBuffer[i+1536]>>1 & 0x08;
+			currbuffer[(i*8)+5] = AlphaNumericFrameBuffer[i]>>5 & 0x01 | AlphaNumericFrameBuffer[i+512]>>4 & 0x02 | AlphaNumericFrameBuffer[i+1024]>>3 & 0x04 | AlphaNumericFrameBuffer[i+1536]>>2 & 0x08;
+			currbuffer[(i*8)+6] = AlphaNumericFrameBuffer[i]>>6 & 0x01 | AlphaNumericFrameBuffer[i+512]>>5 & 0x02 | AlphaNumericFrameBuffer[i+1024]>>4 & 0x04 | AlphaNumericFrameBuffer[i+1536]>>3 & 0x08;
+			currbuffer[(i*8)+7] = AlphaNumericFrameBuffer[i]>>7 & 0x01 | AlphaNumericFrameBuffer[i+512]>>6 & 0x02 | AlphaNumericFrameBuffer[i+1024]>>5 & 0x04 | AlphaNumericFrameBuffer[i+1536]>>4 & 0x08;
+		}
+
+      //
+
+      if (oldbuffer != NULL && memcmp(oldbuffer, currbuffer, g_raw_dmdx*g_raw_dmdy) != 0)
+      {
+        for (i = 0; i < g_raw_dmdx*g_raw_dmdy; ++i)
+          g_raw_dmdbuffer[i] = (UINT8)((int)currbuffer[i]*100/15);
+        g_needs_DMD_update = 1;
+      }
+
+      // swap buffers
+      if (currbuffer == buffer1) {
+        currbuffer = buffer2;
+        oldbuffer = buffer1;
+      }
+      else {
+        currbuffer = buffer1;
+        oldbuffer = buffer2;
+      }
+#endif
+
+#ifdef LIBPINMAME
+      libpinmame_update_display(g_display_index, &segDmdDispLayout, AlphaNumericFrameBuffer);
+      g_display_index++;
+#endif
+    }
+#ifdef LIBPINMAME
+    else {
+      libpinmame_update_display(g_display_index, &segDmdDispLayout, NULL);
+      g_display_index++;
+    }
+#endif
+  }
 #endif
 }
 
 VIDEO_UPDATE(core_gen) {
   int count = 0;
+
+  /*-- Update all physic output at least once per frame --*/
+  core_update_pwm_outputs(TRUE);
+
+#ifdef PROC_SUPPORT
+  int alpha = (core_gameData->gen & (GEN_WPCALPHA_1|GEN_WPCALPHA_2|GEN_ALLS11)) != 0;
+  if (coreGlobals.p_rocEn) {
+    if (pmoptions.alpha_on_dmd && alpha) {
+      procClearDMD();
+    }
+  }
+  // If we don't want the DMD displayed on the screen, skip this code
+  if (pmoptions.virtual_dmd) {
+#endif
+
+#ifdef LIBPINMAME
+  g_display_index = 0;
+#endif
+
   updateDisplay(bitmap, cliprect, core_gameData->lcdLayout, &count);
   memcpy(locals.lastSeg, coreGlobals.segments, sizeof(locals.lastSeg));
+#ifdef PROC_SUPPORT
+  }
+  if (coreGlobals.p_rocEn) {
+    if (pmoptions.alpha_on_dmd && alpha) {
+      procUpdateDMD();
+    }
+  }
+#endif
+
   video_update_core_status(bitmap,cliprect);
 }
 
@@ -911,14 +1425,16 @@ VIDEO_UPDATE(core_gen) {
 void core_updateSw(int flipEn) {
   /*-- handle flippers--*/
   const int flip = core_gameData->hw.flippers;
-  const int flipSwCol = (core_gameData->gen & (GEN_GTS3 | GEN_ALVG | GEN_ALVG_DMD2)) ? 15 : CORE_FLIPPERSWCOL;
+  const int flipSwCol = (core_gameData->gen & (GEN_GTS3 | GEN_SPA | GEN_ALVG | GEN_ALVG_DMD2 | GEN_WICO)) ? 15 : CORE_FLIPPERSWCOL;
   int inports[CORE_MAXPORTS];
   UINT8 swFlip;
   int ii;
 
   if (g_fHandleKeyboard) {
+
     for (ii = 0; ii < CORE_COREINPORT+(coreData->coreDips+31)/16; ii++)
       inports[ii] = readinputport(ii);
+
 
     /*-- buttons --*/
     swFlip = 0;
@@ -940,9 +1456,18 @@ void core_updateSw(int flipEn) {
   else
     swFlip = (coreGlobals.swMatrix[flipSwCol] ^ coreGlobals.invSw[flipSwCol]) & (CORE_SWULFLIPBUTBIT|CORE_SWURFLIPBUTBIT|CORE_SWLLFLIPBUTBIT|CORE_SWLRFLIPBUTBIT);
 
-  /*-- set switches in matrix for non-fliptronic games --*/
-  if (FLIP_SWL(flip)) core_setSw(FLIP_SWL(flip), swFlip & CORE_SWLLFLIPBUTBIT);
-  if (FLIP_SWR(flip)) core_setSw(FLIP_SWR(flip), swFlip & CORE_SWLRFLIPBUTBIT);
+#ifdef PROC_SUPPORT
+  /*-- Only handle flipper switches if we're not in a real game, otherwise they --*/
+  /*-- will get physically activated anyway */
+  if (!coreGlobals.p_rocEn) {
+#endif
+
+    /*-- set switches in matrix for non-fliptronic games --*/
+    if (FLIP_SWL(flip)) core_setSw(FLIP_SWL(flip), swFlip & CORE_SWLLFLIPBUTBIT);
+    if (FLIP_SWR(flip)) core_setSw(FLIP_SWR(flip), swFlip & CORE_SWLRFLIPBUTBIT);
+#ifdef PROC_SUPPORT
+  }
+#endif
 
   /*-- fake solenoids if not CPU controlled --*/
   if ((flip & FLIP_SOL(FLIP_L)) == 0) {
@@ -984,38 +1509,72 @@ void core_updateSw(int flipEn) {
   if (g_fHandleMechanics) {
     if (core_gameData->hw.handleMech) core_gameData->hw.handleMech(g_fHandleMechanics);
   }
-  /*-- Run simulator --*/
+
+  /*-- run simulator --*/
   if (coreGlobals.simAvail)
     sim_run(inports, CORE_COREINPORT+(coreData->coreDips+31)/16,
             (inports[CORE_SIMINPORT] & SIM_SWITCHKEY) == 0,
             (SIM_BALLS(inports[CORE_SIMINPORT])));
-  { /*-- check changed solenoids --*/
-    UINT64 allSol = core_getAllSol();
-    UINT64 chgSol = (allSol ^ coreGlobals.lastSol) & vp_getSolMask64();
-
-    if (chgSol) {
-      coreGlobals.lastSol = allSol;
-      for (ii = 1; ii < CORE_FIRSTCUSTSOL+core_gameData->hw.custSol; ii++) {
-        if (chgSol & 0x01) {
-          /*-- solenoid has changed state --*/
-          OnSolenoid(ii, allSol & 0x01);
+  
+  /*-- Report changed solenoids --*/
+  if (coreGlobals.nSolenoids && 
+     ((options.usemodsol & (CORE_MODOUT_ENABLE_PHYSOUT_SOLENOIDS | CORE_MODOUT_FORCE_ON)) || ((core_gameData->gen & (GEN_ALLWPC | GEN_SAM)) && (options.usemodsol & CORE_MODOUT_ENABLE_MODSOL)) ))
+  {
+    float state[CORE_MODOUT_SOL_MAX];
+    core_getAllPhysicSols(state);
+    for (ii = 1; ii <= coreGlobals.nSolenoids; ii++) {
+      UINT8 v = saturatedByte(state[ii - 1]);
+      if (v != locals.lastPhysicsOutput[CORE_MODOUT_SOL0 + ii - 1]) {
+        #ifdef LIBPINMAME
+        OnSolenoid(ii, v);
+        #else
+        if ((v > 128) != (locals.lastPhysicsOutput[CORE_MODOUT_SOL0 + ii - 1] > 128)) {
+          OnSolenoid(ii, v);
           /*-- log solenoid number on the display (except flippers) --*/
-          if ((!pmoptions.dmd_only && (allSol & 0x01)) &&
-              ((ii < CORE_FIRSTLFLIPSOL) || (ii >= CORE_FIRSTSIMSOL))) {
+          if ((!pmoptions.dmd_only && ((ii < CORE_FIRSTLFLIPSOL) || (ii >= CORE_FIRSTSIMSOL)))) {
             locals.solLog[locals.solLogCount] = ii;
-	    core_textOutf(Machine->visible_area.max_x - 12*8,0,BLACK,"%2d %2d %2d %2d",
-              locals.solLog[(locals.solLogCount+1) & 3],
-              locals.solLog[(locals.solLogCount+2) & 3],
-              locals.solLog[(locals.solLogCount+3) & 3],
-              locals.solLog[(locals.solLogCount+0) & 3]);
+            core_textOutf(Machine->visible_area.max_x - 12 * 8, 0, BLACK, "%2d %2d %2d %2d",
+              locals.solLog[(locals.solLogCount + 1) & 3],
+              locals.solLog[(locals.solLogCount + 2) & 3],
+              locals.solLog[(locals.solLogCount + 3) & 3],
+              locals.solLog[(locals.solLogCount + 0) & 3]);
             locals.solLogCount = (locals.solLogCount + 1) & 3;
           }
+          #ifdef ENABLE_MECHANICAL_SAMPLES
           if (coreGlobals.soundEn)
-            proc_mechsounds(ii, allSol & 0x01);
+            proc_mechsounds(ii, v > 128);
+          #endif
         }
-        chgSol >>= 1;
-        allSol >>= 1;
+        #endif
+        locals.lastPhysicsOutput[CORE_MODOUT_SOL0 + ii - 1] = v;
       }
+    }
+  }
+  else {
+    UINT64 allSol = core_getAllSol();
+    UINT64 chgSol = (allSol ^ locals.lastSol) & vp_getSolMask64();
+    locals.lastSol = allSol;
+    for (ii = 1; ii < CORE_FIRSTCUSTSOL + core_gameData->hw.custSol; ii++)
+    {
+      if (chgSol & 0x01) {
+        OnSolenoid(ii, allSol & 0x01);
+        /*-- log solenoid number on the display (except flippers) --*/
+        if ((!pmoptions.dmd_only && (allSol & 0x01)) && ((ii < CORE_FIRSTLFLIPSOL) || (ii >= CORE_FIRSTSIMSOL))) {
+          locals.solLog[locals.solLogCount] = ii;
+          core_textOutf(Machine->visible_area.max_x - 12 * 8, 0, BLACK, "%2d %2d %2d %2d",
+            locals.solLog[(locals.solLogCount + 1) & 3],
+            locals.solLog[(locals.solLogCount + 2) & 3],
+            locals.solLog[(locals.solLogCount + 3) & 3],
+            locals.solLog[(locals.solLogCount + 0) & 3]);
+          locals.solLogCount = (locals.solLogCount + 1) & 3;
+        }
+        #ifdef ENABLE_MECHANICAL_SAMPLES
+        if (coreGlobals.soundEn)
+           proc_mechsounds(ii, allSol & 0x01);
+        #endif
+      }
+      chgSol >>= 1;
+      allSol >>= 1;
     }
   }
 
@@ -1023,6 +1582,7 @@ void core_updateSw(int flipEn) {
   if (g_fHandleKeyboard &&
       (!coreGlobals.simAvail || inports[CORE_SIMINPORT] & SIM_SWITCHKEY)) {
     /*-- simulator keys disabled, use row+column keys --*/
+
     static int lastRow = 0, lastCol = 0;
     int row = 0, col = 0;
 #ifdef MAME_DEBUG
@@ -1060,11 +1620,11 @@ void core_updateSw(int flipEn) {
 /---------------------------*/
 void core_textOut(char *buf, int length, int x, int y, int color) {
   if (y < locals.maxSimRows) {
-    int ii, l;
+    int ii;
 
-    l = strlen(buf);
+    const int l = (int)strlen(buf);
     for (ii = 0; ii < length; ii++) {
-      char c = (ii >= l) ? ' ' : buf[ii];
+      const char c = (ii >= l) ? ' ' : buf[ii];
 
       drawgfx(Machine->scrbitmap, Machine->uifont, c, color-1, 0, 0,
               x + ii * Machine->uifont->width, y+locals.firstSimRow, 0,
@@ -1099,7 +1659,7 @@ void CLIB_DECL core_textOutf(int x, int y, int color, const char *text, ...) {
 static VIDEO_UPDATE(core_status) {
   BMTYPE **lines = (BMTYPE **)bitmap->line;
   int startRow = 0, nextCol = 0, thisCol = 0;
-  int ii, jj, bits;
+  int ii, jj;
   BMTYPE dotColor[2];
 
   /*-- anything to do ? --*/
@@ -1107,49 +1667,55 @@ static VIDEO_UPDATE(core_status) {
       (coreGlobals.soundEn && (!manual_sound_commands(bitmap))))
     return;
 
-  dotColor[0] = CORE_COLOR(COL_DMDOFF); dotColor[1] = CORE_COLOR(COL_DMDON);
+  dotColor[0] = Machine->pens[COL_DMDOFF]; dotColor[1] = Machine->pens[COL_DMDON];
   /*--  Draw lamps --*/
   if ((core_gameData->hw.lampData) &&
       (startRow + core_gameData->hw.lampData->startpos.x + core_gameData->hw.lampData->size.x < locals.maxSimRows)) {
     core_tLampDisplay *drawData = core_gameData->hw.lampData;
-    int startx = drawData->startpos.x;
-    int starty = drawData->startpos.y + thisCol;
+    const int startx = drawData->startpos.x;
+    const int starty = drawData->startpos.y + thisCol;
     BMTYPE **line = &lines[locals.firstSimRow + startRow + startx];
     int num = 0;
-    int qq;
 
     for (ii = 0; ii < CORE_CUSTLAMPCOL+core_gameData->hw.lampCol; ii++) {
-      bits = coreGlobals.lampMatrix[ii];
+      int bits = coreGlobals.lampMatrix[ii];
 
       for (jj = 0; jj < 8; jj++) {
-	for (qq = 0; qq < drawData->lamps[num].totnum; qq++) {
-	  int color = drawData->lamps[num].lamppos[qq].color;
-	  int lampx = drawData->lamps[num].lamppos[qq].x;
-	  int lampy = drawData->lamps[num].lamppos[qq].y;
-	  line[lampx][starty + lampy] = CORE_COLOR((bits & 0x01) ? color : COL_SHADE(color));
-	}
+        int qq;
+        for (qq = 0; qq < drawData->lamps[num].totnum; qq++) {
+          const int lampx = drawData->lamps[num].lamppos[qq].x;
+          const int lampy = drawData->lamps[num].lamppos[qq].y;
+          if (options.usemodsol & (CORE_MODOUT_ENABLE_PHYSOUT_LAMPS | CORE_MODOUT_FORCE_ON)) {
+            UINT8 v = saturatedByte(coreGlobals.physicOutputState[CORE_MODOUT_LAMP0 + ii * 8 + jj].value);
+            line[lampx][starty + lampy] = 64 + (v >> 4);
+          }
+          else {
+            const int color = drawData->lamps[num].lamppos[qq].color;
+            line[lampx][starty + lampy] = Machine->pens[(bits & 0x01) ? color : COL_SHADE(color)];
+          }
+        }
         bits >>= 1;
         num++;
       }
     }
-    osd_mark_dirty(starty,  locals.firstSimRow + startRow + startx,
-                   starty + drawData->size.y,
-                   locals.firstSimRow + startRow + startx + drawData->size.x);
     startRow += startx + drawData->size.x;
     if (starty + drawData->size.y > nextCol) nextCol = starty + drawData->size.y;
   }
-  /*-- Defult square lamp matrix layout --*/
+  /*-- Default square lamp matrix layout --*/
   else {
+    assert((coreGlobals.nLamps == 0) || ((coreGlobals.nLamps + 7) >> 3 == CORE_CUSTLAMPCOL + core_gameData->hw.lampCol));
     for (ii = 0; ii < CORE_CUSTLAMPCOL + core_gameData->hw.lampCol; ii++) {
-      BMTYPE **line = &lines[locals.firstSimRow + startRow];
-      bits = coreGlobals.lampMatrix[ii];
-
+      BMTYPE** line = &lines[locals.firstSimRow + startRow];
+      int bits = coreGlobals.lampMatrix[ii];
       for (jj = 0; jj < 8; jj++) {
-        line[0][thisCol + ii*2] = dotColor[bits & 0x01];
+        if (options.usemodsol & (CORE_MODOUT_ENABLE_PHYSOUT_LAMPS | CORE_MODOUT_FORCE_ON)) {
+          UINT8 v = saturatedByte(coreGlobals.physicOutputState[CORE_MODOUT_LAMP0 + ii * 8 + jj].value);
+          line[0][thisCol + ii * 2] = 64 + (v >> 4);
+        } else
+          line[0][thisCol + ii * 2] = dotColor[bits & 0x01];
         line += 2; bits >>= 1;
       }
     }
-    osd_mark_dirty(thisCol, locals.firstSimRow + startRow, thisCol + ii*2 ,locals.firstSimRow + startRow + 16);
     startRow += 16; if (thisCol + ii*2 > nextCol) nextCol = thisCol + ii*2;
   } /* else */
 
@@ -1159,14 +1725,13 @@ static VIDEO_UPDATE(core_status) {
 
   for (ii = 0; ii < CORE_CUSTSWCOL+core_gameData->hw.swCol; ii++) {
     BMTYPE **line = &lines[locals.firstSimRow + startRow];
-    bits = coreGlobals.swMatrix[ii];
+    int bits = coreGlobals.swMatrix[ii];
 
     for (jj = 0; jj < 8; jj++) {
       line[0][thisCol + ii*2] = dotColor[bits & 0x01];
       line += 2; bits >>= 1;
     }
   }
-  osd_mark_dirty(thisCol, locals.firstSimRow + startRow, thisCol + ii*2, locals.firstSimRow + startRow + 16);
   startRow += 16; if (thisCol + ii*2 > nextCol) nextCol = thisCol + ii*2;
 
   /* Draw Solenoids and Flashers */
@@ -1176,13 +1741,22 @@ static VIDEO_UPDATE(core_status) {
 
   {
     BMTYPE **line = &lines[locals.firstSimRow + startRow];
-    UINT64 allSol = core_getAllSol();
-    for (ii = 0; ii < CORE_FIRSTCUSTSOL+core_gameData->hw.custSol; ii++) {
-      line[(ii/8)*2][thisCol + (ii%8)*2] = dotColor[allSol & 0x01];
-      allSol >>= 1;
+    if (options.usemodsol & (CORE_MODOUT_ENABLE_PHYSOUT_SOLENOIDS | CORE_MODOUT_ENABLE_MODSOL | CORE_MODOUT_FORCE_ON))
+    {
+      float state[CORE_MODOUT_SOL_MAX];
+      core_getAllPhysicSols(state);
+      for (ii = 0; ii < coreGlobals.nSolenoids; ii++) {
+         line[(ii / 8) * 2][thisCol + (ii % 8) * 2] = 64 + (int) (15 * state[ii]);
+      }
     }
-    osd_mark_dirty(thisCol, locals.firstSimRow + startRow, thisCol + 16,
-        locals.firstSimRow + startRow + 16);
+    else
+    {
+      UINT64 allSol = core_getAllSol();
+      for (ii = 0; ii < CORE_FIRSTCUSTSOL + core_gameData->hw.custSol; ii++) {
+        line[(ii / 8) * 2][thisCol + (ii % 8) * 2] = dotColor[allSol & 0x01];
+        allSol >>= 1;
+      }
+    }
     startRow += 16; if (thisCol + 16 > nextCol) nextCol = thisCol + 16;
   }
 
@@ -1197,23 +1771,21 @@ static VIDEO_UPDATE(core_status) {
   }
   else {
     BMTYPE **line = &lines[locals.firstSimRow + startRow];
-    bits = coreGlobals.diagnosticLed;
+    int bits = coreGlobals.diagnosticLed;
 
-    // Draw LEDS Vertically
+    // Draw LEDs Vertically
     if (coreData->diagLEDs & DIAGLED_VERTICAL) {
       for (ii = 0; ii < (coreData->diagLEDs & ~DIAGLED_VERTICAL); ii++) {
         line[0][thisCol + 3] = dotColor[bits & 0x01];
-	line += 2; bits >>= 1;
+        line += 2; bits >>= 1;
       }
-      osd_mark_dirty(thisCol + 3, locals.firstSimRow + startRow, thisCol + 4, locals.firstSimRow + startRow + ii*2);
       startRow += ii*2; if (thisCol + 4 > nextCol) nextCol = thisCol + 4;
     }
-    else { // Draw LEDS Horizontally
+    else { // Draw LEDs Horizontally
       for (ii = 0; ii < coreData->diagLEDs; ii++) {
-	line[0][thisCol + ii*2] = dotColor[bits & 0x01];
+        line[0][thisCol + ii*2] = dotColor[bits & 0x01];
         bits >>= 1;
       }
-      osd_mark_dirty(thisCol, locals.firstSimRow + startRow, thisCol + ii*2, locals.firstSimRow + startRow + 1);
       startRow += 1; if (thisCol + ii*2 > nextCol) nextCol = thisCol + ii*2;
     }
   }
@@ -1223,13 +1795,17 @@ static VIDEO_UPDATE(core_status) {
     if (startRow + 2 >= locals.maxSimRows) { startRow = 0; thisCol = nextCol + 5; }
 
     for (ii = 0; ii < CORE_MAXGI; ii++)
-	{
-	  if(coreGlobals.gi[ii]==8)
-		lines[locals.firstSimRow + startRow][thisCol + ii*2] = dotColor[1];
-	  else
-		lines[locals.firstSimRow + startRow][thisCol + ii*2] = 64+(coreGlobals.gi[ii]<<1);
-	}
-    osd_mark_dirty(thisCol, locals.firstSimRow + startRow, thisCol + ii*2, locals.firstSimRow + startRow + 1);
+    {
+      if (options.usemodsol & (CORE_MODOUT_ENABLE_PHYSOUT_GI | CORE_MODOUT_FORCE_ON))
+      {
+        UINT8 v = saturatedByte(coreGlobals.physicOutputState[CORE_MODOUT_GI0 + ii].value);
+        lines[locals.firstSimRow + startRow][thisCol + ii * 2] = 64 + (v >> 4);
+      }
+      else if (coreGlobals.gi[ii] == 8)
+        lines[locals.firstSimRow + startRow][thisCol + ii*2] = dotColor[1];
+      else
+        lines[locals.firstSimRow + startRow][thisCol + ii*2] = 64+(coreGlobals.gi[ii]<<1);
+    }
   }
   if (coreGlobals.simAvail) sim_draw(locals.firstSimRow);
   /*-- draw game specific mechanics --*/
@@ -1272,7 +1848,7 @@ int core_getSwCol(int colEn) {
   if (colEn) {
     while ((colEn & 0x01) == 0) {
       colEn >>= 1;
-      ii += 1;
+      ii++;
     }
   }
   return coreGlobals.swMatrix[ii];
@@ -1283,8 +1859,18 @@ int core_getSwCol(int colEn) {
 /-----------------------*/
 void core_setSw(int swNo, int value) {
   if (coreData->sw2m) swNo = coreData->sw2m(swNo); else swNo = (swNo/10)*8+(swNo%10-1);
+  //fprintf(stderr,"\nPinMAME switch %d",swNo);
   coreGlobals.swMatrix[swNo/8] &= ~(1<<(swNo%8)); /* clear the bit first */
+#ifdef PROC_SUPPORT
+	if (coreGlobals.p_rocEn) {
+		coreGlobals.swMatrix[swNo/8] |=  ((value ? 0xff : 0) ^ 0) & (1<<(swNo%8));
+	} else {
+#endif
+
   coreGlobals.swMatrix[swNo/8] |=  ((value ? 0xff : 0) ^ coreGlobals.invSw[swNo/8]) & (1<<(swNo%8));
+#ifdef PROC_SUPPORT
+	}
+#endif
 }
 
 /*-------------------------
@@ -1310,10 +1896,10 @@ void core_updInvSw(int swNo, int inv) {
 /--------------------------------------*/
 int core_getSol(int solNo) {
   if (solNo <= 28)
-    return coreGlobals.solenoids & CORE_SOLBIT(solNo);
+    return coreGlobals.nSolenoids && (options.usemodsol & (CORE_MODOUT_ENABLE_PHYSOUT_SOLENOIDS | CORE_MODOUT_ENABLE_MODSOL | CORE_MODOUT_FORCE_ON)) ? saturatedByte(coreGlobals.physicOutputState[CORE_MODOUT_SOL0 + solNo - 1].value) : coreGlobals.solenoids & CORE_SOLBIT(solNo);
   else if (solNo <= 32) { // 29-32
     if (core_gameData->gen & GEN_ALLS11)
-      return coreGlobals.solenoids & CORE_SOLBIT(solNo);
+      return coreGlobals.nSolenoids && (options.usemodsol & (CORE_MODOUT_ENABLE_PHYSOUT_SOLENOIDS | CORE_MODOUT_ENABLE_MODSOL | CORE_MODOUT_FORCE_ON)) ? saturatedByte(coreGlobals.physicOutputState[CORE_MODOUT_SOL0 + solNo - 1].value) : coreGlobals.solenoids & CORE_SOLBIT(solNo);
     else if (core_gameData->gen & GEN_ALLWPC) // GI circuits
       return coreGlobals.solenoids2 & (1<<(solNo-29+8)); // GameOn
   }
@@ -1331,10 +1917,10 @@ int core_getSol(int solNo) {
     }
   }
   else if (solNo <= 44) { // 37-44 WPC95 & S11 extra
-    if (core_gameData->gen & (GEN_WPC95|GEN_WPC95DCS))
-      return coreGlobals.solenoids & (1<<((solNo - 13)|4));
+    if (core_gameData->gen & (GEN_WPC95|GEN_WPC95DCS)) // Duplicated in 37..40 / 41..44, so always read from 41..44 (hence the |4 in the index/mask)
+      return coreGlobals.nSolenoids && (options.usemodsol & (CORE_MODOUT_ENABLE_PHYSOUT_SOLENOIDS | CORE_MODOUT_ENABLE_MODSOL | CORE_MODOUT_FORCE_ON)) ? saturatedByte(coreGlobals.physicOutputState[CORE_MODOUT_SOL0 + ((solNo - 13) | 4)].value) : coreGlobals.solenoids & (1<<((solNo - 13)|4));
     if (core_gameData->gen & GEN_ALLS11)
-      return coreGlobals.solenoids2 & (1<<(solNo - 37 + 8));
+      return coreGlobals.nSolenoids && (options.usemodsol & (CORE_MODOUT_ENABLE_PHYSOUT_SOLENOIDS | CORE_MODOUT_ENABLE_MODSOL | CORE_MODOUT_FORCE_ON)) ? saturatedByte(coreGlobals.physicOutputState[CORE_MODOUT_SOL0 + 32 + solNo - 37 + 8].value) : coreGlobals.solenoids2 & (1<<(solNo - 37 + 8));
   }
   else if (solNo <= 48) { // 45-48 Lower flippers
     int mask = 1<<(solNo - 45);
@@ -1375,17 +1961,17 @@ UINT64 core_getAllSol(void) {
     UINT64 tmp = coreGlobals.solenoids & 0xf0000000;
     sol |= (tmp<<12)|(tmp<<8);
   }
-  if (core_gameData->gen & (GEN_ALLS11|GEN_SAM)) // 37-44 S11, SAM extra
+  if (core_gameData->gen & (GEN_ALLS11|GEN_SAM|GEN_SPA)) // 37-44 S11, SAM extra
     sol |= ((UINT64)(coreGlobals.solenoids2 & 0xff00))<<28;
   { // 33-36, 45-48 flipper solenoids
     UINT8 lFlip = (coreGlobals.solenoids2 & (CORE_LRFLIPSOLBITS|CORE_LLFLIPSOLBITS));
     UINT8 uFlip = (coreGlobals.solenoids2 & (CORE_URFLIPSOLBITS|CORE_ULFLIPSOLBITS));
     // hold coil is set if either coil is set
-    lFlip = lFlip | ((lFlip & 0x05)<<1);
+    lFlip |= (lFlip & 0x05)<<1;
     if (core_gameData->hw.flippers & FLIP_SOL(FLIP_UR))
-      uFlip = uFlip | ((uFlip & 0x10)<<1);
+      uFlip |= (uFlip & 0x10)<<1;
     if (core_gameData->hw.flippers & FLIP_SOL(FLIP_UL))
-      uFlip = uFlip | ((uFlip & 0x40)<<1);
+      uFlip |= (uFlip & 0x40)<<1;
     sol |= (((UINT64)lFlip)<<44) | (((UINT64)uFlip)<<28);
   }
   /*-- simulated --*/
@@ -1394,7 +1980,6 @@ UINT64 core_getAllSol(void) {
   if ( core_gameData->hw.getSol ) {
     UINT64 bit = ((UINT64)1)<<(CORE_FIRSTCUSTSOL-1);
     int ii;
-
     for (ii = 0; ii < core_gameData->hw.custSol; ii++) {
       sol |= core_gameData->hw.getSol(CORE_FIRSTCUSTSOL + ii) ? bit : 0;
       bit <<= 1;
@@ -1403,11 +1988,71 @@ UINT64 core_getAllSol(void) {
   return sol;
 }
 
+/*-------------------------------------------------
+/  Get the modulated value of all solenoids in the provided array
+/--------------------------------------------------*/
+void core_getAllPhysicSols(float* const state)
+{
+  assert(coreGlobals.nSolenoids && (options.usemodsol & (CORE_MODOUT_ENABLE_PHYSOUT_SOLENOIDS | CORE_MODOUT_ENABLE_MODSOL | CORE_MODOUT_FORCE_ON)));
+  memset(state, 0, CORE_MODOUT_SOL_MAX * sizeof(float)); // To avoid reporting garbage states for unused solenoid slots
+  /*-- 1..32, hardware solenoids --*/
+  if (core_gameData->gen & GEN_ALLWPC) {
+    for (int i = 0; i < 28; i++)
+      state[i] = coreGlobals.physicOutputState[CORE_MODOUT_SOL0 + i].value;
+    // 29..32 GameOn (not modulated, stored in 0x0F00 of solenoids2)
+    for (int i = 28; i < 32; i++)
+      state[i] = coreGlobals.solenoids2 & (1 << (i - 28 + 8)) ? 1.0f : 0.0f;
+  }
+  else
+    for (int i = 0; i < 32; i++)
+      state[i] = coreGlobals.physicOutputState[CORE_MODOUT_SOL0 + i].value;
+  /*-- 33..36 upper flipper solenoids (not modulated for the time being) --*/
+  {
+    UINT8 uFlip = (coreGlobals.solenoids2 & (CORE_URFLIPSOLBITS | CORE_ULFLIPSOLBITS));
+    if (core_gameData->hw.flippers & FLIP_SOL(FLIP_UR))
+      uFlip = uFlip | ((uFlip & 0x10)<<1);
+    if (core_gameData->hw.flippers & FLIP_SOL(FLIP_UL))
+      uFlip = uFlip | ((uFlip & 0x40)<<1);
+    state[32] = uFlip & 0x10 ? 1.0f : 0.0f;
+    state[33] = uFlip & 0x20 ? 1.0f : 0.0f;
+    state[34] = uFlip & 0x40 ? 1.0f : 0.0f;
+    state[35] = uFlip & 0x80 ? 1.0f : 0.0f;
+  }
+  /*-- 37..44, extra solenoids --*/
+  if (core_gameData->gen & (GEN_WPC95 | GEN_WPC95DCS)) { // 37-44 WPC95 extra (duplicated 37..40 / 41..44)
+    for (int i = 28; i < 32; i++)
+    {
+      state[i +  8] = coreGlobals.physicOutputState[CORE_MODOUT_SOL0 + i].value;
+      state[i + 12] = coreGlobals.physicOutputState[CORE_MODOUT_SOL0 + i].value;
+    }
+  }
+  else if (core_gameData->gen & (GEN_ALLS11 | GEN_SAM | GEN_SPA)) // 37-44 S11, SAM extra
+    for (int i = 40; i < 48; i++)
+      state[i - 4] = coreGlobals.physicOutputState[CORE_MODOUT_SOL0 + i].value;
+  /*-- 45..48 lower flipper solenoids (not modulated for the time being) --*/
+  {
+    UINT8 lFlip = (coreGlobals.solenoids2 & (CORE_LRFLIPSOLBITS|CORE_LLFLIPSOLBITS));
+    lFlip |= (lFlip & 0x05)<<1; // hold coil is set if either coil is set
+    state[44] = lFlip & 0x01 ? 1.0f : 0.0f;
+    state[45] = lFlip & 0x02 ? 1.0f : 0.0f;
+    state[46] = lFlip & 0x04 ? 1.0f : 0.0f;
+    state[47] = lFlip & 0x08 ? 1.0f : 0.0f;
+  }
+  /*-- 49..50 simulated --*/
+  state[48] = sim_getSol(49) ? 1.0f : 0.0f;
+  //state[49] = 0.0f; // unused reserved simulated solenoid
+  /*-- 51..66 custom --*/
+  for (int i = 0; i < core_gameData->hw.custSol; i++) {
+    int sol = CORE_FIRSTCUSTSOL - 1 + i;
+    state[sol] = sol < coreGlobals.nSolenoids ? coreGlobals.physicOutputState[CORE_MODOUT_SOL0 + sol].value : (core_gameData->hw.getSol ? (core_gameData->hw.getSol(sol + 1) ? 1.0f : 0.0f) : 0.0f);
+  }
+}
+
 /*---------------------------------------
 /  Get the status of a DIP bank (8 dips)
 /-----------------------------------------*/
 int core_getDip(int dipBank) {
-#ifdef VPINMAME
+#if defined(VPINMAME) || defined(LIBPINMAME)
   return vp_getDIP(dipBank);
 #else /* VPINMAME */
   return (readinputport(CORE_COREINPORT+1+dipBank/2)>>((dipBank & 0x01)*8))&0xff;
@@ -1417,55 +2062,132 @@ int core_getDip(int dipBank) {
 /*--------------------
 /   Draw a LED digit
 /---------------------*/
-static void drawChar(struct mame_bitmap *bitmap, int row, int col, UINT32 bits, int type, int dimming) {
+static void drawChar(struct mame_bitmap *bitmap, int row, int col, UINT16 seg_bits, int type, UINT8 dimming[16]) {
   const tSegData *s = &locals.segData[type];
-  int palSize = sizeof(core_palette)/3;
-  UINT32 pixel[21] = {0};
-  int kk,ll;
-  int pens[4][4] = {{             0, palSize-1-dimming, palSize-17-dimming, palSize-33-dimming },
-                    { COL_DMDOFF,    palSize-1-dimming, palSize-17-dimming, palSize-33-dimming },
-                    { COL_SEGAAOFF1, palSize-1-dimming, palSize-17-dimming, palSize-33-dimming },
-                    { COL_SEGAAOFF2, palSize-1-dimming, palSize-17-dimming, palSize-33-dimming }};
+  UINT32 pixel[20] = {0}; // max 20 rows
+  UINT16 dim[20][15] = {0}; // max 20 rows, 15 cols
+  static const int offPens[4] = { 0, COL_DMDOFF, COL_SEGAAOFF1, COL_SEGAAOFF2 };
+  int sb, kk, ll;
+  const int palSize = sizeof(core_palette) / 3;
+  for (sb = 1; seg_bits; sb++, seg_bits >>= 1) { // loop over each segment
+    if (seg_bits & 0x01) {
+#ifdef PROC_SUPPORT
+      if (coreGlobals.p_rocEn) {
+        if (pmoptions.alpha_on_dmd) {
+            /* Draw alphanumeric segments on the DMD */
+            switch (row) {
+               case 0:
+                  procDrawSegment(col/2, 3,sb-1);
+                  break;
+               case 21:
+                  // This is the ball/credit display on older Sys11
+                  // Push through an 11 as the row
+                  // number, the display routine will
+                  // take care of repositioning
+                  procDrawSegment(col/2,11,sb-1);
+                  break;
+               case 42:
+                  procDrawSegment(col/2,19,sb-1);
+                  break;
+               default:
+                  break;
+            }
+        }
+      }
+#endif
+      for (kk = 0; kk < s->rows; kk++)
+      {
+        pixel[kk] |= s->segs[kk][sb]; // 'sum' up anti-aliasing
 
-  for (kk = 1; bits; kk++, bits >>= 1) {
-    if (bits & 0x01)
-      for (ll = 0; ll < s->rows; ll++)
-        pixel[ll] |= s->segs[ll][kk];
+        // to combine this with dimming fill dim[][] with weighted AA/dimming of each segment
+        UINT32 p = pixel[kk]>>(30-2*s->cols);
+        if (dimming)
+          for (ll = 0; ll < s->cols; ll++, p >>= 2)
+            if (p & 0x03) // segment set?
+            {
+              const UINT16 tmp = 256 - dimming[sb - 1]; // 256 instead of 255 to exploit full range (as 0 is off state)
+              if (tmp > dim[kk][ll]) // always take largest value, to make the crude anti-aliasing work at least somehow per segment
+                dim[kk][ll] = tmp;
+            }
+      }
+    }
   }
+
   for (kk = 0; kk < s->rows; kk++) {
-    BMTYPE *line = &((BMTYPE **)(bitmap->line))[row+kk][col + s->cols];
-    // why don't the bitmap use the leftmost bits. i.e. size is limited to 15
+    BMTYPE * __restrict line = &((BMTYPE **)(bitmap->line))[row+kk][col + s->cols];
+    // size is limited to 15 cols
     UINT32 p = pixel[kk]>>(30-2*s->cols), np = s->segs[kk][0]>>(30-2*s->cols);
 
     for (ll = 0; ll < s->cols; ll++, p >>= 2, np >>= 2)
-      *(--line) = CORE_COLOR(pens[np & 0x03][p & 0x03]);
+    {
+      if (p & 0x03) // segment set?
+        *(--line) = dimming ? dim_LUT[(p & 0x03)-1][dim[kk][ll]] : Machine->pens[palSize - 33 + (3 - (p & 0x03))*16];
+      else
+        *(--line) = Machine->pens[offPens[np & 0x03]];
+    }
   }
-  osd_mark_dirty(col,row,col+s->cols,row+s->rows);
 }
+
 
 /*----------------------
 /  Initialize PinMAME
 /-----------------------*/
 static MACHINE_INIT(core) {
+#ifdef PROC_SUPPORT
+  char * yaml_filename = pmoptions.p_roc;
+#endif
+
   if (!coreData) { // first time
     /*-- init variables --*/
     memset(&coreGlobals, 0, sizeof(coreGlobals));
     memset(&locals, 0, sizeof(locals));
     memset(&locals.lastSeg, -1, sizeof(locals.lastSeg));
+    memset(&locals.lastSegDim, 0, sizeof(locals.lastSegDim));
     coreData = (struct pinMachine *)&Machine->drv->pinmame;
+    coreGlobals.flipperCoils = 0xFFFFFFFFFFFFFFFFull;
     //-- initialise timers --
     if (coreData->timers[0].callback) {
       int ii;
       for (ii = 0; ii < 5; ii++) {
         if (coreData->timers[ii].callback) {
           locals.timers[ii] = timer_alloc(coreData->timers[ii].callback);
-          timer_adjust(locals.timers[ii], TIME_IN_HZ(coreData->timers[ii].rate), 0, TIME_IN_HZ(coreData->timers[ii].rate));
+          if (coreData->timers[ii].rate > 0.) {
+            timer_adjust(locals.timers[ii], TIME_IN_HZ(coreData->timers[ii].rate), 0, TIME_IN_HZ(coreData->timers[ii].rate));
+          } else { // negative = fractional hz value, e.g. as usec
+            timer_adjust(locals.timers[ii], TIME_IN_USEC(-coreData->timers[ii].rate), 0, TIME_IN_USEC(-coreData->timers[ii].rate));
+          }
         }
       }
     }
     /*-- init switch matrix --*/
-    memcpy(&coreGlobals.invSw, core_gameData->wpc.invSw, sizeof(core_gameData->wpc.invSw));
+    memcpy(coreGlobals.invSw, core_gameData->wpc.invSw, sizeof(core_gameData->wpc.invSw));
     memcpy(coreGlobals.swMatrix, coreGlobals.invSw, sizeof(coreGlobals.invSw));
+#ifdef PROC_SUPPORT
+    /*-- P-ROC operation requires a YAML.  Disable P-ROC operation
+     * if no YAML is specified. --*/
+
+    coreGlobals.p_rocEn = strcmp(yaml_filename, "None") != 0;
+    if (coreGlobals.p_rocEn) {
+      /*-- Finish P-ROC initialization now that the sim is active. --*/
+      coreGlobals.p_rocEn = procIsActive();
+      /*-- If the initialization fails, disable the p-roc support --*/
+      if (!coreGlobals.p_rocEn) {
+        fprintf(stderr, "P-ROC initialization failed.  Disabling P-ROC support.\n");
+        // TODO: deInit P-ROC here?
+      }
+      else {
+        // read s11CreditDisplay, doubleAlpha and s11BallDisplay settings
+        procBallCreditDisplay();
+
+        // Added option to enable keyboard for direct switches to YAML
+        g_fHandleKeyboard = procKeyboardWanted();
+
+        // We don't want the PC to make the noises of pop bumpers etc
+        g_fHandleMechanics= 0;
+      }
+    }
+#endif
+
     /*-- masks bit used by flippers --*/
     {
       const int flip = core_gameData->hw.flippers;
@@ -1481,45 +2203,77 @@ static MACHINE_INIT(core) {
     locals.displaySize = pmoptions.dmd_compact ? 1 : 2;
     {
       UINT32 size = core_initDisplaySize(core_gameData->lcdLayout) >> 16;
-      if ((size > Machine->drv->screen_width) && (locals.displaySize > 1)) {
-  	/* force small display */
-  	locals.displaySize = 1;
-  	core_initDisplaySize(core_gameData->lcdLayout);
+      if (((int)size > Machine->drv->screen_width) && (locals.displaySize > 1)) {
+        /* force small display */
+        locals.displaySize = 1;
+        core_initDisplaySize(core_gameData->lcdLayout);
       }
     }
     /*-- Sound enabled ? */
-    if (((Machine->gamedrv->flags & GAME_NO_SOUND) == 0) && Machine->sample_rate)
+    if (((Machine->gamedrv->flags & GAME_NO_SOUND) == 0) && Machine->sample_rate != 0.)
       coreGlobals.soundEn = TRUE;
 
     /*-- init simulator --*/
     if (g_fHandleKeyboard && core_gameData->simData) {
       int inports[CORE_MAXPORTS];
       int ii;
-
       for (ii = 0; ii < CORE_COREINPORT+(coreData->coreDips+31)/16; ii++)
         inports[ii] = readinputport(ii);
 
       coreGlobals.simAvail = sim_init((sim_tSimData *)core_gameData->simData,
-                                         inports,CORE_COREINPORT+(coreData->coreDips+31)/16);
+                                      inports,CORE_COREINPORT+(coreData->coreDips+31)/16);
     }
+
+    /*-- default output types --*/
+    core_set_pwm_output_type(CORE_MODOUT_SOL0, CORE_MODOUT_SOL_MAX, CORE_MODOUT_NONE);
+    core_set_pwm_output_type(CORE_MODOUT_SOL0 + CORE_FIRSTCUSTSOL - 1, CORE_MAXSOL - CORE_FIRSTCUSTSOL, CORE_MODOUT_SOL_CUSTOM);
+    core_set_pwm_output_type(CORE_MODOUT_GI0, CORE_MODOUT_GI_MAX, CORE_MODOUT_NONE);
+    core_set_pwm_output_type(CORE_MODOUT_LAMP0, CORE_MODOUT_LAMP_MAX, CORE_MODOUT_NONE);
+    core_set_pwm_output_type(CORE_MODOUT_SEG0, CORE_MODOUT_SEG_MAX, CORE_MODOUT_NONE);
+
     /*-- finally init the core --*/
     if (coreData->init) coreData->init();
+
+    /*-- init PWM integration (needs to be done after coreData->init() which defines the number of outputs and the physical model to be used on each output) --*/
+#ifndef LIBPINMAME // dimmed segments not wired at the moment?!
+#ifdef VPINMAME
+    if(g_fShowWinDMD || g_fShowPinDMD)
+#endif
+    // Enable PWM/dimmed segments for corresponding alphanum segment machines
+    if(((core_gameData->gen & GEN_GTS3) && GTS3locals.alphagen) || (core_gameData->gen & (GEN_WPCALPHA_1 | GEN_WPCALPHA_2)))
+      options.usemodsol |= CORE_MODOUT_ENABLE_PHYSOUT_ALPHASEGS; // use CORE_MODOUT_ENABLE_PHYSOUT_ALL to enable/test all physical/PWM outputs
+#endif
+#ifdef VPINMAME
+    // If physical output is enabled and supported, we add a 1ms timer that will service physical outputs requests from other threads, that is to say the VPinMAME client thread
+    // Note that physical outputs are also updated once per frame by the core machine driver video update callback.
+    if (((options.usemodsol & (CORE_MODOUT_ENABLE_PHYSOUT_SOLENOIDS | CORE_MODOUT_ENABLE_MODSOL)) && coreGlobals.nSolenoids)
+     || ((options.usemodsol & CORE_MODOUT_ENABLE_PHYSOUT_LAMPS) && coreGlobals.nLamps)
+     || ((options.usemodsol & CORE_MODOUT_ENABLE_PHYSOUT_GI) && coreGlobals.nGI)
+     || ((options.usemodsol & CORE_MODOUT_ENABLE_PHYSOUT_ALPHASEGS) && coreGlobals.nAlphaSegs)
+     ||  (options.usemodsol & CORE_MODOUT_FORCE_ON))
+      timer_pulse(TIME_IN_HZ(1000), FALSE, core_update_pwm_outputs);
+#endif
+
+    /*-- init bulb model LUTs --*/
+    bulb_init();
+
     /*-- init sound commander --*/
     snd_cmd_init();
   }
   /*-- now reset everything --*/
   if (coreData->reset) coreData->reset();
   mech_emuInit();
-  OnStateChange(1); /* We have a lift-off */
-
-/* TOM: this causes to draw the static sim text */
-  schedule_full_refresh();
 
 #ifdef VPINMAME
   // DMD USB Init
   if(g_fShowPinDMD && !time_to_reset)
-	pindmdInit();
+    pindmdInit(g_szGameName, core_gameData->gen, &pmoptions);
 #endif
+
+  OnStateChange(1); /* We have a lift-off */
+
+/* TOM: this causes to draw the static sim text */
+  schedule_full_refresh();
 }
 
 static MACHINE_STOP(core) {
@@ -1528,7 +2282,21 @@ static MACHINE_STOP(core) {
 #ifdef VPINMAME
   // DMD USB Kill
   if(g_fShowPinDMD && !time_to_reset)
-	pindmdDeInit();
+    pindmdDeInit();
+#endif
+
+#if defined(VPINMAME) || defined(LIBPINMAME)
+  g_raw_dmdx = ~0u;
+  g_raw_dmdy = ~0u;
+
+  currbuffer = buffer1;
+  oldbuffer = NULL;
+  raw_dmdoffs = 0;
+  has_DMD_Video = 0;
+
+  g_raw_gtswpc_dmdframes = 0;
+
+  g_needs_DMD_update = 1;
 #endif
 
   mech_emuExit();
@@ -1539,14 +2307,19 @@ static MACHINE_STOP(core) {
       timer_remove(locals.timers[ii]);
   }
   memset(locals.timers, 0, sizeof(locals.timers));
+#ifdef PROC_SUPPORT
+  if (coreGlobals.p_rocEn) {
+    procDeinitialize();
+  }
+#endif
   coreData = NULL;
 }
 
 static void core_findSize(const struct core_dispLayout *layout, int *maxX, int *maxY) {
   if (layout) {
     for (; layout->length; layout += 1) {
-      int tmpX = 0, tmpY = 0, type = layout->type & CORE_SEGMASK;
-#ifndef MAME_DEBUG
+      int tmpX, tmpY, type = layout->type & CORE_SEGMASK;
+#if defined(VPINMAME) && !defined(MAME_DEBUG)
       if (layout->type & CORE_NODISP) continue;
 #endif
       if (type == CORE_IMPORT)
@@ -1575,28 +2348,22 @@ static UINT32 core_initDisplaySize(const struct core_dispLayout *layout) {
   if (layout)
     core_findSize(layout, &maxX, &maxY);
   else if (locals.displaySize > 1)
-#ifdef VPINMAME
-    { maxX = 257; maxY = 65; }
-#else
     { maxX = 256; maxY = 65; }
-#endif /* VPINMAME */
   else
     { maxX = 129; maxY = 33; }
   locals.firstSimRow = maxY + 3;
   locals.maxSimRows = Machine->drv->screen_height - locals.firstSimRow;
   if ((!pmoptions.dmd_only) || (maxY >= Machine->drv->screen_height))
     maxY = Machine->drv->screen_height;
-#ifndef VPINMAME
-  if (maxX == 257) maxX = 256;
-#endif /* VPINMAME */
+  logerror("Resolution set to %dx%d\n", maxX, maxY);
   set_visible_area(0, maxX-1, 0, maxY-1);
   return (maxX<<16) | maxY;
 }
 
-void core_nvram(void *file, int write, void *mem, int length, UINT8 init) {
+void core_nvram(void *file, int write, void *mem, size_t length, UINT8 init) {
   if (write)     mame_fwrite(file, mem, length); /* save */
   else if (file) mame_fread(file,  mem, length); /* load */
-  else           memset(mem, init, length);     /* first time */
+  else           memset(mem, init, length);      /* first time */
   mech_nv(file, write); /* save mech positions */
   { /*-- Load/Save DIP settings --*/
     UINT8 dips[6];
@@ -1607,7 +2374,7 @@ void core_nvram(void *file, int write, void *mem, int length, UINT8 init) {
       mame_fwrite(file, dips, sizeof(dips));
     }
     else if (file) {
-      /* set the defaults (for compabilty with older versions) */
+      /* set the defaults (for compatibility with older versions) */
       dips[0] = readinputport(CORE_COREINPORT+1) & 0xff;
       dips[1] = readinputport(CORE_COREINPORT+1)>>8;
       dips[2] = readinputport(CORE_COREINPORT+2) & 0xff;
@@ -1620,7 +2387,7 @@ void core_nvram(void *file, int write, void *mem, int length, UINT8 init) {
 
     }
     else { // always get the default from the inports
-      /* coreData not initialised yet. Don't know exact number of DIPs */
+      /* coreData not initialized yet. Don't know exact number of DIPs */
       vp_setDIP(0, readinputport(CORE_COREINPORT+1) & 0xff);
       vp_setDIP(1, readinputport(CORE_COREINPORT+1)>>8);
       vp_setDIP(2, readinputport(CORE_COREINPORT+2) & 0xff);
@@ -1631,10 +2398,584 @@ void core_nvram(void *file, int write, void *mem, int length, UINT8 init) {
   }
 }
 
+/*---------- Emulation of physical/analog devices wired to binary outputs ----------*/
+
+/*
+ * Physical output emulation
+ * 
+ * This is meant to be used with any output and should allow to have a physical model whatever is connected to the binary PWM output. 
+ * Drivers must declare the number of outputs they drive of each type and push binary state change accordingly.
+ * The implementation is not thread safe. Since VPinMAME reads state asynchronously, the integration is only performed if requested
+ * asynchronously through a 1ms timer.
+ */
+
+//#define LOG_PWM_OUT (CORE_MODOUT_LAMP0 + 18)
+//#define LOG_PWM_OUT (CORE_MODOUT_SOL0 + CORE_FIRSTCUSTSOL - 1)
+//#define LOG_PWM_OUT (CORE_MODOUT_SEG0 + 0)
+//#define LOG_PWM_OUT (CORE_MODOUT_SOL0 + 16 - 1)
+
+// No operation output: just keep the last value directly defined by the driver
+void core_update_pwm_output_nop(const double now, const int index, const int isFlip)
+{
+}
+
+// Pulse output: simply report the binary output state without any processing
+void core_update_pwm_output_pulse(const double now, const int index, const int isFlip)
+{
+  core_tPhysicOutput* const output = &coreGlobals.physicOutputState[index];
+  const int state = (coreGlobals.binaryOutputState[index >> 3] >> (index & 7)) & 1;
+  output->value = state ? 1.f : 0.f;
+}
+
+// Custom output: update the value from the driver's custom getSol implementation
+void core_update_pwm_output_custom(const double now, const int index, const int isFlip)
+{
+  core_tPhysicOutput* const output = &coreGlobals.physicOutputState[index];
+  output->value = core_gameData->hw.getSol ? (core_gameData->hw.getSol(index - CORE_MODOUT_SOL0 + 1) ? 1.f : 0.f) : 0.f;
+  #ifdef LOG_PWM_OUT
+  if (index == LOG_PWM_OUT)
+    printf("Custom #%d t=%8.5f v=%f\n", index, now, output->value);
+  #endif
+}
+
+// Simple 2 state solenoid output
+// Flip to ON state is taken in account directly, while flip to OFF state is only reported after a delay to filter out any PWM pulses
+void core_update_pwm_output_sol_2_state(const double now, const int index, const int isFlip)
+{
+  core_tPhysicOutput* const output = &coreGlobals.physicOutputState[index];
+  const int state = (coreGlobals.binaryOutputState[index >> 3] >> (index & 7)) & 1;
+  const float prevValue = output->value;
+  if (isFlip)
+     output->state.sol.lastFlipTimestamp = now;
+  if (isFlip && state == 0) {
+     // If binary output is flipping to ON state, immediately retain and report the ON state
+     output->value = 1.0f;
+  }
+  else if ((float)(now - output->state.sol.lastFlipTimestamp) > output->state.sol.switchDownLatency) {
+     // Output is in a stable state (not PWMed since at least the defined switch down latency), just report its value
+     output->value = state ? 1.f : 0.f;
+  }
+  #ifdef LOG_PWM_OUT
+  if (index == LOG_PWM_OUT)
+    printf("Sol #%d t=%8.5f v=%f s=%s\n", index - CORE_MODOUT_SOL0 + 1, now, output->value, isFlip ? (state ? "x > -" : "- > x") : (state ? "    x" : "    -"));
+  #endif
+  // Apply the legacy solenoid behavior but directly updating coreGlobals.solenoids, avoiding the latency of legacy implementation which handles PWM
+  // by 'or'ing solenoids states for a few 'VBlank's then deliver them, 'VBlank' being a custom 60Hz interrupt not corresponding to any hardware.
+  if (output->state.sol.fastOn && (prevValue != output->value)) {
+    const int sol = index - CORE_MODOUT_SOL0;
+    const UINT32 state = output->value > 0.5f ? 1 : 0;
+    if (sol == (coreGlobals.flipperCoils & 0xFF))              // Lower Left Flipper coil
+      coreGlobals.solenoids2 = (coreGlobals.solenoids2 & ~0x04) | (state ? 0x04 : 0x00);
+    else if (sol == ((coreGlobals.flipperCoils >>  8) & 0xFF)) // Lower Right Flipper coil
+      coreGlobals.solenoids2 = (coreGlobals.solenoids2 & ~0x01) | (state ? 0x01 : 0x00);
+    else if (sol == ((coreGlobals.flipperCoils >> 16) & 0xFF)) // Upper Left Flipper coil
+      coreGlobals.solenoids2 = (coreGlobals.solenoids2 & ~0x40) | (state ? 0x40 : 0x00);
+    else if (sol == ((coreGlobals.flipperCoils >> 24) & 0xFF)) // Upper Right Flipper coil
+      coreGlobals.solenoids2 = (coreGlobals.solenoids2 & ~0x10) | (state ? 0x10 : 0x00);
+    else if (sol == ((coreGlobals.flipperCoils >> 32) & 0xFF)) // Lower Left Flipper Hold coil
+      coreGlobals.solenoids2 = (coreGlobals.solenoids2 & ~0x08) | (state ? 0x08 : 0x00);
+    else if (sol == ((coreGlobals.flipperCoils >> 40) & 0xFF)) // Lower Right Flipper Hold coil
+      coreGlobals.solenoids2 = (coreGlobals.solenoids2 & ~0x02) | (state ? 0x02 : 0x00);
+    else if (sol == ((coreGlobals.flipperCoils >> 48) & 0xFF)) // Upper Left Flipper Hold coil
+      coreGlobals.solenoids2 = (coreGlobals.solenoids2 & ~0x80) | (state ? 0x80 : 0x00);
+    else if (sol == ((coreGlobals.flipperCoils >> 56) & 0xFF)) // Upper Right Flipper Hold coil
+      coreGlobals.solenoids2 = (coreGlobals.solenoids2 & ~0x20) | (state ? 0x20 : 0x00);
+    if (sol < 28)
+      coreGlobals.solenoids = (coreGlobals.solenoids & ~(1 << sol)) | (state << sol);
+    else if (sol < 32) {
+      if (core_gameData->gen & (GEN_WPC95 | GEN_WPC95DCS)) {
+        coreGlobals.solenoids = (coreGlobals.solenoids & ~(1 << (sol +  8))) | (state << (sol + 8));
+        coreGlobals.solenoids = (coreGlobals.solenoids & ~(1 << (sol + 12))) | (state << (sol + 12));
+      }
+      else if ((core_gameData->gen & GEN_ALLWPC) == 0)
+        coreGlobals.solenoids = (coreGlobals.solenoids & ~(1 << sol)) | (state << sol);
+      else if (core_gameData->gen & (GEN_ALLS11 | GEN_SAM | GEN_SPA) && 40 <= sol && sol < 48)
+        coreGlobals.solenoids = (coreGlobals.solenoids & ~(1 << (sol - 4))) | (state << (sol - 4));
+    }
+  }
+}
+
+INLINE float cube(const float x)
+{
+  return x * x * x;
+}
+
+INLINE void core_eye_flicker_fusion(core_tPhysicOutput* output, const float emission)
+{
+   // Compute the perceived emission using a hacky simplified eye integration model
+   // We want to model the flicker-fusion eye/brain behavior while keeping the output latency low (filter delay) and limit the flicker (still keeping it, if it can be seen on the real machine)
+   // Note that videos can not be used as references for fitting the model since the camera perform a different luminance integration. Comparisons are only valid with real humans looking at real PWM/strobed incandescent bulbs.
+
+   // The model is a 4 steps RC-IIR/decay low pass filter (with decreased ringing/rippling).
+   // I tested it following advice from a scientific paper that suggested to use a single pass RC filter for the eye model in the flicker-fusion study (I can't find the paper anymore...)
+   //  (this is oversimplifying the human vision system complexity, but is mostly good enough for our use-case)
+   // The overall filter delay is around 20ms. The key factor is the 0.1 constant (lower it for more smoothness, increasing the filter delay), increase it for faster response but more flicker.
+   // From my test, when you look at a steady strobed lamp from a WPC (for example, lower left insert of Monster Bash), you can clearly see that the strobe is too slow (2ms/16ms) causing noticeable flicker.
+   // This behavior would be obtained with a value of around 0.15 but I don't think this is the expected behavior so we smooth it a bit more to limit the flicker more than what it is on a real pinball.
+   // By now we also use a log function to map intensities (resulting range [~0.07..~0.11], kinda magic). This is according to the Ferry-Porter law, where higher intensities need a larger frequency in order to make
+   //  flicker fusion work, and lower intensities already work at smaller ones. (main ff frequency range is roughly 20Hz to 70Hz, BUT with a lot of outlier situations)
+
+   const float eye_integration_old[3] = { output->state.bulb.eye_integration[0], output->state.bulb.eye_integration[1], output->state.bulb.eye_integration[2] };
+   const float eyeIntegrationFactor = /*0.1f*/ (0.07f + 0.02f * /*logf(output->value*6.f + 1.f) approx:*/ 2.f*sqrtf(fmaxf(output->value,0.f))), revEyeIntegrationFactor = 1.0f - eyeIntegrationFactor;
+   output->state.bulb.eye_integration[0] = (eyeIntegrationFactor * 0.5f) * (emission                +output->state.bulb.eye_emission_old) + revEyeIntegrationFactor * eye_integration_old[0];
+   output->state.bulb.eye_integration[1] = (eyeIntegrationFactor * 0.5f) * (output->state.bulb.eye_integration[0]+eye_integration_old[0]) + revEyeIntegrationFactor * eye_integration_old[1];
+   output->state.bulb.eye_integration[2] = (eyeIntegrationFactor * 0.5f) * (output->state.bulb.eye_integration[1]+eye_integration_old[1]) + revEyeIntegrationFactor * eye_integration_old[2];
+   output->value                         = (eyeIntegrationFactor * 0.5f) * (output->state.bulb.eye_integration[2]+eye_integration_old[2]) + revEyeIntegrationFactor * output->value;
+   output->state.bulb.eye_emission_old   = emission;
+
+#ifdef LOG_PWM_OUT
+   if (output == &coreGlobals.physicOutputState[LOG_PWM_OUT])
+     printf("Eye flicker fusion out=%0.5f in=%0.5f\n", output->value, emission);
+#endif
+}
+
+static const double BULB_INTEGRATION_PERIOD = 0.001; // do the integration in a loop of small steps
+
+// Incandescent bulb model based on Dulli Chandra Agrawal's and others publications (Heating-times of tungsten filament incandescent lamps).
+// The bulb is a varying resistor depending on filament temperature, which is heated by the current (Ohm's law)
+// and cooled by radiating energy (Planck & Stefan/Boltzmann laws). The visible emission power is then evaluated from the filament temperature.
+// Integration is performed after (roughly) 1ms delay in (roughly) 1ms cycles
+// isFlip signals a state flip, BUT we track this internally anyways now
+void core_update_pwm_output_bulb(const double now, const int index, const int isFlip)
+{
+  core_tPhysicOutput* output = &coreGlobals.physicOutputState[index];
+  const float U = (((coreGlobals.binaryOutputState[index >> 3] >> (index & 7)) & 1) ^ output->state.bulb.isReversed) ? output->state.bulb.U : 0.f;
+  const float dt_diff = (float)(output->state.bulb.integrationTimestamp - output->state.bulb.prevIntegrationTimestamp);
+
+  if(U != output->state.bulb.prevIntegrationValue        // state flip?
+     || dt_diff >= (float)(BULB_INTEGRATION_PERIOD*20.)) // or we waited long enough to get a stable discrete integration
+  {
+    // do the integration in a loop of small steps, roughly in BULB_INTEGRATION_PERIOD sized steps (but rounded up/down to have same sized cycles in here)
+    float countf = floorf(dt_diff*(float)(1./BULB_INTEGRATION_PERIOD) + 0.5f);
+    if(countf < 1.f) // single cycle/short pulses need to use the 'original' cycle time as a workaround
+      countf = 1.f;
+    const int count = (int)countf;
+    const float dt = dt_diff/countf;
+    for(int i = 0; i < count; ++i) {
+      // Keeps T within the range of the LUT (between room temperature and melt down point)
+      output->state.bulb.filament_temperature = output->state.bulb.filament_temperature < 293.0f ? 293.0f : output->state.bulb.filament_temperature > (float) BULB_T_MAX ? (float) BULB_T_MAX : output->state.bulb.filament_temperature;
+      const float Ut = output->state.bulb.isAC ? (1.41421356f * sinf((float)(60.0 * 2.0 * PI) * (float)(output->state.bulb.prevIntegrationTimestamp - coreGlobals.lastACZeroCrossTimeStamp)) * output->state.bulb.prevIntegrationValue) : output->state.bulb.prevIntegrationValue;
+      const float dT = dt * bulb_heat_up_factor(output->state.bulb.bulb, output->state.bulb.filament_temperature, Ut, output->state.bulb.serial_R);
+      output->state.bulb.filament_temperature += dT < 1000.0f ? dT : 1000.0f; // Limit initial current surge (1ms is a bit long when emulating this part of the heating)
+      core_eye_flicker_fusion(output, bulb_filament_temperature_to_emission(output->state.bulb.filament_temperature));
+      output->state.bulb.prevIntegrationTimestamp += dt;
+    }
+    output->state.bulb.prevIntegrationTimestamp = output->state.bulb.integrationTimestamp;
+    output->state.bulb.prevIntegrationValue = U;
+  }
+  // else: wait with the integration until some more time vanished or the state will flip
+  output->state.bulb.integrationTimestamp = now;
+
+  #ifdef LOG_PWM_OUT
+  if (index == LOG_PWM_OUT)
+    printf("Output #%d t=%8.5f T=%5.0f e=%0.3f V=%0.3f S=%s\n", index, now, output->state.bulb.filament_temperature, bulb_filament_temperature_to_emission(output->state.bulb.filament_temperature), output->value, ((coreGlobals.binaryOutputState[index >> 3] >> (index & 7)) & 1) ? "x" : "-");
+  #endif
+}
+
+// LED and VFD behave similarly:
+// - LED reacts almost instantly (<1us)
+// - The documentation for the behavior of Vacuum Fluorescent Display (used by alphanum displays) is sparse, so the integrator likely needs more work. From the searchs made, it appears that:
+//   - the relative brightness (in steady state) is linear to PWM duty ratio.
+//   - the off -> on speed is very short (below 1ms), therefore ignored
+//   - the on -> off, called persistence depends a lot on used phosphor, for blue VFD uses P11 (0.5ms decay), green VFD uses P24 (0.01ms decay), therefore ignored too
+//
+// Sources:
+// - https://en.wikipedia.org/wiki/Phosphor has a large phosphor chart
+// - https://www.noritake-elec.com/technology/general-technical-information/vfd-operation states a linear relation between PWM and relative brightness
+// - http://www.futabahk.com.hk/FTS/-%20FTP_DataBase/Docs_05TechDocs/VFD/AN-1103A-EN%20%20VFD%20Characteristics%20and%20Operation%20Guide%20(EN).pdf states the same
+// isFlip signals a state flip, BUT we track this internally anyways now
+void core_update_pwm_output_led(const double now, const int index, const int isFlip)
+{
+  core_tPhysicOutput* output = &coreGlobals.physicOutputState[index];
+  const int state = (coreGlobals.binaryOutputState[index >> 3] >> (index & 7)) & 1;
+  const float power = state ? output->state.bulb.relative_brightness : 0.f;
+  const float dt_diff = (float)(output->state.bulb.integrationTimestamp - output->state.bulb.prevIntegrationTimestamp);
+
+  if(power != output->state.bulb.prevIntegrationValue    // state flip?
+     || dt_diff >= (float)(BULB_INTEGRATION_PERIOD*20.)) // or we waited long enough to get a stable discrete integration
+  {
+    // do the integration in a loop of small steps, roughly in BULB_INTEGRATION_PERIOD sized steps (but rounded up/down to have same sized cycles in here)
+    float countf = floorf(dt_diff*(float)(1./BULB_INTEGRATION_PERIOD) + 0.5f);
+    if(countf < 1.f) // single cycle/short pulses need to use the 'original' cycle time as a workaround
+      countf = 1.f;
+    const int count = (int)countf;
+    const float dt = dt_diff/countf;
+    const float dt_ratio = dt*(float)(1./BULB_INTEGRATION_PERIOD);
+    const float emission = output->state.bulb.prevIntegrationValue * /*powf(dt_ratio,(float)(1./1.3)) approx:*/ cube(sqrtf(sqrtf(dt_ratio))); // pow boosts the emission artificially a bit, especially for GTS3/WPC alphaseg, as the power-on cycle is somehow too short?!?
+    for(int i = 0; i < count; ++i)
+      core_eye_flicker_fusion(output, emission);
+
+    // No real need to do this anymore, rather let the low pass filter over/undershoot to be more 'correct'
+    /*if (output->state.bulb.prevIntegrationValue != 0.f && output->value > (float)(254./255.)) // Stabilize Steady-On state
+      output->value = 1.f;
+    else if (output->state.bulb.prevIntegrationValue == 0.f && output->value < (float)(1./255.)) // Stabilize Steady-Off state
+      output->value = 0.f;*/
+    output->state.bulb.prevIntegrationTimestamp = output->state.bulb.integrationTimestamp;
+    output->state.bulb.prevIntegrationValue = power;
+  }
+  // else: wait with the integration until some more time vanished or the state will flip
+  output->state.bulb.integrationTimestamp = now;
+
+  #ifdef LOG_PWM_OUT
+  if (index == LOG_PWM_OUT)
+    printf("Output #%d t=%8.5f T=%5.0f e=%0.3f V=%0.3f S=%s\n", index, now, output->state.bulb.filament_temperature, bulb_filament_temperature_to_emission(output->state.bulb.filament_temperature), output->value, state ? "x" : "-");
+  #endif
+}
+
+// This can be called from any thread to request an update of all integrated outputs
+// The call is non blocking: the main PinMAME thread will schedule an update and return immediately
+void core_request_pwm_output_update()
+{
+	locals.pwmUpdateRequested = TRUE;
+}
+
+// Actually perform PWM integration on all outputs:
+// - called periodically with forceUpdate=FALSE to check if a client thread requested the update
+// - or called with forceUpdate=TRUE when used in a single threaded environment
+// Note that the need of explicit integration call depends on the output type. For example, some solenoids
+// have immediate response and do not rely on integration.
+void core_update_pwm_outputs(int forceUpdate)
+{
+   if (locals.pwmUpdateRequested || forceUpdate) {
+	   locals.pwmUpdateRequested = FALSE;
+	   const double now = timer_get_time();
+	   if (options.usemodsol & (CORE_MODOUT_ENABLE_PHYSOUT_LAMPS | CORE_MODOUT_FORCE_ON))
+	    for (int i = 0; i < coreGlobals.nLamps; i++)
+	      coreGlobals.physicOutputState[CORE_MODOUT_LAMP0 + i].integrator(now, CORE_MODOUT_LAMP0 + i, FALSE);
+	   if (options.usemodsol & (CORE_MODOUT_ENABLE_PHYSOUT_GI | CORE_MODOUT_FORCE_ON))
+	     for (int i = 0; i < coreGlobals.nGI; i++)
+	      coreGlobals.physicOutputState[CORE_MODOUT_GI0 + i].integrator(now, CORE_MODOUT_GI0 + i, FALSE);
+	   if (options.usemodsol & (CORE_MODOUT_ENABLE_PHYSOUT_SOLENOIDS | CORE_MODOUT_ENABLE_MODSOL | CORE_MODOUT_FORCE_ON))
+	     for (int i = 0; i < coreGlobals.nSolenoids; i++)
+	       coreGlobals.physicOutputState[CORE_MODOUT_SOL0 + i].integrator(now, CORE_MODOUT_SOL0 + i, FALSE);
+	   if (options.usemodsol & (CORE_MODOUT_ENABLE_PHYSOUT_ALPHASEGS | CORE_MODOUT_FORCE_ON))
+	     for (int i = 0; i < coreGlobals.nAlphaSegs; i++)
+	       coreGlobals.physicOutputState[CORE_MODOUT_SEG0 + i].integrator(now, CORE_MODOUT_SEG0 + i, FALSE);
+   }
+}
+
+void core_set_pwm_output_type(int startIndex, int count, int type)
+{
+  for (int i = startIndex; i < startIndex + count; i++) {
+    memset(&(coreGlobals.physicOutputState[i]), 0, sizeof(core_tPhysicOutput));
+    coreGlobals.physicOutputState[i].type = type;
+    switch (type) {
+    case CORE_MODOUT_NONE:
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_nop;
+      break;
+    case CORE_MODOUT_PULSE:
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_pulse;
+      break;
+    case CORE_MODOUT_SOL_CUSTOM:
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_custom;
+      break;
+    case CORE_MODOUT_SOL_2_STATE:
+      coreGlobals.physicOutputState[i].state.sol.fastOn = TRUE;
+      // TODO 60ms is likely too much. For example for Stern SAM, the sequence is 40ms pulse to lift flipper then 1ms pulse every 12ms to hold.
+      coreGlobals.physicOutputState[i].state.sol.switchDownLatency = 0.060f;
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_sol_2_state;
+      break;
+    case CORE_MODOUT_LEGACY_SOL_2_STATE:
+      coreGlobals.physicOutputState[i].state.sol.fastOn = FALSE;
+      // TODO 60ms is likely too much. For example for Stern SAM, the sequence is 40ms pulse to lift flipper then 1ms pulse every 12ms to hold.
+      coreGlobals.physicOutputState[i].state.sol.switchDownLatency = 0.060f;
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_sol_2_state;
+      break;
+    case CORE_MODOUT_BULB_44_5_7V_AC: // Sega/Stern Whitestar uses 5.7V AC wired to #44 bulbs for GI which leads to a (very slow) bulb equilibrium around 78% of the rated bulb brightness. Likely for less heat and longer bulb life ?
+      coreGlobals.physicOutputState[i].state.bulb.bulb = BULB_44;
+      coreGlobals.physicOutputState[i].state.bulb.U = 5.7f;
+      coreGlobals.physicOutputState[i].state.bulb.isAC = TRUE;
+      coreGlobals.physicOutputState[i].state.bulb.serial_R = 0.0f;
+      coreGlobals.physicOutputState[i].state.bulb.relative_brightness = 1.f;
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_bulb;
+      break;
+    case CORE_MODOUT_BULB_44_6_3V_AC: // AC bulb outputs used for GI strings. Voltage drop through WPC triacs are considered as neglectable.
+      coreGlobals.physicOutputState[i].state.bulb.bulb = BULB_44;
+      coreGlobals.physicOutputState[i].state.bulb.U = 6.3f;
+      coreGlobals.physicOutputState[i].state.bulb.isAC = TRUE;
+      coreGlobals.physicOutputState[i].state.bulb.serial_R = 0.0f;
+      coreGlobals.physicOutputState[i].state.bulb.relative_brightness = 1.f;
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_bulb;
+      break;
+    case CORE_MODOUT_BULB_44_6_3V_AC_REV: // Same but reversed through a relay (S11 hardware uses this for GI)
+      coreGlobals.physicOutputState[i].state.bulb.bulb = BULB_44;
+      coreGlobals.physicOutputState[i].state.bulb.U = 6.3f;
+      coreGlobals.physicOutputState[i].state.bulb.isAC = TRUE;
+      coreGlobals.physicOutputState[i].state.bulb.serial_R = 0.0f;
+      coreGlobals.physicOutputState[i].state.bulb.relative_brightness = 1.f;
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_bulb;
+      coreGlobals.physicOutputState[i].state.bulb.isReversed = TRUE;
+      break;
+    case CORE_MODOUT_BULB_47_6_3V_AC:
+      coreGlobals.physicOutputState[i].state.bulb.bulb = BULB_47;
+      coreGlobals.physicOutputState[i].state.bulb.U = 6.3f;
+      coreGlobals.physicOutputState[i].state.bulb.isAC = TRUE;
+      coreGlobals.physicOutputState[i].state.bulb.serial_R = 0.0f;
+      coreGlobals.physicOutputState[i].state.bulb.relative_brightness = 1.f;
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_bulb;
+      break;
+    case CORE_MODOUT_BULB_86_6_3V_AC:
+      coreGlobals.physicOutputState[i].state.bulb.bulb = BULB_86;
+      coreGlobals.physicOutputState[i].state.bulb.U = 6.3f;
+      coreGlobals.physicOutputState[i].state.bulb.isAC = TRUE;
+      coreGlobals.physicOutputState[i].state.bulb.serial_R = 0.0f;
+      coreGlobals.physicOutputState[i].state.bulb.relative_brightness = 1.f;
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_bulb;
+      break;
+    case CORE_MODOUT_BULB_44_18V_DC_WPC: // Strobed bulb, 18V switched through a TIP102 and a TIP107 (voltage drop supposed of 0.7V per semiconductor switch, datasheet states Vcesat=2V for I=3A), resistor from schematics (TZ, TOTAN, CFTBL, WPC95 general)
+      coreGlobals.physicOutputState[i].state.bulb.bulb = BULB_44;
+      coreGlobals.physicOutputState[i].state.bulb.U = 18.f - 0.7f - 0.7f;
+      coreGlobals.physicOutputState[i].state.bulb.isAC = FALSE;
+      coreGlobals.physicOutputState[i].state.bulb.serial_R = 0.22f;
+      coreGlobals.physicOutputState[i].state.bulb.relative_brightness = 1.f;
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_bulb;
+      break;
+    case CORE_MODOUT_BULB_44_20V_DC_GTS3: // Strobed bulb, Switched through MOSFETs (12P06 & 12N10L, no drop), serial 3,5 Ohms, then series with 1N4004 (0,7V drop) for bulbs / 120 Ohms with 1N4004 for LEDs, resistor from schematics (Cue Ball Wizard)
+      coreGlobals.physicOutputState[i].state.bulb.bulb = BULB_44;
+      coreGlobals.physicOutputState[i].state.bulb.U = 20.f - 0.7f;
+      coreGlobals.physicOutputState[i].state.bulb.isAC = FALSE;
+      coreGlobals.physicOutputState[i].state.bulb.serial_R = 3.5f;
+      coreGlobals.physicOutputState[i].state.bulb.relative_brightness = 1.f;
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_bulb;
+      break;
+    case CORE_MODOUT_BULB_44_18V_DC_S11: // Strobed bulb, 18V switched through ?, resistor from schematics (Guns'n Roses)
+      coreGlobals.physicOutputState[i].state.bulb.bulb = BULB_44;
+      coreGlobals.physicOutputState[i].state.bulb.U = 18.f;
+      coreGlobals.physicOutputState[i].state.bulb.isAC = FALSE;
+      coreGlobals.physicOutputState[i].state.bulb.serial_R = 4.3f;
+      coreGlobals.physicOutputState[i].state.bulb.relative_brightness = 1.f;
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_bulb;
+      break;
+    case CORE_MODOUT_BULB_44_18V_DC_SE: // Strobed bulb, 18V switched through VN02N (Solid State Relay, 0.4 Ohms resistor), a 19N06L MOSFET transistor (no drop) and a diode (0.7V drop) from Sega/Stern Whitestar schematics
+      coreGlobals.physicOutputState[i].state.bulb.bulb = BULB_44;
+      coreGlobals.physicOutputState[i].state.bulb.U = 18.f - 0.7f;
+      coreGlobals.physicOutputState[i].state.bulb.isAC = FALSE;
+      coreGlobals.physicOutputState[i].state.bulb.serial_R = 0.4f;
+      coreGlobals.physicOutputState[i].state.bulb.relative_brightness = 1.f;
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_bulb;
+      break;
+    case CORE_MODOUT_BULB_44_20V_DC_CC: // Strobed bulb, 20V switched through VN02 (Solid State Relay, 0.4 Ohms resistor), a STP20N10L MOSFET transistor (no drop), a 0.02 Ohms resistor, and 2x 1N4004 diode (0.7V drop) from Capcom schematics
+      coreGlobals.physicOutputState[i].state.bulb.bulb = BULB_44;
+      coreGlobals.physicOutputState[i].state.bulb.U = 20.f - 0.7f - 0.7f;
+      coreGlobals.physicOutputState[i].state.bulb.isAC = FALSE;
+      coreGlobals.physicOutputState[i].state.bulb.serial_R = 0.4f + 0.02f;
+      coreGlobals.physicOutputState[i].state.bulb.relative_brightness = 1.f;
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_bulb;
+      break;
+    case CORE_MODOUT_BULB_89_20V_DC_WPC: // Flasher 20V DC switched through a TIP102 (voltage drop supposed of 0.7V per semiconductor switch, datasheet states Vcesat=2V for I=3A), resistor from WPC schematics (TZ, TOTAN, CFTBL, WPC95 general)
+      coreGlobals.physicOutputState[i].state.bulb.bulb = BULB_89;
+      coreGlobals.physicOutputState[i].state.bulb.U = 20.f - 0.7f;
+      coreGlobals.physicOutputState[i].state.bulb.isAC = FALSE;
+      coreGlobals.physicOutputState[i].state.bulb.serial_R = 0.12f;
+      coreGlobals.physicOutputState[i].state.bulb.relative_brightness = 1.f;
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_bulb;
+      break;
+    case CORE_MODOUT_BULB_89_20V_DC_GTS3: // Flasher 20V DC switched through a 12N10L Mosfet (no voltage drop), resistor from schematics (Cue Ball Wizard)
+      coreGlobals.physicOutputState[i].state.bulb.bulb = BULB_89;
+      coreGlobals.physicOutputState[i].state.bulb.U = 20.f;
+      coreGlobals.physicOutputState[i].state.bulb.isAC = FALSE;
+      coreGlobals.physicOutputState[i].state.bulb.serial_R = 0.3f;
+      coreGlobals.physicOutputState[i].state.bulb.relative_brightness = 1.f;
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_bulb;
+      break;
+    case CORE_MODOUT_BULB_89_32V_DC_S11: // Flasher 32V DC switched through a TIP 122 (Vcesat max= 2 to 4V, 1V used here) with a 3 Ohms serial resistor and a diode (1V voltage drop), resistor from board photos
+      coreGlobals.physicOutputState[i].state.bulb.bulb = BULB_89;
+      coreGlobals.physicOutputState[i].state.bulb.U = 32.f - 1.0f - 1.0f;
+      coreGlobals.physicOutputState[i].state.bulb.isAC = FALSE;
+      coreGlobals.physicOutputState[i].state.bulb.serial_R = 3.f;
+      coreGlobals.physicOutputState[i].state.bulb.relative_brightness = 1.f;
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_bulb;
+      break;
+    case CORE_MODOUT_BULB_89_25V_DC_S11: // Flasher 25V DC switched through a TIP 122 (Vcesat max= 2 to 4V, 1V used here) with a 1,5 Ohms serial resistor and a diode (1V voltage drop), from Police Force (and others) schematics
+      coreGlobals.physicOutputState[i].state.bulb.bulb = BULB_89;
+      coreGlobals.physicOutputState[i].state.bulb.U = 25.f - 1.0f - 1.0f;
+      coreGlobals.physicOutputState[i].state.bulb.isAC = FALSE;
+      coreGlobals.physicOutputState[i].state.bulb.serial_R = 1.5f;
+      coreGlobals.physicOutputState[i].state.bulb.relative_brightness = 1.f;
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_bulb;
+      break;
+    case CORE_MODOUT_LED:
+      coreGlobals.physicOutputState[i].state.bulb.relative_brightness = 1.f;
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_led;
+      break;
+    case CORE_MODOUT_LED_STROBE_1_10MS:
+      coreGlobals.physicOutputState[i].state.bulb.relative_brightness = 10.f / 1.f;
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_led;
+      break;
+    case CORE_MODOUT_LED_STROBE_1_5MS:
+       coreGlobals.physicOutputState[i].state.bulb.relative_brightness = 5.f / 1.f;
+       coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_led;
+       break;
+    case CORE_MODOUT_LED_STROBE_8_16MS:
+       coreGlobals.physicOutputState[i].state.bulb.relative_brightness = 16.f / 8.f;
+       coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_led;
+       break;
+    case CORE_MODOUT_VFD_STROBE_05_20MS:
+      coreGlobals.physicOutputState[i].state.bulb.relative_brightness = 20.f / 0.5f;
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_led;
+      break;
+    case CORE_MODOUT_VFD_STROBE_1_16MS:
+      coreGlobals.physicOutputState[i].state.bulb.relative_brightness = 16.f / 1.f;
+      coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_led;
+      break;
+    default: // Unimplemented integrator
+      logerror("Unsupported physical output #%d of type %d\n", i, type);
+      assert(FALSE);
+    }
+  }
+}
+
+void core_set_pwm_output_bulb(int startIndex, int count, int bulb, float U, int isAC, float serial_R, float relative_brightness)
+{
+  for (int i = startIndex; i < startIndex + count; i++) {
+    memset(&(coreGlobals.physicOutputState[i]), 0, sizeof(core_tPhysicOutput));
+    coreGlobals.physicOutputState[i].type = CORE_MODOUT_CUSTOM_INTEGRATOR;
+    coreGlobals.physicOutputState[i].state.bulb.bulb = bulb;
+    coreGlobals.physicOutputState[i].state.bulb.U = U;
+    coreGlobals.physicOutputState[i].state.bulb.isAC = isAC;
+    coreGlobals.physicOutputState[i].state.bulb.serial_R = serial_R;
+    coreGlobals.physicOutputState[i].state.bulb.relative_brightness = relative_brightness;
+    coreGlobals.physicOutputState[i].integrator = &core_update_pwm_output_bulb;
+  }
+}
+
+void core_set_pwm_output_types(int startIndex, int count, int* outputTypes)
+{
+  for (int i = 0; i < count; i++)
+    core_set_pwm_output_type(startIndex + i, 1, outputTypes[i]);
+}
+
+// Write binary state of outputs, taking care of PWM integration based on physical model of the connected device
+void core_write_pwm_output(int index, int count, UINT8 bitStates)
+{
+   if ((options.usemodsol & (CORE_MODOUT_ENABLE_PHYSOUT_ALL | CORE_MODOUT_ENABLE_MODSOL | CORE_MODOUT_FORCE_ON)) == 0)
+     return;
+   const double now = timer_get_time();
+   for (int i = 0; i < count; i++) {
+     const int pos = index >> 3, ofs = index & 7;
+     const int prevBit = (coreGlobals.binaryOutputState[pos] >> ofs) & 1, newBit = bitStates & 1;
+     if (prevBit != newBit) {
+       coreGlobals.physicOutputState[index].integrator(now, index, TRUE);
+       coreGlobals.binaryOutputState[pos] ^= 1 << ofs;
+     }
+     bitStates = bitStates >> 1;
+     index++;
+   }
+}
+
+void core_write_pwm_output_8b(int index, UINT8 bitStates)
+{
+   if ((options.usemodsol & (CORE_MODOUT_ENABLE_PHYSOUT_ALL | CORE_MODOUT_ENABLE_MODSOL | CORE_MODOUT_FORCE_ON)) == 0)
+     return;
+   assert((index & 7) == 0);
+   UINT8 changeMask = coreGlobals.binaryOutputState[index >> 3] ^ bitStates;
+   if (changeMask) {
+     int pos = index;
+     const double now = timer_get_time();
+     while (changeMask) {
+       if (changeMask & 1)
+         coreGlobals.physicOutputState[pos].integrator(now, pos, TRUE);
+       changeMask >>= 1;
+       pos++;
+     }
+     coreGlobals.binaryOutputState[index >> 3] = bitStates;
+   }
+}
+
+void core_write_masked_pwm_output_8b(int index, UINT8 bitStates, UINT8 bitMask)
+{
+   if ((options.usemodsol & (CORE_MODOUT_ENABLE_PHYSOUT_ALL | CORE_MODOUT_ENABLE_MODSOL | CORE_MODOUT_FORCE_ON)) == 0)
+     return;
+   assert((index & 7) == 0);
+   UINT8 changeMask = bitMask & (coreGlobals.binaryOutputState[index >> 3] ^ bitStates); // Identify differences
+   if (changeMask) {
+     int pos = index;
+     const double now = timer_get_time();
+     while (changeMask) {
+       if (changeMask & 1)
+         coreGlobals.physicOutputState[pos].integrator(now, pos, TRUE);
+       changeMask >>= 1;
+       pos++;
+     }
+     coreGlobals.binaryOutputState[index >> 3] = (coreGlobals.binaryOutputState[index >> 3] & ~bitMask) | (bitStates & bitMask);
+   }
+}
+
+// Write a 8xn lamp matrix, taking care of PWM integration based on physical model of connected device
+void core_write_pwm_output_lamp_matrix(int startIndex, UINT8 columns, UINT8 rows, int nCols)
+{
+   if (options.usemodsol & (CORE_MODOUT_ENABLE_PHYSOUT_LAMPS | CORE_MODOUT_FORCE_ON))
+   {
+      for (const int endIndex = startIndex + nCols * 8; startIndex < endIndex; columns >>= 1, startIndex += 8) {
+         if (columns & 1) {
+            coreGlobals.tmpLampMatrix[(startIndex - CORE_MODOUT_LAMP0) >> 3] |= rows;
+            core_write_pwm_output_8b(startIndex, rows);
+         }
+         else {
+            core_write_pwm_output_8b(startIndex, 0);
+         }
+      }
+   }
+   else {
+      core_setLamp(coreGlobals.tmpLampMatrix, columns << ((startIndex - CORE_MODOUT_LAMP0) / 8), rows);
+   }
+}
+
+//
+//
+//
+
+void core_sound_throttle_adj(int sIn, int *sOut, int buffersize, double samplerate)
+{
+	const int delta = (sIn >= *sOut) ? (sIn - *sOut) : (sIn + buffersize - *sOut);
+
+#ifdef DEBUG_SOUND
+	{
+		char tmp[161];
+		LARGE_INTEGER performance_count;
+		QueryPerformanceCounter(&performance_count);
+
+		sprintf(tmp, "snd clk: %llu in: %d out: %d size: %d delta %d", performance_count.QuadPart, sIn, *sOut, buffersize, delta);
+		DebugSound(tmp);
+	}
+#endif
+
+	if (delta > samplerate * 50 / 1000)
+	{
+		// Over 50ms delta and throttle didn't catch it fast enough.   Drop some samples, but not so
+		// much that we have to restart from a zero buffer.
+		*sOut = sIn - (int)(samplerate * 20 / 1000 + 0.5);
+		if (*sOut < 0)
+			*sOut += buffersize;
+
+		SetThrottleAdj(0);
+	}
+	else if (delta > samplerate * 35 / 1000)
+	{
+		SetThrottleAdj(-4);
+	}
+	else if (delta > samplerate * 25 / 1000)
+	{
+		SetThrottleAdj(-1);
+	}
+	else if (delta < samplerate * 10 / 1000)
+	{
+		SetThrottleAdj(10);
+	}
+	else if (delta < samplerate * 20 / 1000)
+	{
+		SetThrottleAdj(2);
+	}
+	else
+	{
+		SetThrottleAdj(0);
+	}
+}
+
 /*----------------------------------------------
 /  Add a timer when building the machine driver
 /-----------------------------------------------*/
-void machine_add_timer(struct InternalMachineDriver *machine, void (*func)(int), int rate) {
+void machine_add_timer(struct InternalMachineDriver *machine, void (*func)(int), double rate) {
   int ii;
   for (ii = 0; machine->pinmame.timers[ii].callback; ii++)
     ;
@@ -1646,7 +2987,7 @@ void machine_add_timer(struct InternalMachineDriver *machine, void (*func)(int),
 /  Default machine driver for all games
 /----------------------------------------*/
 MACHINE_DRIVER_START(PinMAME)
-  MDRV_VIDEO_ATTRIBUTES(VIDEO_TYPE_RASTER | VIDEO_SUPPORTS_DIRTY)
+  MDRV_VIDEO_ATTRIBUTES(VIDEO_TYPE_RASTER)
   MDRV_SCREEN_SIZE(CORE_SCREENX, CORE_SCREENY)
   MDRV_VISIBLE_AREA(0, CORE_SCREENX-1, 0, CORE_SCREENY-1)
   MDRV_PALETTE_INIT(core)

@@ -35,18 +35,22 @@
 #include <io.h>
 #include <driver.h>
 #include "M32Util.h"
-#include "bitmask.h"
-#include "screenshot.h"
-#include "mame32.h"
+#include "Bitmask.h"
+#include "Screenshot.h"
+#include "MAME32.h"
 #include "TreeView.h"
 #include "resource.h"
-#include "properties.h"
+#include "Properties.h"
 #include "options.h"
 #include "help.h"
 #include "dialogs.h"
 
 #ifdef _MSC_VER
 #include "msc.h"
+#endif
+
+#ifdef _WIN64
+ #define GWL_WNDPROC         (-4)
 #endif
 
 #define MAX_EXTRA_FOLDERS 256
@@ -189,8 +193,8 @@ void InitTree(LPFOLDERDATA lpFolderData, LPFILTER_ITEM lpFilterList)
 
 	/* this will subclass the treeview (where WM_DRAWITEM gets sent for
 	   the header control) */
-	g_lpTreeWndProc = (WNDPROC)(LONG)(int)GetWindowLong(GetTreeView(), GWL_WNDPROC);
-	SetWindowLong(GetTreeView(), GWL_WNDPROC, (LONG)TreeWndProc);
+	g_lpTreeWndProc = (WNDPROC)GetWindowLongPtr(GetTreeView(), GWL_WNDPROC);
+	SetWindowLongPtr(GetTreeView(), GWL_WNDPROC, (LONG_PTR)TreeWndProc);
 }
 
 void DestroyTree(HWND hWnd)
@@ -261,8 +265,7 @@ int FindGame(LPTREEFOLDER lpFolder, int nGame)
 // Called to re-associate games with folders
 void ResetWhichGamesInFolders(void)
 {
-	UINT	i, jj, k;
-	BOOL b;
+	UINT i, k;
 	int nGames = GetNumGames();
 
 	for (i = 0; i < numFolders; i++)
@@ -276,11 +279,12 @@ void ResetWhichGamesInFolders(void)
 			{
 				if (g_lpFolderData[k].m_pfnQuery || g_lpFolderData[k].m_bExpectedResult)
 				{
+					int jj;
 					SetAllBits(lpFolder->m_lpGameBits, FALSE);
 					for (jj = 0; jj < nGames; jj++)
 					{
 						// invoke the query function
-						b = g_lpFolderData[k].m_pfnQuery ? g_lpFolderData[k].m_pfnQuery(jj) : TRUE;
+						BOOL b = g_lpFolderData[k].m_pfnQuery ? g_lpFolderData[k].m_pfnQuery(jj) : TRUE;
 
 						// if we expect FALSE, flip the result
 						if (!g_lpFolderData[k].m_bExpectedResult)
@@ -655,7 +659,7 @@ void CreateAllChildFolders(void)
 void ResetTreeViewFolders(void)
 {
 	HWND hTreeView = GetTreeView();
-	int i;
+	UINT i;
 	TVITEM tvi;
 	TVINSERTSTRUCT	tvs;
 
@@ -663,7 +667,7 @@ void ResetTreeViewFolders(void)
 
 	// currently "cached" parent
 	HTREEITEM hti_parent = NULL;
-	int index_parent = -1;			
+	int index_parent = -1;
 
 	TreeView_DeleteAllItems(hTreeView);
 
@@ -1304,7 +1308,10 @@ static int InitExtraFolders(void)
 	struct stat     stat_buffer;
 	struct _finddata_t files;
 	int             i, count = 0;
-	long            hLong;
+#ifdef __GNUC__
+#define intptr_t long
+#endif
+	intptr_t        hLong;
 	char*           ext;
 	char            buf[256];
 	char            curdir[MAX_PATH];
@@ -1385,7 +1392,11 @@ static int InitExtraFolders(void)
 				}
 				fclose(fp);
 
+#ifdef __GNUC__
 				strcpy(buf, files.name);
+#else
+				strcpy_s(buf, sizeof(buf), files.name);
+#endif
 				ext = strrchr(buf, '.');
 
 				if (ext && *(ext + 1) && !_stricmp(ext + 1, "ini"))
@@ -1557,7 +1568,7 @@ BOOL TryAddExtraFolderAndChildren(int parent_index)
         }
     }
 
-    if ( fp )
+    //if ( fp )
     {
         fclose( fp );
     }
@@ -1662,10 +1673,10 @@ void RemoveFromCustomFolder(LPTREEFOLDER lpFolder,int driver_index)
 
 BOOL TrySaveExtraFolder(LPTREEFOLDER lpFolder)
 {
-    char fname[MAX_PATH];
+	char fname[MAX_PATH];
 	FILE *fp;
 	BOOL error = FALSE;
-    int i,j;
+	int i;
 
 	LPTREEFOLDER root_folder = NULL;
 	LPEXFOLDERDATA extra_folder = NULL;
@@ -1693,15 +1704,16 @@ BOOL TrySaveExtraFolder(LPTREEFOLDER lpFolder)
 	   MessageBox(GetMainWindow(), "Error finding custom file name to save", MAME32NAME, MB_OK | MB_ICONERROR);
 	   return FALSE;
 	}
-    /* "folder\title.ini" */
+	/* "folder\title.ini" */
 
-    snprintf( fname, sizeof(fname), "%s\\%s.ini", GetFolderDir(), extra_folder->m_szTitle);
+	snprintf( fname, sizeof(fname), "%s\\%s.ini", GetFolderDir(), extra_folder->m_szTitle);
 
-    fp = fopen(fname, "wt");
-    if (fp == NULL)
+	fp = fopen(fname, "wt");
+	if (fp == NULL)
 	   error = TRUE;
 	else
 	{
+	   UINT j;
 	   TREEFOLDER *folder_data;
 
 

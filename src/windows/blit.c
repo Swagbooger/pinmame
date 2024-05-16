@@ -4,6 +4,9 @@
 //
 //============================================================
 
+// NOTE: The original blitter code is NOT running if _WIN64 is defined,
+// but rather a non-complete C-implementation (it should handle all PinMAME relevant cases though)
+
 // standard windows headers
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -75,6 +78,7 @@ struct rgb_descriptor
 //	IMPORTS
 //============================================================
 
+#ifndef _WIN64
 extern void asmblit1_16_to_16_x1(void);
 extern void asmblit1_16_to_16_x2(void);
 extern void asmblit1_16_to_16_x3(void);
@@ -152,6 +156,7 @@ extern void asmblit_footer_mmx(void);
 extern void asmblit_prefetch_sse(void);
 
 extern UINT32 asmblit_cpuid_features(void);
+#endif
 
 
 //============================================================
@@ -192,6 +197,7 @@ static int					use_mmx = -1;
 static int					use_sse = -1;
 static int					use_sse2 = -1;
 
+#ifndef _WIN64
 // register index to size table
 static const UINT8 regoffset_regsize[32] =
 {
@@ -311,6 +317,7 @@ static struct rgb_descriptor sharp_desc =
 		{ RGB,RGB,RGB,RGB,RGB,RGB,RGB,RGB, RGB,RGB,RGB,RGB,RGB,RGB,RGB,RGB }
 	}
 };
+#endif
 
 
 //============================================================
@@ -327,6 +334,7 @@ static void compute_source_fixups(const struct win_blit_params *blit, UINT32 val
 //	BLITTER CORE TABLES
 //============================================================
 
+#ifndef _WIN64
 static void (*blit1_core[4][4][3])(void) =
 {
 	{
@@ -454,6 +462,7 @@ static void (*blit16_core_rgb[4][4])(void) =
 	{ NULL, NULL, NULL, NULL },
 	{ NULL, NULL, NULL, NULL }
 };
+#endif
 
 
 
@@ -461,12 +470,19 @@ static void (*blit16_core_rgb[4][4])(void) =
 //	win_perform_blit
 //============================================================
 
-int win_perform_blit(const struct win_blit_params *blit, int update)
+static inline UINT32 sqri(const UINT32 x)
+{
+	return x*x;
+}
+
+int win_perform_blit(const struct win_blit_params * const blit, int update)
 {
 	int srcdepth = (blit->srcdepth + 7) / 8;
 	int dstdepth = (blit->dstdepth + 7) / 8;
 	struct rectangle temprect;
+#ifndef _WIN64
 	blitter_func blitter;
+#endif
 	int srcx, srcy;
 	DWORD dw;
 
@@ -519,9 +535,9 @@ int win_perform_blit(const struct win_blit_params *blit, int update)
 		blit->swapxy != active_blitter_params.swapxy)
 	{
 		// allocate memory for the blitter code and mark it as executable to avoid an access violation
-		if (active_fast_blitter == NULL) active_fast_blitter = VirtualAlloc(NULL, MAX_BLITTER_SIZE, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+		if (active_fast_blitter == NULL) active_fast_blitter = VirtualAlloc(NULL, MAX_BLITTER_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 		else VirtualProtect(active_fast_blitter, MAX_BLITTER_SIZE, PAGE_EXECUTE_READWRITE, &dw);
-		if (active_update_blitter == NULL) active_update_blitter = VirtualAlloc(NULL, MAX_BLITTER_SIZE, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+		if (active_update_blitter == NULL) active_update_blitter = VirtualAlloc(NULL, MAX_BLITTER_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 		else VirtualProtect(active_update_blitter, MAX_BLITTER_SIZE, PAGE_EXECUTE_READWRITE, &dw);
 
 		generate_blitter(blit);
@@ -541,9 +557,89 @@ int win_perform_blit(const struct win_blit_params *blit, int update)
 	asmblit_dstdata = (UINT8 *)blit->dstdata + blit->dstpitch * blit->dstyoffs + dstdepth * blit->dstxoffs;
 	asmblit_dstpitch = blit->dstpitch;
 
+#ifndef _WIN64
 	// pick the blitter
 	blitter = update ? (blitter_func)active_update_blitter : (blitter_func)active_fast_blitter;
 	(*blitter)();
+#else
+	if ((blit->dstdepth == 15) || (blit->dstdepth == 16))
+	{
+#if 0 // only works 'correctly' if compact display disabled, and still has this nasty black border on the bottom due to its hacky nature
+		int c, c2, s,sy;
+		const UINT8 * __restrict src = asmblit_srcdata;
+		UINT8* __restrict dst = asmblit_dstdata;
+		const UINT32 r = blit->dstyscale + blit->dstxscale;
+
+		for (c = 0; c < asmblit_srcheight; c+=2)
+		{
+			UINT8* __restrict dstc2 = dst;
+			for (c2 = 0; c2 < blit->srcwidth; c2 += 2, dstc2 += blit->dstxscale * (int)(2*sizeof(UINT16)))
+			{
+				UINT16* __restrict dstsy = (UINT16*)dstc2;
+				const UINT16 col = blit->srclookup[((UINT16*)src)[c2]];
+				for (sy = 0; sy < blit->dstyscale * 2; ++sy, dstsy += blit->dstpitch/2)
+				{
+					const int xs = blit->dstxscale;
+					const UINT32 rcy = sqri(sy - blit->dstyscale);
+					for (s = 0; s < xs * 2; ++s)
+					{
+						const UINT32 rc = sqri(s - xs) + rcy;
+						dstsy[s] = ((rc < r) ? col : 0); //(rc < r - 2) ? (rc < r - 4) ? col : (col & (30 | (30 << 5) | (30 << 10))) >> 1 : (col & (28 | (28 << 5) | (28 << 10))) >> 2 : 0);
+					}
+				}
+			}
+			src += blit->srcpitch*2;
+			dst += blit->dstpitch * (blit->dstyscale * 2 - (blit->dstyscale > 1 ? 1 : 0)); //!! hack anti-skip one line to make up for bottom
+		}
+
+		if (blit->dstyscale > 1) //!! due to hack above, make bottom black
+			memset(dst, 0, blit->dstpitch*(asmblit_srcheight / 2));
+#else
+		UINT32 c;
+		const UINT8 * __restrict src = asmblit_srcdata;
+		UINT8 * __restrict dst = asmblit_dstdata;
+
+		for (c = 0; c < asmblit_srcheight; ++c)
+		{
+			int c2,c2d=0;
+			for (c2 = 0; c2 < blit->srcwidth; ++c2)
+			{
+				const UINT16 col = blit->srclookup[((UINT16*)src)[c2]];
+				int s;
+				for (s = 0; s < blit->dstxscale; ++s,++c2d)
+					((UINT16*)dst)[c2d] = col;
+			}
+			for (c2 = 1; c2 < blit->dstyscale; ++c2)
+				memcpy(dst + blit->dstpitch*c2, dst, blit->dstpitch);
+			src += blit->srcpitch;
+			dst += blit->dstpitch * blit->dstyscale;
+		}
+#endif
+	}
+	else if (blit->dstdepth == 32)
+	{
+		UINT32 c;
+		const UINT8 * __restrict src = asmblit_srcdata;
+		UINT8 * __restrict dst = asmblit_dstdata;
+
+		for (c = 0; c < asmblit_srcheight; ++c)
+		{
+			int c2,c2d=0;
+			for (c2 = 0; c2 < blit->srcwidth; ++c2)
+			{
+				const UINT32 col = blit->srclookup[((UINT16*)src)[c2]];
+				int s;
+				for (s = 0; s < blit->dstxscale; ++s,++c2d)
+					((UINT32*)dst)[c2d] = col;
+			}
+			for (c2 = 1; c2 < blit->dstyscale; ++c2)
+				memcpy(dst + blit->dstpitch*c2, dst, blit->dstpitch);
+			src += blit->srcpitch;
+			dst += blit->dstpitch * blit->dstyscale;
+		}
+	}
+#endif
+
 	return 1;
 }
 
@@ -637,6 +733,7 @@ static int blit_vectors(const struct win_blit_params *blit)
 //	snippet_length
 //============================================================
 
+#ifndef _WIN64
 static int snippet_length(void *snippet)
 {
 	UINT8 *current = snippet;
@@ -644,9 +741,8 @@ static int snippet_length(void *snippet)
 	// determine the length of a code snippet
 	while (current[0] != 0xcc || current[1] != 0xcc || current[2] != 0xcc || current[3] != 0xe0)
 		current++;
-	return current - (UINT8 *)snippet;
+	return (int)(current - (UINT8 *)snippet);
 }
-
 
 
 //============================================================
@@ -660,7 +756,6 @@ static void emit_snippet(void *snippet, UINT8 **dest)
 	memcpy(*dest, snippet, length);
 	*dest += length;
 }
-
 
 
 //============================================================
@@ -1151,7 +1246,7 @@ static void emit_expansion(int count, const UINT8 *reglist, const UINT32 *offsli
 		}
 	}
 }
-
+#endif
 
 
 //============================================================
@@ -1160,7 +1255,12 @@ static void emit_expansion(int count, const UINT8 *reglist, const UINT32 *offsli
 
 static void check_for_mmx(void)
 {
-	UINT32 features = asmblit_cpuid_features();
+	UINT32 features =
+#ifndef _WIN64
+		asmblit_cpuid_features();
+#else
+		0;
+#endif
 	use_mmx = (features & (1 << 23));
 	use_sse = (features & (1 << 25));
 	use_sse2 = (features & (1 << 26));
@@ -1181,11 +1281,14 @@ static void check_for_mmx(void)
 //	expand_blitter
 //============================================================
 
+#ifndef _WIN64
 static void expand_blitter(int which, const struct win_blit_params *blit, UINT8 **dest, int update)
 {
+#ifndef _WIN64
 	int srcdepth_index = (blit->srcdepth + 7) / 8 - 1;
 	int dstdepth_index = (blit->dstdepth + 7) / 8 - 1;
 	int xscale_index = blit->dstxscale - 1;
+#endif
 	UINT8 *blitter = NULL;
 	int i;
 
@@ -1218,14 +1321,17 @@ static void expand_blitter(int which, const struct win_blit_params *blit, UINT8 
 				else if (blit->dsteffect == EFFECT_SHARP)
 					generate_rgb_masks(&sharp_desc, blit);
 
+#ifndef _WIN64
 				if (which == 1)
 					blitter = (UINT8 *)(blit1_core_rgb[srcdepth_index][dstdepth_index]);
 				else
 					blitter = (UINT8 *)(blit16_core_rgb[srcdepth_index][dstdepth_index]);
+#endif
 			}
 			break;
 	}
 
+#ifndef _WIN64
 	// find the blitter -- standard case
 	if (blitter == NULL)
 	{
@@ -1242,6 +1348,7 @@ static void expand_blitter(int which, const struct win_blit_params *blit, UINT8 
 			}
 		}
 	}
+#endif
 
 	// copy until the end
 	while (blitter[0] != 0xcc || blitter[1] != 0xcc || blitter[2] != 0xcc || blitter[3] != 0xe0)
@@ -1326,7 +1433,7 @@ static void expand_blitter(int which, const struct win_blit_params *blit, UINT8 
 			*(*dest)++ = *blitter++;
 	}
 }
-
+#endif
 
 
 //============================================================
@@ -1342,7 +1449,7 @@ static void fixup_addresses(UINT8 **fixups, UINT8 *start, UINT8 *end)
 		if (start[0] == 0xcc && start[1] == 0xcc && start[2] == 0xcc && (start[3] & 0xe0) == 0x00)
 		{
 			int idx = start[3] & 0x1f;
-			*(UINT32 *)start = fixups[idx] - (start + 4);
+			*(UINT32 *)start = (UINT32)(fixups[idx] - (start + 4));
 		}
 	}
 }
@@ -1523,6 +1630,7 @@ static void generate_blitter(const struct win_blit_params *blit)
 
 	// generate blitter loop
 
+#ifndef _WIN64
 	// function header
 	EMIT_SNIPPET_PAIR(header);
 
@@ -1566,6 +1674,7 @@ static void generate_blitter(const struct win_blit_params *blit)
 		EMIT_SNIPPET_PAIR(footer_mmx);
 	}
 	EMIT_SNIPPET_PAIR(footer);
+#endif
 
 	// fixup local jmps
 	fixup_addresses(&addrfixups[0][0], active_fast_blitter, fastptr);

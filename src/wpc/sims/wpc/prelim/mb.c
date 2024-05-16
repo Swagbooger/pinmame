@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /*******************************************************************************
  Preliminary Monster Bash (Williams, 1998) Pinball Simulator
 
@@ -7,6 +9,7 @@
  Read PZ.c or FH.c if you like more help.
 
  ******************************************************************************/
+
 /* 160401 Added mechanics simulator */
 /*------------------------------------------------------------------------------
   Keys for the Monster Bash Simulator:
@@ -258,8 +261,8 @@ DCS_SOUNDROM6xm("mb_s2.rom",CRC(9152f559) SHA1(68d455d8b875101caedafd21b59c447f3
                 "mb_s3.rom",CRC(c3cd6e81) SHA1(b041979c8955907090b30960780cecb19258bd5e),
                 "mb_s4.rom",CRC(00b88352) SHA1(5da75e0b400eb71583681e06088eb97fc12e7f17),
                 "mb_s5.rom",CRC(dae16105) SHA1(15878ef8685f3e9fc8eb2a2401581d30fe706e89),
-		"mb_s6.rom",CRC(3975d5da) SHA1(6dbb34a827c0956e6aef1401c12cba88ae370e1f),
-		"mb_s7.rom",CRC(c242fb78) SHA1(c5a2a37ff3414d1e946cddb69b5e8f067b50bcc6))
+                "mb_s6.rom",CRC(3975d5da) SHA1(6dbb34a827c0956e6aef1401c12cba88ae370e1f),
+                "mb_s7.rom",CRC(c242fb78) SHA1(c5a2a37ff3414d1e946cddb69b5e8f067b50bcc6))
 WPC_ROMEND
 
 WPC_ROMSTART(mb,106b,"mb_106b.bin",0x100000,CRC(c7c5d855) SHA1(96a43a955c0abaef8d6af1b64eaf50a7eeb69fe0))
@@ -267,8 +270,8 @@ DCS_SOUNDROM6xm("mb_s2.rom",CRC(9152f559) SHA1(68d455d8b875101caedafd21b59c447f3
                 "mb_s3.rom",CRC(c3cd6e81) SHA1(b041979c8955907090b30960780cecb19258bd5e),
                 "mb_s4.rom",CRC(00b88352) SHA1(5da75e0b400eb71583681e06088eb97fc12e7f17),
                 "mb_s5.rom",CRC(dae16105) SHA1(15878ef8685f3e9fc8eb2a2401581d30fe706e89),
-		"mb_s6.rom",CRC(3975d5da) SHA1(6dbb34a827c0956e6aef1401c12cba88ae370e1f),
-		"mb_s7.rom",CRC(c242fb78) SHA1(c5a2a37ff3414d1e946cddb69b5e8f067b50bcc6))
+                "mb_s6.rom",CRC(3975d5da) SHA1(6dbb34a827c0956e6aef1401c12cba88ae370e1f),
+                "mb_s7.rom",CRC(c242fb78) SHA1(c5a2a37ff3414d1e946cddb69b5e8f067b50bcc6))
 WPC_ROMEND
 
 WPC_ROMSTART(mb,10, "mb_g11.1_0", 0x100000,CRC(6b8db967) SHA1(e24d801ed9d326b9d4ddb26100c85cfd8e697d17))
@@ -276,8 +279,8 @@ DCS_SOUNDROM6xm("mb_s2.rom",CRC(9152f559) SHA1(68d455d8b875101caedafd21b59c447f3
                 "mb_s3.rom",CRC(c3cd6e81) SHA1(b041979c8955907090b30960780cecb19258bd5e),
                 "mb_s4.rom",CRC(00b88352) SHA1(5da75e0b400eb71583681e06088eb97fc12e7f17),
                 "mb_s5.rom",CRC(dae16105) SHA1(15878ef8685f3e9fc8eb2a2401581d30fe706e89),
-		"mb_s6.rom",CRC(3975d5da) SHA1(6dbb34a827c0956e6aef1401c12cba88ae370e1f),
-		"mb_s7.rom",CRC(c242fb78) SHA1(c5a2a37ff3414d1e946cddb69b5e8f067b50bcc6))
+                "mb_s6.rom",CRC(3975d5da) SHA1(6dbb34a827c0956e6aef1401c12cba88ae370e1f),
+                "mb_s7.rom",CRC(c242fb78) SHA1(c5a2a37ff3414d1e946cddb69b5e8f067b50bcc6))
 WPC_ROMEND
 
 WPC_ROMSTART(mb,05, "mb_g11.0_5", 0x100000,CRC(ccd437f0) SHA1(a9a510576cea092de8f8ee7aaa8266424fef224c))
@@ -285,17 +288,17 @@ DCS_SOUNDROM6xm("mb_s2.rom",CRC(9152f559) SHA1(68d455d8b875101caedafd21b59c447f3
                 "mb_s3.rom",CRC(c3cd6e81) SHA1(b041979c8955907090b30960780cecb19258bd5e),
                 "mb_s4.rom",CRC(00b88352) SHA1(5da75e0b400eb71583681e06088eb97fc12e7f17),
                 "mb_s5.rom",CRC(dae16105) SHA1(15878ef8685f3e9fc8eb2a2401581d30fe706e89),
-		"mb_s6.rom",CRC(3975d5da) SHA1(6dbb34a827c0956e6aef1401c12cba88ae370e1f),
-		"mb_s7.rom",CRC(c242fb78) SHA1(c5a2a37ff3414d1e946cddb69b5e8f067b50bcc6))
+                "mb_s6.rom",CRC(3975d5da) SHA1(6dbb34a827c0956e6aef1401c12cba88ae370e1f),
+                "mb_s7.rom",CRC(c242fb78) SHA1(c5a2a37ff3414d1e946cddb69b5e8f067b50bcc6))
 WPC_ROMEND
 
 /*--------------
 /  Game drivers
 /---------------*/
-CORE_GAMEDEF (mb,10,   "Monster Bash (1.0)",1998,"Williams",wpc_m95S,0)
+CORE_GAMEDEF (mb,10,"Monster Bash (1.0)",1998,"Williams",wpc_m95S,0)
 CORE_CLONEDEF(mb,106,10,"Monster Bash (1.06)", 1998,"Williams",wpc_m95S,0)
 CORE_CLONEDEF(mb,106b,10,"Monster Bash (1.06b)", 1998,"Williams",wpc_m95S,0)
-CORE_CLONEDEF(mb,05,10,"Monster Bash (0.5)", 1998,"Williams",wpc_m95S,0)
+CORE_CLONEDEF(mb,05,10,"Monster Bash (0.5 Prototype)", 1998,"Williams",wpc_m95S,0)
 
 /*-----------------------
 / Simulation Definitions
@@ -321,7 +324,10 @@ static core_tGameData mbGameData = {
     FLIP_SW(FLIP_L | FLIP_U) | FLIP_SOL(FLIP_L),
     0,0,0,0,0,1,0,
     NULL, mb_handleMech, mb_getMech, mb_drawMech,
-    NULL, NULL
+    NULL
+#ifdef ENABLE_MECHANICAL_SAMPLES
+    , NULL
+#endif
   },
   &mbSimData,
   {
@@ -349,7 +355,7 @@ static mech_tInitData mb_mech[] = {{
 },{
   41,42,MECH_LINEAR | MECH_STOPEND | MECH_TWODIRSOL, DRACTIME, DRACTIME,
   {{78, 0, 5},{77, 18, 23},{76,36,51},{75,64,69},{74,85,89}}
-}};
+},0};
 
 static void mb_drawMech(BMTYPE **line) {
   core_textOutf(50, 0,BLACK,"Bank: %3d", mech_getPos(0));
@@ -373,5 +379,5 @@ static void init_mb(void) {
   mech_add(0, &mb_mech[0]);
   mech_add(1, &mb_mech[1]);
   mech_add(2, &mb_mech[2]);
+  wpc_set_fastflip_addr(0x87);
 }
-

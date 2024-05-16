@@ -1,10 +1,13 @@
 #include "driver.h"
-#include "vidhrdw/crtc6845.h"
+#include "vidhrdw/crtc6845.h" //!! use MAME mc6845? -> much more complex
 #include "cpu/m6809/m6809.h"
 #include "cpu/m68000/m68000.h"
 #include "core.h"
 #include "sndbrd.h"
 #include "dedmd.h"
+#ifdef PROC_SUPPORT
+#include "p-roc/p-roc.h"
+#endif
 
 /*--------- Common DMD stuff ----------*/
 static struct {
@@ -14,6 +17,8 @@ static struct {
   // dmd16 stuff
   UINT32 hv5408, hv5408s, hv5308, hv5308s, hv5222, lasthv5222;
   int blnk, rowdata, rowclk, frame;
+
+  int laststat;
 } dmdlocals;
 
 static UINT16 *dmd64RAM;
@@ -27,13 +32,15 @@ static READ_HANDLER(dmd_busy_r)   { return dmdlocals.busy; }
 /*Data East, Sega, Stern 128x32 DMD Handling*/
 /*------------------------------------------*/
 #define DMD32_BANK0    2
-#define DMD32_FIRQFREQ 80
+#define DMD32_FIRQFREQ_HACK 86.20689655172414 // real DE HW 78.07 (measured on LW3), Whitestar 77.77, but this leads to (at least?) LW3 and R&B and SW glitching, thus use the old/working 80Hz * the changes to IRQ freq in Sys11 for these (and Aaron Spelling & Michael Jordan, //!! although (at least) these 2 show the display version screen from time to time)
+#define DMD32_FIRQFREQ_DE 78.07 // real DE HW (measured on LW3)
+#define DMD32_FIRQFREQ_SE 77.77 // real Whitestar HW
 
 static WRITE_HANDLER(dmd32_ctrl_w);
 static void dmd32_init(struct sndbrdData *brdData);
 
 const struct sndbrdIntf dedmd32Intf = {
-  NULL, dmd32_init, NULL, NULL,NULL, 
+  NULL, dmd32_init, NULL, NULL,NULL,
   dmd_data_w, dmd_busy_r, dmd32_ctrl_w, dmd_status_r, SNDBRD_NOTSOUND
 };
 
@@ -64,10 +71,24 @@ static MEMORY_WRITE_START(dmd32_writemem)
   { 0x4001, 0xffff, MWA_NOP },
 MEMORY_END
 
-MACHINE_DRIVER_START(de_dmd32)
-  MDRV_CPU_ADD(M6809, 2000000)
+MACHINE_DRIVER_START(de_dmd32_hack)
+  MDRV_CPU_ADD(M6809, 2000000) // 8000000/4
   MDRV_CPU_MEMORY(dmd32_readmem, dmd32_writemem)
-  MDRV_CPU_PERIODIC_INT(dmd32_firq, DMD32_FIRQFREQ)
+  MDRV_CPU_PERIODIC_INT(dmd32_firq, DMD32_FIRQFREQ_HACK)
+  MDRV_INTERLEAVE(50)
+MACHINE_DRIVER_END
+
+MACHINE_DRIVER_START(de_dmd32)
+  MDRV_CPU_ADD(M6809, 2000000) // 8000000/4
+  MDRV_CPU_MEMORY(dmd32_readmem, dmd32_writemem)
+  MDRV_CPU_PERIODIC_INT(dmd32_firq, DMD32_FIRQFREQ_DE)
+  MDRV_INTERLEAVE(50)
+MACHINE_DRIVER_END
+
+MACHINE_DRIVER_START(se_dmd32)
+  MDRV_CPU_ADD(M6809, 2000000) // 8000000/4
+  MDRV_CPU_MEMORY(dmd32_readmem, dmd32_writemem)
+  MDRV_CPU_PERIODIC_INT(dmd32_firq, DMD32_FIRQFREQ_SE)
   MDRV_INTERLEAVE(50)
 MACHINE_DRIVER_END
 
@@ -104,6 +125,7 @@ static WRITE_HANDLER(dmd32_status_w) {
 static WRITE_HANDLER(dmd32_bank_w) {
   cpu_setbank(DMD32_BANK0, dmdlocals.brdData.romRegion + (data & 0x1f)*0x4000);
 }
+
 static READ_HANDLER(dmd32_latch_r) {
   sndbrd_data_cb(dmdlocals.brdData.boardNo, dmdlocals.busy = 0); // Clear Busy
   cpu_set_irq_line(dmdlocals.brdData.cpuNo, M6809_IRQ_LINE, CLEAR_LINE);
@@ -115,16 +137,41 @@ static INTERRUPT_GEN(dmd32_firq) {
 }
 
 PINMAME_VIDEO_UPDATE(dedmd32_update) {
-  UINT8 *RAM  = ((UINT8 *)dmd32RAM) + ((crtc6845_start_address_r(0) & 0x0100)<<2);
-  UINT8 *RAM2 = RAM + 0x200;
-  tDMDDot dotCol;
-  int ii,jj;
+  const UINT8 *RAM  = ((UINT8 *)dmd32RAM) + ((crtc6845_start_address_r(0) & 0x0100)<<2);
+  const UINT8 *RAM2 = RAM + 0x200;
+  int ii;
+
+#ifdef PROC_SUPPORT
+	if (coreGlobals.p_rocEn) {
+		/* Whitestar games drive 4 colors using 2 subframes, which the P-ROC
+		   has 4 subframes for up to 16 colors. Experimentation has showed
+		   using P-ROC subframe 2 and 3 provides a pretty good color match. */
+		const int procSubFrame0 = 2;
+		const int procSubFrame1 = 3;
+
+		/* Start with an empty frame buffer */
+		procClearDMD();
+
+		/* Fill the P-ROC subframes from the video RAM */
+		procFillDMDSubFrame(procSubFrame0, RAM, 0x200);
+		procFillDMDSubFrame(procSubFrame1, RAM2, 0x200);
+
+		/* Each byte is reversed in the video RAM relative to the bit order the P-ROC
+		   expects. So reverse each byte. */
+		procReverseSubFrameBytes(procSubFrame0);
+		procReverseSubFrameBytes(procSubFrame1);
+		procUpdateDMD();
+		/* Don't explicitly update the DMD from here. The P-ROC code
+		   will update after the next DMD event. */
+	}
+#endif
 
   for (ii = 1; ii <= 32; ii++) {
-    UINT8 *line = &dotCol[ii][0];
+    UINT8 *line = &coreGlobals.dotCol[ii][0];
+    int jj;
     for (jj = 0; jj < (128/8); jj++) {
-      UINT8 intens1 = 2*(RAM[0] & 0x55) + (RAM2[0] & 0x55);
-      UINT8 intens2 =   (RAM[0] & 0xaa) + (RAM2[0] & 0xaa)/2;
+      const UINT8 intens1 = 2*(*RAM & 0x55) + (*RAM2 & 0x55);
+      const UINT8 intens2 =   (*RAM & 0xaa) + (*RAM2 & 0xaa)/2;
       *line++ = (intens2>>6) & 0x03;
       *line++ = (intens1>>6) & 0x03;
       *line++ = (intens2>>4) & 0x03;
@@ -133,24 +180,25 @@ PINMAME_VIDEO_UPDATE(dedmd32_update) {
       *line++ = (intens1>>2) & 0x03;
       *line++ = (intens2)    & 0x03;
       *line++ = (intens1)    & 0x03;
-      RAM += 1; RAM2 += 1;
+      RAM++; RAM2++;
     }
     *line = 0;
   }
-  video_update_core_dmd(bitmap, cliprect, dotCol, layout);
+
+  video_update_core_dmd(bitmap, cliprect, layout);
   return 0;
 }
 
 /*-----------------------------*/
 /*Data East 192x64 DMD Handling*/
 /*-----------------------------*/
-#define DMD64_IRQ2FREQ 150
+#define DMD64_IRQ2FREQ 74.72 // real HW
 
 static WRITE_HANDLER(dmd64_ctrl_w);
 static void dmd64_init(struct sndbrdData *brdData);
 
 const struct sndbrdIntf dedmd64Intf = {
-  NULL, dmd64_init, NULL, NULL,NULL, 
+  NULL, dmd64_init, NULL, NULL,NULL,
   dmd_data_w, dmd_busy_r, dmd64_ctrl_w, dmd_status_r, SNDBRD_NOTSOUND
 };
 
@@ -177,7 +225,7 @@ static MEMORY_WRITE16_START(dmd64_writemem)
 MEMORY_END
 
 MACHINE_DRIVER_START(de_dmd64)
-  MDRV_CPU_ADD(M68000, 6000000)
+  MDRV_CPU_ADD(M68000, 12000000) // schematics
   MDRV_CPU_MEMORY(dmd64_readmem, dmd64_writemem)
   MDRV_CPU_PERIODIC_INT(dmd64_irq2, DMD64_IRQ2FREQ)
   MDRV_INTERLEAVE(50)
@@ -217,16 +265,18 @@ static READ16_HANDLER(crtc6845_msb_register_r)  { return crtc6845_register_0_r(o
 
 /*-- update display --*/
 PINMAME_VIDEO_UPDATE(dedmd64_update) {
-  UINT8 *RAM  = (UINT8 *)(dmd64RAM) + ((crtc6845_start_address_r(0) & 0x400)<<2);
-  UINT8 *RAM2 = RAM + 0x800;
-  tDMDDot dotCol;
-  int ii,jj;
+  const UINT8 *RAM  = (UINT8 *)(dmd64RAM) + ((crtc6845_start_address_r(0) & 0x400)<<2);
+  const UINT8 *RAM2 = RAM + 0x800;
+  int ii;
 
   for (ii = 1; ii <= 64; ii++) {
-    UINT8 *line = &dotCol[ii][0];
+    UINT8 *line = &coreGlobals.dotCol[ii][0];
+    int jj;
     for (jj = 0; jj < (192/16); jj++) {
-      UINT8 intens1 = 2*(RAM[1] & 0x55) + (RAM2[1] & 0x55);
-      UINT8 intens2 =   (RAM[1] & 0xaa) + (RAM2[1] & 0xaa)/2;
+      const UINT8 intens1 = 2*(RAM[1] & 0x55) + (RAM2[1] & 0x55);
+      const UINT8 intens2 =   (RAM[1] & 0xaa) + (RAM2[1] & 0xaa)/2;
+      const UINT8 intens3 = 2*(RAM[0] & 0x55) + (RAM2[0] & 0x55);
+      const UINT8 intens4 =   (RAM[0] & 0xaa) + (RAM2[0] & 0xaa)/2;
       *line++ = (intens2>>6) & 0x03;
       *line++ = (intens1>>6) & 0x03;
       *line++ = (intens2>>4) & 0x03;
@@ -235,21 +285,19 @@ PINMAME_VIDEO_UPDATE(dedmd64_update) {
       *line++ = (intens1>>2) & 0x03;
       *line++ = (intens2)    & 0x03;
       *line++ = (intens1)    & 0x03;
-      intens1 = 2*(RAM[0] & 0x55) + (RAM2[0] & 0x55);
-      intens2 =   (RAM[0] & 0xaa) + (RAM2[0] & 0xaa)/2;
-      *line++ = (intens2>>6) & 0x03;
-      *line++ = (intens1>>6) & 0x03;
-      *line++ = (intens2>>4) & 0x03;
-      *line++ = (intens1>>4) & 0x03;
-      *line++ = (intens2>>2) & 0x03;
-      *line++ = (intens1>>2) & 0x03;
-      *line++ = (intens2)    & 0x03;
-      *line++ = (intens1)    & 0x03;
+      *line++ = (intens4>>6) & 0x03;
+      *line++ = (intens3>>6) & 0x03;
+      *line++ = (intens4>>4) & 0x03;
+      *line++ = (intens3>>4) & 0x03;
+      *line++ = (intens4>>2) & 0x03;
+      *line++ = (intens3>>2) & 0x03;
+      *line++ = (intens4)    & 0x03;
+      *line++ = (intens3)    & 0x03;
       RAM += 2; RAM2 += 2;
     }
     *line = 0;
   }
-  video_update_core_dmd(bitmap, cliprect, dotCol, layout);
+  video_update_core_dmd(bitmap, cliprect, layout);
   return 0;
 }
 
@@ -271,7 +319,7 @@ static WRITE_HANDLER(dmd16_ctrl_w);
 static INTERRUPT_GEN(dmd16_nmi);
 
 const struct sndbrdIntf dedmd16Intf = {
-  NULL, dmd16_init, NULL, NULL,NULL, 
+  NULL, dmd16_init, NULL, NULL,NULL,
   dmd_data_w, dmd_busy_r, dmd16_ctrl_w, dmd_status_r, SNDBRD_NOTSOUND
 };
 
@@ -318,6 +366,7 @@ static void dmd16_init(struct sndbrdData *brdData) {
   dmd16_setbank(0x07, 0x07);
   dmd16_setbusy(BUSY_SET|BUSY_CLR,0);
 }
+
 /*--- Port decoding ----
   76543210
   10-001-- Bank0 (stat)
@@ -332,8 +381,8 @@ static void dmd16_init(struct sndbrdData *brdData) {
   11-101-- Row Clock (stat)
   0----1-- CLATCH (mom)
   0----0-- COCLK (mom)
-
 --------------------*/
+
 static READ_HANDLER(dmd16_port_r) {
   if ((offset & 0x84) == 0x80) {
     dmd16_setbusy(BUSY_CLR, 0); dmd16_setbusy(BUSY_CLR,1);
@@ -395,7 +444,7 @@ static WRITE_HANDLER(dmd16_port_w) {
         case 0xcc: // Row data
           dmdlocals.rowdata = data; break;
         case 0xd4: // Row clock
-          if (~data & dmdlocals.rowclk) // negative edge;
+          if (~data & dmdlocals.rowclk) // negative edge
             dmdlocals.hv5222 = (dmdlocals.hv5222<<1) | (dmdlocals.rowdata);
           dmdlocals.rowclk = data;
           break;
@@ -421,17 +470,16 @@ static WRITE_HANDLER(dmd16_ctrl_w) {
 }
 
 static void dmd16_setbusy(int bit, int value) {
-  static int laststat = 0;
-  int newstat = (laststat & ~bit) | (value ? bit : 0);
+  const int newstat = (dmdlocals.laststat & ~bit) | (value ? bit : 0);
 #if 1
   /* In the data-sheet for the HC74 flip-flop is says that SET & CLR are _not_
      edge triggered. For some strange reason, the DMD doesn't work unless we
      treat the HC74 as edge-triggered.
   */
-  if      (~newstat & laststat & BUSY_CLR) dmdlocals.busy = 0;
-  else if (~newstat & laststat & BUSY_SET) dmdlocals.busy = 1;
+  if      (~newstat & dmdlocals.laststat & BUSY_CLR) dmdlocals.busy = 0;
+  else if (~newstat & dmdlocals.laststat & BUSY_SET) dmdlocals.busy = 1;
   else if ((newstat & (BUSY_CLR|BUSY_SET)) == (BUSY_CLR|BUSY_SET)) {
-    if (newstat & ~laststat & BUSY_CLK) dmdlocals.busy = 1;
+    if (newstat & ~dmdlocals.laststat & BUSY_CLK) dmdlocals.busy = 1;
   }
 #else
   switch (newstat & 0x03) {
@@ -444,7 +492,7 @@ static void dmd16_setbusy(int bit, int value) {
       dmdlocals.busy = 1; break;
   }
 #endif
-  laststat = newstat;
+  dmdlocals.laststat = newstat;
   cpu_set_irq_line(dmdlocals.brdData.cpuNo, Z80_INT_REQ, dmdlocals.busy ? ASSERT_LINE : CLEAR_LINE);
   sndbrd_data_cb(dmdlocals.brdData.boardNo, dmdlocals.busy);
 }
@@ -457,28 +505,28 @@ static INTERRUPT_GEN(dmd16_nmi) { cpu_set_nmi_line(dmdlocals.brdData.cpuNo, PULS
 
 /*-- update display --*/
 PINMAME_VIDEO_UPDATE(dedmd16_update) {
-  UINT32 *frame = &dmdlocals.framedata[(!dmdlocals.frame)*0x80];
-  tDMDDot dotCol;
-  int ii,jj,kk;
+  const UINT32 *frame = &dmdlocals.framedata[(!dmdlocals.frame)*0x80];
+  int ii;
 
   for (ii = 1; ii <= 16; ii++) {
-    UINT8 *line = &dotCol[ii][0];
+    UINT8 *line = &coreGlobals.dotCol[ii][0];
+    int jj;
     for (jj = 0; jj < 2; jj++) {
       UINT32 tmp0 = frame[0];
       UINT32 tmp1 = frame[1];
       UINT32 tmp2 = frame[2];
       UINT32 tmp3 = frame[3];
+      int kk;
       for (kk = 0; kk < 32; kk++) {
-		//If both dots are lit, we use color 3, but if only 1, we use 1.
-        *line++ = (tmp2 & 0x01) + (tmp0 & 0x01) + 1*(tmp2 & tmp0 & 0x01);
-        *line++ = (tmp3 & 0x01) + (tmp1 & 0x01) + 1*(tmp3 & tmp1 & 0x01);
+        //If both dots are lit, we use color 3, but if only 1, we use 1.
+        *line++ = (tmp2 & 0x01) + (2 * (tmp0 & 0x01));
+        *line++ = (tmp3 & 0x01) + (2 * (tmp1 & 0x01));
         tmp0 >>= 1; tmp1 >>= 1; tmp2 >>= 1; tmp3 >>= 1;
       }
       frame += 4;
     }
     *line++ = 0;
   }
-  video_update_core_dmd(bitmap, cliprect, dotCol, layout);
+  video_update_core_dmd(bitmap, cliprect, layout);
   return 0;
 }
-

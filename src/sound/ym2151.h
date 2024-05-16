@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Jarek Burczynski
 /*
 **
 ** File: ym2151.h - header file for software implementation of YM2151
@@ -52,7 +54,7 @@
 ** 'clock' is the chip clock in Hz
 ** 'rate' is sampling rate
 */
-int YM2151Init(int num, int clock, int rate);
+int YM2151Init(int num, double clock, double rate);
 
 /* shutdown the YM2151 emulators*/
 void YM2151Shutdown(void);
@@ -81,9 +83,9 @@ void YM2151SetIrqHandler(int n, void (*handler)(int irq));
 /* set port write handler on YM2151 chip number 'n'*/
 void YM2151SetPortWriteHandler(int n, mem_write_handler handler);
 
-#ifdef PINMAME
+#ifdef PREDCS_FIRQ_HACK
 /*return 1 if 2151 is outputting any data*/
-	int YM2151ReadOutputFlag(int n);
+int YM2151ReadOutputFlag(int n);
 #endif
 
 #endif /*_H_YM2151_*/

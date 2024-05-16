@@ -3,20 +3,20 @@
 
 #include "Utils.h"
 
-extern char g_szCaption[256];
+extern TCHAR g_szCaption[256];
 
 void DisplayError(HWND hWnd, HRESULT hr, char* szReason, char* szAdvice)
 {
-	char szMsg[512];
+	TCHAR szMsg[512];
 
 	char *pszErrorMsg = NULL;
 	FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER|FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS, 
 		NULL, hr, 0, (LPTSTR) &pszErrorMsg, 0, NULL);
 
 	if ( szAdvice )
-		wsprintf(szMsg, "%s\n\nError 0x%08x: %s\n%s", szReason, hr, pszErrorMsg, szAdvice);
+		wsprintf(szMsg, TEXT("%s\n\nError 0x%08x: %s\n%s"), szReason, hr, pszErrorMsg, szAdvice);
 	else
-		wsprintf(szMsg, "%s\n\nError 0x%08x: %s", szReason, hr, pszErrorMsg);
+		wsprintf(szMsg, TEXT("%s\n\nError 0x%08x: %s"), szReason, hr, pszErrorMsg);
 
 	MessageBox(hWnd, szMsg, g_szCaption, MB_ICONEXCLAMATION|MB_OK);
 	LocalFree(pszErrorMsg);
@@ -27,10 +27,9 @@ void DisplayCOMError(IUnknown *pUnknown, REFIID riid)
 	if ( !pUnknown )
 		return;
 
-	HRESULT hr;
 	ISupportErrorInfo *pSupportErrorInfo;
 
-	hr = pUnknown->QueryInterface(IID_ISupportErrorInfo, (void**) &pSupportErrorInfo);
+	HRESULT hr = pUnknown->QueryInterface(IID_ISupportErrorInfo, (void**) &pSupportErrorInfo);
 	if ( FAILED(hr) )
 		return;
 
@@ -73,17 +72,15 @@ LONG RegDeleteKeyEx(HKEY hKey, LPCTSTR lpszSubKey)
 	return lResult;
 }
 
-int GetVersionResourceEntry(LPCTSTR lpszFilename, LPCTSTR lpszResourceEntry, LPTSTR lpszBuffer, WORD wMaxSize) {
-	DWORD   dwVerHandle; 
+int GetVersionResourceEntry(LPCTSTR lpszFilename, LPCTSTR lpszResourceEntry, LPTSTR lpszBuffer, WORD wMaxSize)
+{
+	DWORD	dwVerHandle;
 	DWORD	dwInfoSize;
-	HANDLE  hVersionInfo;
-	LPVOID  lpEntryInfo;
-	LPVOID  lpEntry;
+	LPVOID	lpEntry;
 	UINT	wEntrySize;
-	LPDWORD lpdwVar;
-	UINT    wVarSize;
-	DWORD   dwTranslation;
-	TCHAR   szEntry[256];
+	LPDWORD	lpdwVar;
+	UINT	wVarSize;
+	TCHAR	szEntry[256];
 
 	if ( !lpszFilename || !lpszBuffer || !wMaxSize )
 		return 0;
@@ -93,12 +90,12 @@ int GetVersionResourceEntry(LPCTSTR lpszFilename, LPCTSTR lpszResourceEntry, LPT
 	if ( !(dwInfoSize = GetFileVersionInfoSize((LPSTR) lpszFilename, &dwVerHandle)) ) {
 		return 1;
 	}
-	
-	hVersionInfo = GlobalAlloc(GPTR, dwInfoSize);
+
+	HANDLE hVersionInfo = GlobalAlloc(GPTR, dwInfoSize);
 	if ( !hVersionInfo )
 		return 0;
 
-	lpEntryInfo = GlobalLock(hVersionInfo);
+	LPVOID lpEntryInfo = GlobalLock(hVersionInfo);
 	if ( !lpEntryInfo )
 		return 0;
 
@@ -107,10 +104,10 @@ int GetVersionResourceEntry(LPCTSTR lpszFilename, LPCTSTR lpszResourceEntry, LPT
 
 	if ( !VerQueryValue(lpEntryInfo, "VarFileInfo\\Translation", (void**) &lpdwVar, &wVarSize) )
 		return 0;
-	
-	dwTranslation = (*lpdwVar/65536) + (*lpdwVar%65536)*65536;
 
-	wsprintf(szEntry, "StringFileInfo\\%0.8x\\%s", dwTranslation, lpszResourceEntry);
+	DWORD dwTranslation = (*lpdwVar/65536) + (*lpdwVar%65536)*65536;
+
+	wsprintf(szEntry, TEXT("StringFileInfo\\%0.8x\\%s"), dwTranslation, lpszResourceEntry);
 
 	if ( !VerQueryValue(lpEntryInfo, szEntry, &lpEntry, &wEntrySize) )
 		return 0;
@@ -118,11 +115,10 @@ int GetVersionResourceEntry(LPCTSTR lpszFilename, LPCTSTR lpszResourceEntry, LPT
 	if ( wEntrySize>wMaxSize )
 		wEntrySize = wMaxSize;
 
-	lstrcpyn(lpszBuffer, (LPSTR) lpEntry, wEntrySize);
+	strncpy(lpszBuffer, (LPSTR) lpEntry, wEntrySize);
 
 	GlobalUnlock(hVersionInfo);
 	GlobalFree(hVersionInfo);
 
 	return 1;
 }
-

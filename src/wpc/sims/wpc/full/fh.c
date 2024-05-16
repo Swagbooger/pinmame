@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /********************************************************************************************
  Williams Funhouse (1990) Pinball Simulator
 
@@ -393,8 +395,8 @@ static int fh_handleBallState(sim_tBallStatus *ball, int *inports) {
   {
 
   /* Ball in RIGHT Shooter Lane */
-        /* Note: Sim supports max of 50 speed for manual plunger */
-      case stRBallLane:
+  /* Note: Sim supports max of 50 speed for manual plunger */
+  case stRBallLane:
     if (ball->speed < 20)
       return setState(stRNotEnough,3);  /*Ball not plunged hard enough*/
     if (ball->speed < 25)
@@ -402,16 +404,16 @@ static int fh_handleBallState(sim_tBallStatus *ball, int *inports) {
     if (ball->speed < 30)
       return setState(stDropHole,20);   /*Ball landed in Drop Hole*/
     if (ball->speed < 35)
-                        return setState(stJet1,20);              /*Ball Hit Bumper!*/
+      return setState(stJet1,20);       /*Ball Hit Bumper!*/
     if (ball->speed < 40)
       return setState(stRudyHideout,35);  /*Skill Shot - Landed in Rudy Hideout*/
-    if (ball->speed >= 40)
+    else
       return setState(stRLoopUp,30);    /*Shot missed hideout, but triggered Right Loop!*/
-    break;
+  break;
 
   /* Ball in LEFT Shooter Lane */
-        /* Note: Sim supports max of 50 speed for manual plunger */
-      case stLBallLane:
+  /* Note: Sim supports max of 50 speed for manual plunger */
+  case stLBallLane:
     if (ball->speed < 25)
       return setState(stLNotEnough,3);  /*Ball not plunged hard enough*/
     if (ball->speed < 30)
@@ -420,27 +422,27 @@ static int fh_handleBallState(sim_tBallStatus *ball, int *inports) {
       return setState(stAwardEB,20);    /*Ball landed in Steps Award Extra Ball*/
     if (ball->speed < 40)
       return setState(stAwardPTS,25);   /*Ball landed in Steps Award Points*/
-    if (ball->speed >= 40)
+    else
       return setState(stAwardDog,30);   /*Shot Awards Super Dog*/
-    break;
+  break;
 
   /* Rudy Hit */
-      case stRudyHit:
+  case stRudyHit:
     /*Is Rudy's Mouth Open?*/
     if (locals.rudymouthPos)
       return setState(stRudyJaw1,10);   /*Yes, ball goes into rudy's mouth*/
     else
       return setState(stRudyJaw,10);    /*Ball hits Rudy's Jaw!!*/
-    break;
+  break;
 
   /* Trap Door */
-      case stTrapDoorLoop:
+  case stTrapDoorLoop:
     /*Is the Trap Door Open?*/
     if (locals.trapdoorPos)
       return setState(stBallInTrap,10); /*Trap Door is Open, Ball Lands in Trap Door!*/
     else
       return setState(stUpperLoop,10);  /*Trap Door is Closed, Make Upper Loop Shot!*/
-    break;
+  break;
 
   /* Left Outlane - Drain or Go to Left Shooter? */
   case stLOut2:
@@ -451,8 +453,8 @@ static int fh_handleBallState(sim_tBallStatus *ball, int *inports) {
       }
     else
       return setState(stDrain,15);
-    break;
-    }
+  break;
+  }
   return 0;
 }
 
@@ -567,6 +569,7 @@ static core_tLampDisplay fh_lampPos = {
 
   The code specifies: SOLENOID, CHANNEL #, and SAMPLE NAME
   *************************************************************/
+#ifdef ENABLE_MECHANICAL_SAMPLES
 static wpc_tSamSolMap fh_samsolmap[] = {
  /*Channel #0*/
  {sKnocker,0,SAM_KNOCKER}, {sBallRel,0,SAM_BALLREL},
@@ -595,6 +598,7 @@ static wpc_tSamSolMap fh_samsolmap[] = {
 // {sEyesRight,3,SAM_DIVERTER},  {sEyesLeft,3,SAM_DIVERTER}
 
 };
+#endif
 
 static void fh_drawMech(BMTYPE **line) {
   core_textOutf(30, 0,BLACK,"Trap Door: %-6s", locals.trapdoorPos?"Open":"Closed");
@@ -623,6 +627,7 @@ static void fh_drawStatic(BMTYPE **line) {
 /*-----------------
 /  ROM definitions
 /------------------*/
+// "special L-2 sound ROM" for L-9:
 #define FH_SOUND_L3 \
 WPCS_SOUNDROM222("fh_u18.sl3",CRC(7f6c7045) SHA1(8c8d601e8e6598507d75b4955ccc51623124e8ab), \
                  "fh_u15.sl2",CRC(0744b9f5) SHA1(b626601d82e6b1cf25f7fdcca31e623fc14a3f92), \
@@ -646,6 +651,17 @@ WPC_ROMSTART(fh,d9b,"fh_d9ger.rom",0x040000,CRC(b9759f80) SHA1(979995fc65a616522
 WPC_ROMSTART(fh,905h,"fh_905h.rom",0x080000,CRC(445b632a) SHA1(6e277027a1d025e2b93f0d7736b414ba3a68a4f8)) FH_SOUND_L3 WPC_ROMEND
 WPC_ROMSTART(fh,906h,"fh_906h.rom",0x080000,CRC(2fe830a1) SHA1(f52eeef26ce509a52d7b58783236605dafae47d8)) FH_SOUND_L3 WPC_ROMEND
 
+WPC_ROMSTART(fh,pa1, "u6-l2.rom",   0x20000, CRC(7a8a3278) SHA1(b35c1149862724ea70cc810f14141e51b365e950))
+  SOUNDREGION(0x10000, S11CS_CPUREGION)
+  SOUNDREGION(0x70000, S11CS_ROMREGION)
+    ROM_LOAD("fh_u4.pa1",  0x00000, 0x10000, CRC(9f0a716d) SHA1(3d3ec250b0b4344844ad8ce5bcbb326f934b22d3))
+      ROM_CONTINUE        (0x40000, 0x10000)
+    ROM_LOAD("fh_u19.pa1", 0x10000, 0x10000, CRC(b0fb5ddf) SHA1(138c2aa283f7ced90637e981063f520bf46c57df))
+      ROM_CONTINUE        (0x50000, 0x10000)
+    ROM_LOAD("fh_u20.pa1", 0x20000, 0x10000, CRC(bb864f78) SHA1(ed861bd5df382e7efac103a1acb3d810ee4b15dc))
+      ROM_CONTINUE        (0x60000, 0x10000)
+WPC_ROMEND
+
 WPC_ROMSTART(fh,l2,"u6-l2.rom",0x020000,CRC(7a8a3278) SHA1(b35c1149862724ea70cc810f14141e51b365e950)) FH_SOUND_L2 WPC_ROMEND
 
 WPC_ROMSTART(fh,l3,"u6-l3.rom",0x020000,CRC(7a74d702) SHA1(91540cdc62c855b4139b202aa6ad5440b2dee141)) FH_SOUND_L2 WPC_ROMEND
@@ -663,20 +679,21 @@ WPC_ROMSTART(fh,f91,"ffh0_91.rom",0x040000,CRC(b3224e53) SHA1(f0996209a4490af7ac
 /  Game drivers
 /---------------*/
 
-CORE_GAMEDEF(fh,l9,"Funhouse L-9 (SL-3)",1992,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(fh,d9,l9,"Funhouse D-9 (SL-3) LED Ghost Fix",1992,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(fh,l9b,l9,"Funhouse L-9 (SL-3) Bootleg Improved German translation",1992,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(fh,d9b,l9,"Funhouse D-9 (SL-3) German LED Ghost Fix",1992,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(fh,905h,l9,"Funhouse 9.05H",1996,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(fh,906h,l9,"Funhouse 9.06H (Coin Play)",1996,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(fh,l2,l9,"Funhouse L-2",1990,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(fh,l3,l9,"Funhouse L-3",1990,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(fh,d3,l9,"Funhouse D-3 LED Ghost Fix",1990,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(fh,l4,l9,"Funhouse L-4",1991,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(fh,d4,l9,"Funhouse D-4 LED Ghost Fix",1991,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(fh,l5,l9,"Funhouse L-5",1991,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(fh,d5,l9,"Funhouse D-5 LED Ghost Fix",1991,"Williams",wpc_mAlpha2S,0)
-CORE_CLONEDEF(fh,f91,l9,"Funhouse (FreeWPC 0.91)",1991,"Williams",wpc_mAlpha2S,0)
+CORE_GAMEDEF(fh,l9,"Funhouse (L-9, SL-3)",1992,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(fh,d9,l9,"Funhouse (D-9, SL-3 LED Ghost Fix)",1992,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(fh,l9b,l9,"Funhouse (L-9, SL-3 Improved German translation patch)",1992,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(fh,d9b,l9,"Funhouse (D-9, SL-3 German LED Ghost Fix)",1992,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(fh,905h,l9,"Funhouse (9.05H)",1996,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(fh,906h,l9,"Funhouse (9.06H Coin Play)",1996,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(fh,pa1,l9,"Funhouse (L-2, Prototype PA-1 system 11 sound)",1990,"Williams",wpc_alpha1S,0) // L-2 is lowest we have, should use P-6 instead
+CORE_CLONEDEF(fh,l2,l9,"Funhouse (L-2)",1990,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(fh,l3,l9,"Funhouse (L-3)",1990,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(fh,d3,l9,"Funhouse (D-3 LED Ghost Fix)",1990,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(fh,l4,l9,"Funhouse (L-4)",1991,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(fh,d4,l9,"Funhouse (D-4 LED Ghost Fix)",1991,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(fh,l5,l9,"Funhouse (L-5)",1991,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(fh,d5,l9,"Funhouse (D-5 LED Ghost Fix)",1991,"Williams",wpc_mAlpha2S,0)
+CORE_CLONEDEF(fh,f91,l9,"Funhouse (FreeWPC 0.91)",1991,"FreeWPC",wpc_mAlpha2S,0)
 
 /*-----------------------
 / Simulation Definitions
@@ -702,7 +719,31 @@ static core_tGameData fhGameData = {
     FLIP_SWNO(12,11),   /* Which switches are the flippers */
     0,0,0,0,0,1,0,
     NULL, fh_handleMech, NULL, fh_drawMech,
-    &fh_lampPos, fh_samsolmap
+    &fh_lampPos
+#ifdef ENABLE_MECHANICAL_SAMPLES
+    , fh_samsolmap
+#endif
+  },
+  &fhSimData,
+  {
+    "",
+    /*Coin    1     2     3     4     5     6     7     8     9    10   Cab.  Cust */
+    { 0x00, 0x00, 0x00, 0x00, 0x00, 0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, /* Dummy Jaw (Col 5, Row 1) & Superdog opto (Col 5, Row 5) = 0x11) */
+    /*Start    Tilt    SlamTilt    CoinDoor    Shooter */
+    { swStart, swTilt, swSlamTilt, swCoinDoor, 0},
+  }
+};
+
+static core_tGameData fhpa1GameData = {
+  GEN_WPCALPHA_1, wpc_dispAlpha, /* generation */
+  {
+    FLIP_SWNO(12,11),   /* Which switches are the flippers */
+    0,0,0,0,0,1,0,
+    NULL, fh_handleMech, NULL, fh_drawMech,
+    &fh_lampPos
+#ifdef ENABLE_MECHANICAL_SAMPLES
+    , fh_samsolmap
+#endif
   },
   &fhSimData,
   {
@@ -740,12 +781,33 @@ static core_tGameData fhGameData = {
 ---------------------------------------------------------------------------------------------*/
 
 
+#ifdef PROC_SUPPORT
+  #include "p-roc/p-roc.h"
+  /*
+    Solenoid smoothing messes up Rudy's mouth (C21 and C22)
+  */
+  void fh_wpc_proc_solenoid_handler(int solNum, int enabled, int smoothed) {
+    switch (solNum) {
+      case 20:  // C21, Mouth Motor
+      case 21:  // C22, Up/Down Driver
+        // Solenoids to handle in immediate mode, not smoothed.  Negate `smoothed`
+        // so default handler will process immediate solenoid changes and ignore
+        // smoothed changes.
+        smoothed = !smoothed;
+    }
+    default_wpc_proc_solenoid_handler(solNum, enabled, smoothed);
+  }
+#endif
+
 /*---------------
 /  Game handling
 /----------------*/
 static void init_fh(void) {
-  core_gameData = &fhGameData;
+  core_gameData = strncasecmp(Machine->gamedrv->name, "fh_pa1", 6) ? &fhGameData : &fhpa1GameData;
   locals.divertercount=0;
+#ifdef PROC_SUPPORT
+  wpc_proc_solenoid_handler = fh_wpc_proc_solenoid_handler;
+#endif
 }
 
 
@@ -761,7 +823,10 @@ static void fh_handleMech(int mech) {
   if (mech & 0x01) {
     if (core_getSol(sRampDiv) && locals.diverterPos != OPEN) {
       locals.diverterPos = OPEN;
-      wpc_play_sample(0,SAM_DIVERTER);
+#ifdef ENABLE_MECHANICAL_SAMPLES
+      if (coreGlobals.soundEn)
+        wpc_play_sample(0,SAM_DIVERTER);
+#endif
     }
     else
       locals.divertercount++;
@@ -820,11 +885,17 @@ static void fh_handleMech(int mech) {
     eyesright = core_getSol(sEyesRight);
     if (eyesleft && !(locals.rudyeyesLR == EYES_LEFT)) {
       locals.rudyeyesLR = EYES_LEFT;
-      wpc_play_sample(2,SAM_DIVERTER);
+#ifdef ENABLE_MECHANICAL_SAMPLES
+      if (coreGlobals.soundEn)
+        wpc_play_sample(2,SAM_DIVERTER);
+#endif
     }
     if (eyesright && !(locals.rudyeyesLR == EYES_RIGHT)) {
       locals.rudyeyesLR = EYES_RIGHT;
-      wpc_play_sample(2,SAM_DIVERTER);
+#ifdef ENABLE_MECHANICAL_SAMPLES
+      if (coreGlobals.soundEn)
+        wpc_play_sample(2,SAM_DIVERTER);
+#endif
     }
     if (!eyesleft && !eyesright)
       locals.rudyeyesLR = EYES_ST;

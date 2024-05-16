@@ -1,10 +1,18 @@
 /*----------------------------------------
 /              Atari sound
 /-----------------------------------------*/
+
+//!! Remaining issue: The 1000 point sound on Airborne Avenger sounds quite different on most videos I found.
+//   It's not a dump issue at least, since the sound itself uses waveform 0 (sine wave) and that waveform is used for a bunch of other sounds, which are good.
+//   I think that there's some filtering and/or clipping going on at the DAC output section.
+//   My guess is that it's a side effect from having the volume pot turned up, the manual itself actually mentions distortion.
+
 #include <stdlib.h>
 #include "driver.h"
 #include "core.h"
 #include "sndbrd.h"
+
+#define GEN1_SND_CLK 125000
 
 static struct {
   struct sndbrdData brdData;
@@ -15,6 +23,8 @@ static struct {
 static int  atari_sh_start1(const struct MachineSound *msound);
 static int  atari_sh_start2(const struct MachineSound *msound);
 static void atari_sh_stop (void);
+static void atari_sh_reset1(void);
+static void atari_sh_reset2(void);
 static WRITE_HANDLER(atari_data1_w);
 static WRITE_HANDLER(atari_ctrl1_w);
 static WRITE_HANDLER(atari_data_w);
@@ -34,8 +44,8 @@ const struct sndbrdIntf atari1sIntf = {
 const struct sndbrdIntf atari2sIntf = {
   "ATARI2", atari_init, NULL, NULL, atari_data_w, atari_data_w, NULL, atari_ctrl_w, NULL, SNDBRD_NODATASYNC|SNDBRD_NOCTRLSYNC
 };
-static struct CustomSound_interface atari1s_custInt = {atari_sh_start1, atari_sh_stop};
-static struct CustomSound_interface atari2s_custInt = {atari_sh_start2, atari_sh_stop};
+static struct CustomSound_interface atari1s_custInt = {atari_sh_start1, atari_sh_stop, NULL, atari_sh_reset1};
+static struct CustomSound_interface atari2s_custInt = {atari_sh_start2, atari_sh_stop, NULL, atari_sh_reset2};
 
 MACHINE_DRIVER_START(atari1s)
   MDRV_SOUND_ADD(CUSTOM, atari1s_custInt)
@@ -78,10 +88,9 @@ static void playSound(void) {
   }
   if (atarilocals.sound & 0x01) { // wave on
     int i;
-    UINT8 byte;
     mixer_set_volume(atarilocals.channel, atarilocals.volume*4);
     for (i=0; i < 32; i++) { // copy in the correct waveform from the sound PROM
-      byte = memory_region(REGION_SOUND1)[32 * atarilocals.waveform + i] & 0x0f;
+      const UINT8 byte = memory_region(REGION_SOUND1)[32 * atarilocals.waveform + i] & 0x0f;
       romWave[i] = 0x80 + (byte | (byte << 4));
     }
     if (mixer_is_sample_playing(atarilocals.channel)) {
@@ -94,12 +103,33 @@ static void playSound(void) {
   }
 }
 
+static void playSound1(void) {
+	if (atarilocals.sound & 0x01) { // wave on
+		int i;
+		UINT8 byte;
+		mixer_set_volume(atarilocals.channel, atarilocals.volume * 4);
+		for (i = 0; i < 32; i++) { // copy in the correct waveform from the sound PROM
+			byte = memory_region(REGION_SOUND1)[32 * atarilocals.waveform + i] & 0x0f;
+			romWave[i] = 0x80 + (byte | (byte << 4));
+		}
+		if (mixer_is_sample_playing(atarilocals.channel)) {
+			mixer_set_sample_frequency(atarilocals.channel,
+				GEN1_SND_CLK / (16 - atarilocals.frequency));
+		}
+		else {
+			mixer_play_sample(atarilocals.channel, (signed char *)romWave, sizeof(romWave),
+				GEN1_SND_CLK / (16 - atarilocals.frequency), 1);
+		}
+	}
+}
+
 static int atari_sh_start1(const struct MachineSound *msound) {
   if (Machine->gamedrv->flags & GAME_NO_SOUND) {
     return -1;
   }
 
   atarilocals.channel = mixer_allocate_channel(20);
+  atarilocals.sound = 0;
   return 0;
 }
 
@@ -116,34 +146,45 @@ static int atari_sh_start2(const struct MachineSound *msound) {
 static void atari_sh_stop(void) {
 }
 
+static void atari_sh_reset1(void) {
+  stopSound();
+}
+
+static void atari_sh_reset2(void) {
+  stopSound();
+  stopNoise();
+}
+
 static WRITE_HANDLER(atari_data1_w) {
-  static int delay; // used to delay the mixer_stop_sample call by 1 iteration (makes sound smoother)
-  if (data) {
-    delay = 0;
-    atarilocals.frequency = data < 0x10 ? 0x10 | data : data;
-    if (mixer_is_sample_playing(atarilocals.channel)) {
-      mixer_set_sample_frequency(atarilocals.channel, 500 * atarilocals.frequency);
-    } else {
-      mixer_play_sample(atarilocals.channel, (signed char *)romWave, sizeof(romWave), 500 * atarilocals.frequency, 1);
-    }
-  } else {
-    if (!delay) {
-      delay = 1;
-    } else {
-      delay = 0;
-      mixer_stop_sample(atarilocals.channel);
-    }
-  }
+	// frequency and volume
+	UINT8 Freq = data & 0xF;
+	UINT8 Volume = (data & 0xF0) >> 4;
+
+	if (Freq != atarilocals.frequency)
+	{
+		atarilocals.frequency = Freq;
+	}
+	if (Volume != atarilocals.volume)
+	{
+		atarilocals.volume = Volume;
+	}
+	playSound1();
 }
 
 static WRITE_HANDLER(atari_ctrl1_w) {
-  int i;
-  UINT8 byte;
-  atarilocals.waveform = data & 0x0f;
-  for (i=0; i < 32; i++) { // copy in the correct waveform from the sound PROM
-    byte = memory_region(REGION_SOUND1)[32 * atarilocals.waveform + i] & 0x0f;
-    romWave[i] = 0x80 + (byte | (byte << 4));
-  }
+	// waveform and enable
+	UINT8 Wave = data & 0xF;
+	int Enable = (data & 0x10) ? 1 : 0;
+	if (Wave != atarilocals.waveform)
+	{
+		atarilocals.waveform = Wave;
+	}
+	if (atarilocals.sound != Enable)
+	{
+		atarilocals.sound = Enable;
+		if (Enable == 0) stopSound();
+	}
+	playSound1();
 }
 
 static WRITE_HANDLER(atari_ctrl_w) {

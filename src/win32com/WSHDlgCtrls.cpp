@@ -1,6 +1,6 @@
 // WSHDlgCtrls.cpp : Implementation of WSHDlgCtrls
-#include "Stdafx.h"
-#include "VPinMAME_h.h"
+#include "StdAfx.h"
+#include "VPinMAME.h"
 #include "WSHDlgCtrls.h"
 
 /////////////////////////////////////////////////////////////////////////////
@@ -40,7 +40,7 @@ END_COM_MAP()
 // ISupportsErrorInfo
 	STDMETHOD(InterfaceSupportsErrorInfo)(REFIID riid)
 	{
-		static const IID* arr[] = 
+		static const IID* arr[] =
 		{
 			&IID_IEnumWSHDlgCtrls
 		};
@@ -56,7 +56,7 @@ END_COM_MAP()
 public:
 	STDMETHODIMP Next(ULONG celt,VARIANT __RPC_FAR *rgVar, ULONG __RPC_FAR *pCeltFetched)
 	{
-		HRESULT hr = S_FALSE;
+		HRESULT hr;
 
 		if ( pCeltFetched )
 			*pCeltFetched = 0;

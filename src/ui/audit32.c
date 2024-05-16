@@ -25,7 +25,7 @@
 #include <stdio.h>
 #include <richedit.h>
 
-#include "screenshot.h"
+#include "Screenshot.h"
 #include "win32ui.h"
 
 #include <audit.h>
@@ -33,9 +33,9 @@
 
 #include "resource.h"
 
-#include "bitmask.h"
+#include "Bitmask.h"
 #include "options.h"
-#include "m32util.h"
+#include "M32Util.h"
 #include "audit32.h"
 #include "Properties.h"
 
@@ -384,7 +384,7 @@ static void CLIB_DECL DetailsPrintf(const char *fmt, ...)
 	va_list marker;
 	char	buffer[2000];
 	char * s;
-	long l;
+	int l;
 
 	//RS 20030613 Different Ids for Property Page and Dialog
 	// so see which one's currently instantiated
@@ -408,7 +408,7 @@ static void CLIB_DECL DetailsPrintf(const char *fmt, ...)
 
 	l = Edit_GetTextLength(hEdit);
 	Edit_SetSel(hEdit, Edit_GetTextLength(hEdit), Edit_GetTextLength(hEdit));
-	SendMessage( hEdit, EM_REPLACESEL, FALSE, (WPARAM)s );
+	SendMessage( hEdit, EM_REPLACESEL, FALSE, (LPARAM)s );
 }
 
 static const char * StatusString(int iStatus)

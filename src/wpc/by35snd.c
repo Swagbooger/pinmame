@@ -1,96 +1,76 @@
+// license:BSD-3-Clause
+
 #include "driver.h"
 #include "machine/6821pia.h"
 #include "cpu/m6800/m6800.h"
 #include "cpu/m68000/m68000.h"
 #include "cpu/m6809/m6809.h"
-#include "sound/tms5220.h"
+#include "sound/discrete.h"
+#include "sound/tms5220.h" // uses TMS5200
 #include "core.h"
 #include "sndbrd.h"
 #include "by35.h"
 #include "by35snd.h"
 
-// sample support added for by32 / by50 by Oliver Kaegi (08/27/2004)
-//
-// sample table for both 82s123 prom from the by32 / by50 sound card...
-//
-static const char *u318_sample_names[] =
+#if 0 // port from MAME, to be wired up
+static const struct discrete_mixer_desc as2888_digital_mixer_info =
 {
-	"*s3250u3",
-	"w1801.wav",
-	"w1802.wav",
-	"w1803.wav",
-	"w1804.wav",
-	"w1805.wav",
-	"w1806.wav",
-	"w1807.wav",
-	"w1808.wav",
-	"w1809.wav",
-	"w1810.wav",
-	"w1811.wav",
-	"w1812.wav",
-	"w1813.wav",
-	"w1814.wav",
-	"w1815.wav",
-	"w1815.wav",
-	"w1817.wav",
-	"w1818.wav",
-	"w1819.wav",
-	"w1820.wav",
-	"w1821.wav",
-	"w1822.wav",
-	"w1823.wav",
-	"w1824.wav",
-	"w1825.wav",
-	"w1826.wav",
-	"w1827.wav",
-	"w1828.wav",
-	"w1829.wav",
-	"w1830.wav",
-	"w1831.wav",
-	"w1831.wav",
-	"w5101.wav",
-	"w5102.wav",
-	"w5103.wav",
-	"w5104.wav",
-	"w5105.wav",
-	"w5106.wav",
-	"w5107.wav",
-	"w5108.wav",
-	"w5109.wav",
-	"w5110.wav",
-	"w5111.wav",
-	"w5112.wav",
-	"w5113.wav",
-	"w5114.wav",
-	"w5115.wav",
-	"w5115.wav",
-	"w5117.wav",
-	"w5118.wav",
-	"w5119.wav",
-	"w5120.wav",
-	"w5121.wav",
-	"w5122.wav",
-	"w5123.wav",
-	"w5124.wav",
-	"w5125.wav",
-	"w5126.wav",
-	"w5127.wav",
-	"w5128.wav",
-	"w5129.wav",
-	"w5130.wav",
-	"w5131.wav",
-	"w5131.wav",
-	0   /* end of array */
+	DISC_MIXER_IS_RESISTOR,                       /* type */
+	{RES_K(33), RES_K(3.9)},                      /* r{} */
+	{0, 0, 0, 0},                                 /* r_node */
+	{0, 0},                                       /* c{} */
+	0,                                            /* rI  */
+//	RES_VOLTAGE_DIVIDER(RES_K(10), RES_R(360)),   /* rF  */
+	RES_K(10),                                    /* rF  */   // not really
+	CAP_U(0.01),                                  /* cF  */
+	0,                                            /* cAmp */
+	0,                                            /* vRef */
+	0.00002                                       /* gain */
 };
 
-struct Samplesinterface u318_samples_interface =
-{
-	3,
-	50,	/* volume */
-	u318_sample_names,
-	"Bally sounds"
+static const struct discrete_op_amp_filt_info as2888_preamp_info = {
+	RES_K(10), 0, RES_R(470), 0,      /* r1 .. r4 */
+	RES_K(10),                        /* rF */
+	CAP_U(1),                         /* C1 */
+	0,                                /* C2 */
+	0,                                /* C3 */
+	0.0,                              /* vRef */
+	12.0,                             /* vP */
+	-12.0,                            /* vN */
 };
 
+static DISCRETE_SOUND_START(as2888_discrete)
+
+	DISCRETE_INPUT_DATA(NODE_08)        // Start Sustain Attenuation from 555 circuit
+	DISCRETE_INPUT_LOGIC(NODE_01)       // Binary Counter B output (divide by 1) T2
+	DISCRETE_INPUT_LOGIC(NODE_04)       // Binary Counter D output (divide by 4) T3
+
+	DISCRETE_DIVIDE(NODE_11, 1, NODE_01, 1) // 2
+	DISCRETE_DIVIDE(NODE_14, 1, NODE_04, 1)
+
+
+	DISCRETE_RCFILTER(NODE_06, 1, NODE_14, RES_K(15), CAP_U(0.1))      // T4 filter
+#if 0
+	DISCRETE_RCFILTER(NODE_05, 1, NODE_11, RES_K(33), CAP_U(0.01))     // T1 filter
+	DISCRETE_ADDER2(NODE_07, 1, NODE_05, NODE_06)
+#else
+
+	DISCRETE_MIXER2(NODE_07, 1, NODE_11, NODE_06, &as2888_digital_mixer_info)   // Mix and filter T1 and T4 together
+#endif
+	DISCRETE_RCDISC5(NODE_87, 1, NODE_08, RES_K(150), CAP_U(1.0))
+
+	DISCRETE_RCFILTER_VREF(NODE_88,1,NODE_87,RES_M(1),CAP_U(0.01),2)
+	DISCRETE_MULTIPLY(NODE_09, 1, NODE_07, NODE_88)    // Apply sustain
+
+	DISCRETE_OP_AMP_FILTER(NODE_20, 1, NODE_09, 0, DISC_OP_AMP_FILTER_IS_HIGH_PASS_1, &as2888_preamp_info)
+
+	DISCRETE_CRFILTER(NODE_25, NODE_20, RES_M(100), CAP_U(0.05))    // Resistor is fake. Capacitor in series between pre-amp and output amp.
+
+	DISCRETE_GAIN(NODE_30, NODE_25, 50) // Output amplifier LM380 fixed inbuilt gain of 50
+
+	DISCRETE_OUTPUT(NODE_30, 10000000)  //  17000000
+DISCRETE_SOUND_END
+#endif
 
 /*----------------------------------------
 /              -32, -50 sound
@@ -111,122 +91,108 @@ const struct sndbrdIntf by32Intf = {
 static struct CustomSound_interface by32_custInt = {by32_sh_start, by32_sh_stop};
 
 MACHINE_DRIVER_START(by32)
+#if 0
+  MDRV_SOUND_ADD(DISCRETE, as2888_discrete)
+#else
   MDRV_SOUND_ADD(CUSTOM, by32_custInt)
+#endif
+#ifdef ENABLE_MECHANICAL_SAMPLES
   MDRV_SOUND_ADD(SAMPLES, samples_interface)
-  MDRV_SOUND_ADD_TAG("BY_32_50", SAMPLES, u318_samples_interface)
+#endif
 MACHINE_DRIVER_END
 
+#define BY32_DECAYFREQ   50
+#define BY32_EXPFACTOR   90
+#define BY32_PITCH      400
+
+/* waveform for the audio hardware */
+static const INT16 sineWave[] = {
+/*
+    6836,  16956,  20464,  22477,  24174,  24988,  25600,  25699,
+   25710,  11529,   6486,   6222,   6587,   6805,   6835,   6574,
+    6347,   6026,  21288,  23102,  22166,  20086,  18564,  17068,
+   15433,  14130,  12733,  -4363,  -7370,  -7842,  -7468,  -7275,
+   -7076,  -6897,  -6630,  -2875,   6858,   5115,    482,  -2879,
+   -5526,  -8070,  -9501, -10671, -16040, -27830, -29562, -28556,
+  -27184, -25808, -24037, -22682, -20848, -14203,  -2291,    513,
+     879,    880,    959,   1074,   1244,   1380,  -4861, -14419,
+  -15251, -14156, -12504, -11270, -10166,  -9080,  -8086,    497
+*/
+    -411,   9756,  21784,  27153,  29033,  30258,  30725,  30748,
+   30328,  29687,  28821,  27547,  26363,  25106,  23445,  22274,
+   20969,  19560,   4032,  -2111,  -3506,  -3407,  -3325,  -3334,
+   -3311,  -3336,  -3373,  -3400,  -3446,  -3459,  -3514,  -3547,
+   -3793,  -3949,  -2817,  12083,  14726,  13756,  12298,  10663,
+    9447,   8297,   6956,   5936,   4985,   3869,   3060,   2291,
+    1416,    891,    219,  -5349, -17793, -19641, -19026, -18017,
+  -16879, -15996, -15140, -14122, -13342, -12609, -11688, -11009,
+  -10354,  -9703,  -9137,  -8405,   1461,   6115,   2565,  -1128,
+   -4224,  -7153,  -8915, -10243, -11378, -11950, -12304, -12431,
+  -12364, -12180, -11539, -11005, -10365, -23724, -27447, -26336,
+  -24325, -22384, -20117, -18338, -16665, -14691, -13182, -11771,
+  -10091,  -8838,  -7650,  -6468,  -5566,  -4913,  12261,  15587,
+   15601,  14905,  14239,  13449,  12861,  12276,  11609,  11068,
+   10570,   9945,   9493,   9060,   8629,   8188,   2540,  -9151,
+  -10863, -10051,  -8964,  -8013,  -6870,  -6009,  -5199,  -4240,
+   -3520,  -2882,  -2103,  -1550,  -1051,   -630
+};
 
 static struct {
   struct sndbrdData brdData;
-  int  startit, lastCmd,  strobe, sampleoff;
+  int volume, lastCmd, channel, strobe;
 } by32locals;
 
+static void by32_decay(int param) {
+  mixer_set_volume(by32locals.channel, by32locals.volume/10);
+  if (by32locals.volume < 50) by32locals.volume = 0;
+  else by32locals.volume = by32locals.volume * BY32_EXPFACTOR / 100;
+}
 
-static int by32_sh_start(const struct MachineSound *msound)  {
-  int mixing_levels[1] = {0};
-  mixer_allocate_channels(1, mixing_levels);
+static int by32_sh_start(const struct MachineSound *msound) {
+  by32locals.channel = mixer_allocate_channel(30);
+  mixer_play_sample_16(by32locals.channel, (INT16 *)sineWave, sizeof(sineWave), 0, 1);
+  timer_pulse(TIME_IN_HZ(BY32_DECAYFREQ),0,by32_decay);
   return 0;
 }
 
-
 static void by32_sh_stop(void) {
+  mixer_stop_sample(by32locals.channel);
 }
 
-
-
-// table to play samples
-
-//by32_ctrl_w         	by32_data_w
-//    cb2 e  		a-d    		prev-cb2    prev-a-d   		result (dont play if 1111)
-// a) 0   X   		 		X		  		fill prev cb2
-// b) 1   X            			0        	0001      	play X0001
-// c)        		1100    	1       	0001       	play X1100 fill prev a-d
-// d)     		0001		0		XXXX 		fill prev a-d
-// e) 1   x                             1                               ignore
-// X -> dont care
-
-static int lastchan = 0;
-static void playsam(int cmd) {
-   int i;
+static void setfreq(int cmd) {
   if ((cmd != by32locals.lastCmd) && ((cmd & 0x0f) != 0x0f)) {
-
-       int samplex;
-        samplex = by32locals.sampleoff + (cmd & 0x1f);
-//  logerror("%04x: samplestart cmd %02x alstcmd %02x %d \n", activecpu_get_previouspc(), cmd,by32locals.lastCmd,samplex);
-
-// 	if (by32locals.startit == 0)
-// 	{
-// 		sample_start(0,samplex,0);
-// 		by32locals.startit = 1;
-// 	}
-// 	else
-// 	{
-		lastchan++;
-		if (lastchan > 2) lastchan = 0;
-  		sample_start(6+lastchan,samplex,0);
-		//  		by32locals.startit = 0;
-//	}
-//       sample_start(0,samplex,0);
-  } else   if ((cmd & 0x0f) == 0x0f)     {
-	   for (i = 0;i < 3;i++) {
-           if (i != lastchan) sample_stop(6+i);
-        }
-         }
+    UINT8 sData = core_revbyte(*(by32locals.brdData.romRegion + (cmd ^ 0x10)));
+    double f = sizeof(sineWave)/((1.1E-6+BY32_PITCH*1E-8)*sData)/8;
+    mixer_set_sample_frequency(by32locals.channel, f);
+    by32locals.volume = 1000;
+    mixer_set_volume(by32locals.channel, 100);
+  }
   by32locals.lastCmd = cmd;
 }
 
 static WRITE_HANDLER(by32_data_w) {
-      	logerror("%04x: by_data_w data %02x \n", activecpu_get_previouspc(), data);
-      	if (~by32locals.strobe & 0x01)
- 	{
- 		by32locals.lastCmd =	(by32locals.lastCmd & 0x10) | (data & 0x0f); // case d
- 	}
- 	else
- 	{
-       		playsam((by32locals.lastCmd & 0x10) | (data & 0x0f)); 		// case c
-       	}
+  if (~by32locals.strobe & 0x01) {
+    by32locals.lastCmd = (by32locals.lastCmd & 0x10) | (data & 0x0f);
+  } else {
+    setfreq((by32locals.lastCmd & 0x10) | (data & 0x0f));
+  }
 }
+
 static WRITE_HANDLER(by32_ctrl_w) {
-int i;
-  if (~by32locals.strobe & 0x01)
-	{
- //        playsam((by32locals.lastCmd & 0x0f) | ((data & 0x02) ? 0x10 : 0x00)); // case b
-// sound e bit is swaped !!!!
-          playsam((by32locals.lastCmd & 0x0f) | ((data & 0x02) ? 0x00 : 0x10)); // case b
-	}
-  else
-    	if (~data & 0x01)
-           {
-// 	   by32locals.lastCmd = (by32locals.lastCmd & 0x0f) | ((data & 0x02) ? 0x10 : 0x00); // case a
-  	   by32locals.lastCmd = (by32locals.lastCmd & 0x0f) | ((data & 0x02) ? 0x00 : 0x10); // case a
-	   for (i = 0;i < 3;i++) {
-           if (i != lastchan) sample_stop(6+i);
-        }
-
-           }
-
-  logerror("%04x: by_ctrl32_w data %02x startit %d\n", activecpu_get_previouspc(), data,by32locals.startit);
-  by32locals.strobe = data;	// case e
+  if (~by32locals.strobe & data & 0x01) {
+    setfreq((by32locals.lastCmd & 0x0f) | ((data & 0x02) ? 0x10 : 0x00));
+  } else if (by32locals.strobe & ~data & 0x01) {
+    by32locals.volume = 0;
+    by32locals.lastCmd = (by32locals.lastCmd & 0x0f) | ((data & 0x02) ? 0x10 : 0x00);
+  }
+  by32locals.strobe = data;
 }
-
 static WRITE_HANDLER(by32_manCmd_w) {
   by32_data_w(0, data); by32_ctrl_w(0,0); by32_ctrl_w(0,((data & 0x10)>>3)|0x01);
 }
 static void by32_init(struct sndbrdData *brdData) {
-  int w;
-   memset(&by32locals, 0, sizeof(by32locals));
+  memset(&by32locals, 0, sizeof(by32locals));
   by32locals.brdData = *brdData;
-  w = core_revbyte(*(by32locals.brdData.romRegion));
-    if (w == 0xfe)
-    {
-    	by32locals.sampleoff	= 18;		// 751-18 game rom detected (star trek,playboy...)
-    }
-    else
-    {
-    	by32locals.sampleoff	= 32 + 18;		// 751-51 game rom detected (harlem, dolly...)
-    }
-    logerror("%04x: by_ctrl32_int %02x \n", activecpu_get_previouspc(),w );
 }
 
 
@@ -239,14 +205,14 @@ static void by32_init(struct sndbrdData *brdData) {
 /      3.58MHz
 /
 /  U4  ROM f000-ffff (8000-8fff)
-/ U1-U8 ROM 8000-ffff (vocalizer board)
+/U1-U8 ROM 8000-ffff (vocalizer board)
 /  U10 RAM 0000-007f
 /  U2  PIA 0080-0083 (PIA0)
-/      A:  8910 DA
-/      B0: 8910 BC1
-/      B1: 8910 BDIR
-/      B6: Speach clock
-/      B7: Speach data
+/      A  : 8910 DA
+/      B0 : 8910 BC1
+/      B1 : 8910 BDIR
+/      B6 : Speech clock
+/      B7 : Speech data
 /      CA1: SoundEnable
 /      CB1: fed by 555 timer (not equipped?)
 /      CA2: ? (volume circuit)
@@ -273,19 +239,13 @@ const struct sndbrdIntf by51Intf = {
   "BY51", sp_init, NULL, sp_diag, sp51_manCmd_w, sp51_data_w, NULL, sp51_ctrl_w, NULL,
 };
 
-static struct AY8910interface   sp_ay8910Int  = { 1, 3579545/4, {20}, {sp_8910a_r} };
-static struct hc55516_interface sp_hc55516Int = { 1, {75}};
+static struct AY8910interface   sp_ay8910Int  = { 1, 3579545./4., {20}, {sp_8910a_r} };
+
 static MEMORY_READ_START(sp51_readmem)
   { 0x0000, 0x007f, MRA_RAM },
   { 0x0080, 0x00ff, pia_r(SP_PIA0) },
   { 0x1000, 0x1fff, MRA_ROM },
   { 0xf000, 0xffff, MRA_ROM },
-MEMORY_END
-
-static MEMORY_READ_START(sp56_readmem)
-  { 0x0000, 0x007f, MRA_RAM },
-  { 0x0080, 0x00ff, pia_r(SP_PIA0) },
-  { 0x8000, 0xffff, MRA_ROM },
 MEMORY_END
 
 static MEMORY_WRITE_START(sp_writemem)
@@ -295,37 +255,59 @@ static MEMORY_WRITE_START(sp_writemem)
   { 0x8000, 0xffff, MWA_ROM },
 MEMORY_END
 
-#ifndef PINMAME_NO_UNUSED	// currently unused function (GCC 3.4)
-static INTERRUPT_GEN(sp555_timer) {
-  static int cb1;
-  pia_set_input_cb1(SP_PIA0, cb1 = !cb1);
-}
-#endif
-
 MACHINE_DRIVER_START(by51)
-  MDRV_CPU_ADD_TAG("scpu", M6802, 3579545/4)
+  MDRV_CPU_ADD_TAG("scpu", M6802, 3579545./4.)
   MDRV_CPU_FLAGS(CPU_AUDIO_CPU)
   MDRV_CPU_MEMORY(sp51_readmem, sp_writemem)
-//MDRV_CPU_PERIODIC_INT(sp555_timer, 250)
   MDRV_INTERLEAVE(500)
   MDRV_SOUND_ADD(AY8910, sp_ay8910Int)
 MACHINE_DRIVER_END
+
+static struct DACinterface sp_dacInt = { 1, { 20 }};
+
+static MEMORY_READ_START(sp51N_readmem)
+  { 0x0000, 0x007f, MRA_RAM },
+  { 0x0080, 0x00ff, pia_r(SP_PIA0) },
+  { 0xf000, 0xffff, MRA_ROM },
+MEMORY_END
+
+static MEMORY_WRITE_START(sp51N_writemem)
+  { 0x0000, 0x007f, MWA_RAM },
+  { 0x0080, 0x00ff, pia_w(SP_PIA0) },
+  { 0x1000, 0x1000, DAC_0_data_w },
+MEMORY_END
+
+MACHINE_DRIVER_START(by51N)
+  MDRV_IMPORT_FROM(by51)
+  MDRV_CPU_MODIFY("scpu")
+  MDRV_CPU_MEMORY(sp51N_readmem, sp51N_writemem)
+  MDRV_SOUND_ADD(DAC, sp_dacInt)
+MACHINE_DRIVER_END
+
+static struct mc3417_interface sp_mc3417Int = { 1, {100}};
+
+static MEMORY_READ_START(sp56_readmem)
+  { 0x0000, 0x007f, MRA_RAM },
+  { 0x0080, 0x00ff, pia_r(SP_PIA0) },
+  { 0x8000, 0xffff, MRA_ROM },
+MEMORY_END
 
 MACHINE_DRIVER_START(by56)
   MDRV_IMPORT_FROM(by51)
   MDRV_CPU_MODIFY("scpu")
   MDRV_CPU_MEMORY(sp56_readmem, sp_writemem)
-  MDRV_SOUND_ADD(HC55516, sp_hc55516Int)
+  MDRV_SOUND_ADD(MC3417, sp_mc3417Int)
 MACHINE_DRIVER_END
 
 static READ_HANDLER(sp_8910r);
+static READ_HANDLER(sp_pia0b_r);
 static WRITE_HANDLER(sp_pia0a_w);
 static WRITE_HANDLER(sp_pia0b_w);
 static WRITE_HANDLER(sp_pia0cb2_w);
 static void sp_irq(int state);
 
 static const struct pia6821_interface sp_pia = {
-  /*i: A/B,CA/B1,CA/B2 */ sp_8910r, 0, PIA_UNUSED_VAL(1), PIA_UNUSED_VAL(1), 0, 0,
+  /*i: A/B,CA/B1,CA/B2 */ sp_8910r, sp_pia0b_r, PIA_UNUSED_VAL(1), PIA_UNUSED_VAL(1), 0, 0,
   /*o: A/B,CA/B2       */ sp_pia0a_w, sp_pia0b_w, 0, sp_pia0cb2_w,
   /*irq: A/B           */ sp_irq, sp_irq
 };
@@ -340,15 +322,16 @@ static void sp_init(struct sndbrdData *brdData) {
   int i;
   splocals.brdData = *brdData;
   pia_config(SP_PIA0, PIA_STANDARD_ORDERING, &sp_pia);
-  if (splocals.brdData.subType == 1) { // -56 board
-    hc55516_set_gain(0, 40000);
-  }
+  //if (splocals.brdData.subType == 1) { // -56 board
+  //  mc3417_set_gain(0, 0.92);
+  //}
   for (i=0; i < 0x80; i++) memory_region(BY51_CPUREGION)[i] = 0xff;
 }
 static void sp_diag(int button) {
   cpu_set_nmi_line(splocals.brdData.cpuNo, button ? ASSERT_LINE : CLEAR_LINE);
 }
 static READ_HANDLER(sp_8910r) {
+  if (splocals.brdData.subType == 2) return ~splocals.lastcmd; // -51N
   if ((splocals.pia0b & 0x03) == 0x01) return AY8910Read(0);
   return 0;
 }
@@ -356,11 +339,14 @@ static WRITE_HANDLER(sp_pia0a_w) {
   splocals.pia0a = data;
   if (splocals.pia0b & 0x02) AY8910Write(0, splocals.pia0b ^ 0x01, splocals.pia0a);
 }
+static READ_HANDLER(sp_pia0b_r) {
+  return splocals.pia0b;
+}
 static WRITE_HANDLER(sp_pia0b_w) {
   splocals.pia0b = data;
   if (splocals.brdData.subType == 1) { // -56 board
-    hc55516_digit_w(0,(data & 0x80)>0);
-    hc55516_clock_w(0,(data & 0x40)>0);
+    mc3417_digit_w(0,(data & 0x80)>0);
+    mc3417_clock_w(0,(data & 0x40)>0);
   }
   if (splocals.pia0b & 0x02) AY8910Write(0, splocals.pia0b ^ 0x01, splocals.pia0a);
 }
@@ -371,14 +357,27 @@ static WRITE_HANDLER(sp_pia0cb2_w) {
 }
 
 static WRITE_HANDLER(sp51_data_w) {
-  splocals.lastcmd = (splocals.lastcmd & 0x10) | (data & 0x0f);
+  if (splocals.brdData.subType == 2) { // -51N
+    splocals.lastcmd = data & 0x0f;
+    if ((splocals.lastctrl & 1) && data != 0x0f) {
+      sp_irq(1); sp_irq(0);
+    }
+  } else {
+    splocals.lastcmd = (splocals.lastcmd & 0x10) | (data & 0x0f);
+  }
 }
 static WRITE_HANDLER(sp51_ctrl_w) {
-  splocals.lastcmd = (splocals.lastcmd & 0x0f) | ((data & 0x02) << 3);
+  if (splocals.brdData.subType != 2) { // not -51N
+    splocals.lastcmd = (splocals.lastcmd & 0x0f) | ((data & 0x02) << 3);
+  }
   pia_set_input_ca1(SP_PIA0, data & 0x01);
+  splocals.lastctrl = data;
 }
 static WRITE_HANDLER(sp51_manCmd_w) {
   splocals.lastcmd = data;  pia_set_input_ca1(SP_PIA0, 1); pia_set_input_ca1(SP_PIA0, 0);
+  if (splocals.brdData.subType == 2) { // -51N
+    sp_irq(1); sp_irq(0);
+  }
 }
 
 static READ_HANDLER(sp_8910a_r) {
@@ -414,7 +413,7 @@ static void sp_irq(int state) {
 / CA1:    NC
 / CA2:    Self-test LED (+5V)
 / CB1:    Sound interrupt (assume it starts high)
-/ CB2:	  ?
+/ CB2:    ?
 / IRQA, IRQB: CPU IRQ
 /
 / PIA1: 0090
@@ -431,6 +430,8 @@ static void sp_irq(int state) {
 */
 #define SNT_PIA0 2
 #define SNT_PIA1 3
+#define SNT2_PIA0 4
+#define SNT2_PIA1 5
 
 static void snt_init(struct sndbrdData *brdData);
 static void snt_diag(int button);
@@ -439,14 +440,14 @@ static WRITE_HANDLER(snt_ctrl_w);
 static WRITE_HANDLER(snt_manCmd_w);
 static void snt_5220Irq(int state);
 static void snt_5220Rdy(int state);
-static READ_HANDLER(snt_8910a_r);
+READ_HANDLER(snt_8910a_r);
 
 const struct sndbrdIntf by61Intf = {
   "BYSNT", snt_init, NULL, snt_diag, snt_manCmd_w, snt_data_w, NULL, snt_ctrl_w, NULL, 0//SNDBRD_NODATASYNC|SNDBRD_NOCTRLSYNC
 };
-static struct TMS5220interface snt_tms5220Int = { 639450, 75, snt_5220Irq, snt_5220Rdy };
+static struct TMS5220interface snt_tms5220Int = { 640000, 75, snt_5220Irq, snt_5220Rdy };
 static struct DACinterface     snt_dacInt = { 1, { 20 }};
-static struct AY8910interface  snt_ay8910Int = { 1, 3579545/4, {25}, {snt_8910a_r}};
+static struct AY8910interface  snt_ay8910Int = { 1, 3579545./4., {25}, {snt_8910a_r}};
 
 static MEMORY_READ_START(snt_readmem)
   { 0x0000, 0x007f, MRA_RAM },
@@ -465,7 +466,7 @@ static MEMORY_WRITE_START(snt_writemem)
 MEMORY_END
 
 MACHINE_DRIVER_START(by61)
-  MDRV_CPU_ADD(M6802, 3579545/4)
+  MDRV_CPU_ADD(M6802, 3579545./4.)
   MDRV_CPU_FLAGS(CPU_AUDIO_CPU)
   MDRV_CPU_MEMORY(snt_readmem, snt_writemem)
   MDRV_INTERLEAVE(500)
@@ -474,53 +475,110 @@ MACHINE_DRIVER_START(by61)
   MDRV_SOUND_ADD(AY8910,  snt_ay8910Int)
 MACHINE_DRIVER_END
 
+static struct DACinterface     snt_dacInt2 = { 2, { 20, 20 }};
+
+static MEMORY_READ_START(snt_readmem2)
+  { 0x0000, 0x007f, MRA_RAM },
+  { 0x0080, 0x0083, pia_r(SNT2_PIA0) },
+  { 0x0090, 0x0093, pia_r(SNT2_PIA1) },
+  { 0x1000, 0x1000, MRA_NOP },
+  { 0xc000, 0xffff, MRA_ROM },
+MEMORY_END
+
+static MEMORY_WRITE_START(snt_writemem2)
+  { 0x0000, 0x007f, MWA_RAM },
+  { 0x0080, 0x0083, pia_w(SNT2_PIA0) },
+  { 0x0090, 0x0093, pia_w(SNT2_PIA1) },
+  { 0x1000, 0x1000, DAC_1_data_w },
+  { 0xc000, 0xffff, MWA_ROM },
+MEMORY_END
+
+MACHINE_DRIVER_START(by61x2)
+  MDRV_CPU_ADD(M6802, 3579545./4.)
+  MDRV_CPU_FLAGS(CPU_AUDIO_CPU)
+  MDRV_CPU_MEMORY(snt_readmem, snt_writemem)
+
+  MDRV_CPU_ADD(M6802, 3579545./4.)
+  MDRV_CPU_FLAGS(CPU_AUDIO_CPU)
+  MDRV_CPU_MEMORY(snt_readmem2, snt_writemem2)
+  MDRV_INTERLEAVE(500)
+
+  MDRV_SOUND_ADD(TMS5220, snt_tms5220Int)
+  MDRV_SOUND_ADD(DAC,     snt_dacInt2)
+  MDRV_SOUND_ADD(AY8910,  snt_ay8910Int)
+MACHINE_DRIVER_END
+
 static READ_HANDLER(snt_pia0a_r);
+static READ_HANDLER(snt_pia0b_r);
 static WRITE_HANDLER(snt_pia0a_w);
 static WRITE_HANDLER(snt_pia0b_w);
+static WRITE_HANDLER(snt_pia0ca2_w);
+
 static READ_HANDLER(snt_pia1a_r);
 static READ_HANDLER(snt_pia1ca2_r);
 static READ_HANDLER(snt_pia1cb1_r);
 static WRITE_HANDLER(snt_pia1a_w);
 static WRITE_HANDLER(snt_pia1b_w);
-static WRITE_HANDLER(snt_pia0ca2_w);
+
+static READ_HANDLER(snt2_pia0a_r);
+static WRITE_HANDLER(snt2_pia0ca2_w);
+
 static void snt_irq(int state);
+static void snt2_irq(int state);
 
 static struct {
   struct sndbrdData brdData;
   int pia0a, pia0b, pia1a, pia1b, pia1cb1, pia1ca2;
   UINT8 cmd[2], lastcmd, lastctrl;
 } sntlocals;
+
 static const struct pia6821_interface snt_pia[] = {{
-  /*i: A/B,CA/B1,CA/B2 */ snt_pia0a_r, 0, PIA_UNUSED_VAL(1), PIA_UNUSED_VAL(1), 0, PIA_UNUSED_VAL(0),
+  /*i: A/B,CA/B1,CA/B2 */ snt_pia0a_r, snt_pia0b_r, PIA_UNUSED_VAL(1), PIA_UNUSED_VAL(1), 0, PIA_UNUSED_VAL(0),
   /*o: A/B,CA/B2       */ snt_pia0a_w, snt_pia0b_w, snt_pia0ca2_w, 0,
   /*irq: A/B           */ snt_irq, snt_irq
 },{
   /*i: A/B,CA/B1,CA/B2 */ snt_pia1a_r, 0, PIA_UNUSED_VAL(1), snt_pia1cb1_r, snt_pia1ca2_r, PIA_UNUSED_VAL(0),
   /*o: A/B,CA/B2       */ snt_pia1a_w, snt_pia1b_w, 0, 0,
   /*irq: A/B           */ snt_irq, snt_irq
+},{
+  /*i: A/B,CA/B1,CA/B2 */ snt2_pia0a_r, 0, PIA_UNUSED_VAL(1), PIA_UNUSED_VAL(1), 0, PIA_UNUSED_VAL(0),
+  /*o: A/B,CA/B2       */ 0, 0, snt2_pia0ca2_w, 0,
+  /*irq: A/B           */ snt2_irq, snt2_irq
+},{
+  /*i: A/B,CA/B1,CA/B2 */ 0, 0, PIA_UNUSED_VAL(1), PIA_UNUSED_VAL(1), 0, PIA_UNUSED_VAL(0),
+  /*o: A/B,CA/B2       */ 0, 0, 0, 0,
+  /*irq: A/B           */ snt2_irq, snt2_irq
 }};
-
-extern void tms5200_set_reverb(int delay, float force);
 
 static void snt_init(struct sndbrdData *brdData) {
   int i;
   sntlocals.brdData = *brdData;
   pia_config(SNT_PIA0, PIA_STANDARD_ORDERING, &snt_pia[0]);
   pia_config(SNT_PIA1, PIA_STANDARD_ORDERING, &snt_pia[1]);
-//  tms5220_reset();
+  if (brdData->subType == 2) { // Mysterian, uses a 2nd board without any AY8910 or TMS speech chip, just the DAC is used
+    pia_config(SNT2_PIA0, PIA_STANDARD_ORDERING, &snt_pia[2]);
+    pia_config(SNT2_PIA1, PIA_STANDARD_ORDERING, &snt_pia[3]);
+  }
+  tms5220_reset();
   tms5220_set_variant(TMS5220_IS_5200);
   for (i=0; i < 0x80; i++) memory_region(BY61_CPUREGION)[i] = 0xff;
   if (core_gameData->hw.gameSpecific1 & BY35GD_REVERB) {
-    tms5200_set_reverb(1500, core_getDip(4) * 0.05);
+    tms5220_set_reverb_filter(0.25f, (float)core_getDip(4) * 0.05f);
+    AY8910_set_reverb_filter(0, 0.25f, (float)core_getDip(4) * 0.05f);
+    DAC_set_reverb_filter(0, 0.25f, (float)core_getDip(4) * 0.05f);
   }
 }
 static void snt_diag(int button) {
   cpu_set_nmi_line(sntlocals.brdData.cpuNo, button ? ASSERT_LINE : CLEAR_LINE);
 }
+
 static READ_HANDLER(snt_pia0a_r) {
-  if (sntlocals.brdData.subType == 1)   return snt_8910a_r(0); // -61B
+  if (sntlocals.brdData.subType && sntlocals.brdData.subType < 3) return snt_8910a_r(0); // -61B
   if ((sntlocals.pia0b & 0x03) == 0x01) return AY8910Read(0);
   return 0;
+}
+static READ_HANDLER(snt_pia0b_r) {
+  return sntlocals.pia0b;
 }
 static WRITE_HANDLER(snt_pia0a_w) {
   sntlocals.pia0a = data;
@@ -548,23 +606,73 @@ static READ_HANDLER(snt_pia1cb1_r) {
   return sntlocals.pia1cb1;
 }
 
+static READ_HANDLER(snt2_pia0a_r) {
+  return snt_8910a_r(0);
+}
+
 static WRITE_HANDLER(snt_data_w) {
   sntlocals.lastcmd = (sntlocals.lastcmd & 0x10) | (data & 0x0f);
 }
 static WRITE_HANDLER(snt_ctrl_w) {
   sntlocals.lastcmd = (sntlocals.lastcmd & 0x0f) | ((data & 0x02) ? 0x10 : 0x00);
   pia_set_input_cb1(SNT_PIA0, ~data & 0x01);
+  switch (sntlocals.brdData.subType) {
+    case 2:
+      pia_set_input_cb1(SNT2_PIA0, ~data & 0x01);
+      break;
+    case 3: // Cosmic Flash needs IRQ triggered depending on LSB
+      if (data & 0x01) cpu_set_irq_line(sntlocals.brdData.cpuNo, M6802_IRQ_LINE, PULSE_LINE);
+  }
 }
+
+static int manualSoundcmd = 0; // only for sound command mode
 static WRITE_HANDLER(snt_manCmd_w) {
-  sntlocals.lastcmd = data;  pia_set_input_cb1(SNT_PIA0, 1); pia_set_input_cb1(SNT_PIA0, 0);
+  manualSoundcmd = 1;
+  sntlocals.lastcmd = data;
+  pia_set_input_cb1(SNT_PIA0, 1);
+  pia_set_input_cb1(SNT_PIA0, 0);
+  switch (sntlocals.brdData.subType) {
+    case 2:
+      pia_set_input_cb1(SNT2_PIA0, 1);
+      pia_set_input_cb1(SNT2_PIA0, 0);
+      break;
+    case 3:
+      cpu_set_irq_line(sntlocals.brdData.cpuNo, M6802_IRQ_LINE, PULSE_LINE);
+  }
 }
-static READ_HANDLER(snt_8910a_r) { return ~sntlocals.lastcmd; }
+
+READ_HANDLER(snt_8910a_r) {
+  if (!manualSoundcmd)
+    return ~sntlocals.lastcmd;
+  else // S&T needs special handling for sound command mode
+  {
+    static UINT8 first = 1;
+    if (first) // first nibble/least significant 4-bits
+    {
+      const UINT8 cmd = sntlocals.lastcmd & 0x0f;
+      first = 0;
+      return ~cmd;
+    }
+    else // second nibble/most significant 4-bits
+    {
+      const UINT8 cmd = sntlocals.lastcmd >> 4;
+      first = 1;
+      manualSoundcmd = 0; // manual soundcommand finished
+      return ~cmd;
+    }
+  }
+}
 
 static WRITE_HANDLER(snt_pia0ca2_w) { sndbrd_ctrl_cb(sntlocals.brdData.boardNo,data); } // diag led
+static WRITE_HANDLER(snt2_pia0ca2_w) { sndbrd_ctrl_cb(sntlocals.brdData.boardNo, data << 1); } // diag led of 2nd board
 
 static void snt_irq(int state) {
   cpu_set_irq_line(sntlocals.brdData.cpuNo, M6802_IRQ_LINE, state ? ASSERT_LINE : CLEAR_LINE);
 }
+static void snt2_irq(int state) {
+  cpu_set_irq_line(sntlocals.brdData.cpuNo + 1, M6802_IRQ_LINE, state ? ASSERT_LINE : CLEAR_LINE);
+}
+
 static void snt_5220Irq(int state) { pia_set_input_cb1(SNT_PIA1, (sntlocals.pia1cb1 = !state)); }
 static void snt_5220Rdy(int state) { pia_set_input_ca2(SNT_PIA1, (sntlocals.pia1ca2 = state)); }
 
@@ -575,10 +683,7 @@ static void cs_init(struct sndbrdData *brdData);
 static void cs_diag(int button);
 static WRITE_HANDLER(cs_cmd_w);
 static WRITE_HANDLER(cs_ctrl_w);
-static READ_HANDLER(cs_port1_r);
-#ifndef PINMAME_NO_UNUSED	// currently unused function (GCC 3.4)
 static READ_HANDLER(cs_port2_r);
-#endif
 static WRITE_HANDLER(cs_port2_w);
 
 const struct sndbrdIntf by45Intf = {
@@ -588,19 +693,15 @@ static struct DACinterface cs_dacInt = { 1, { 20 }};
 static MEMORY_READ_START(cs_readmem)
   { 0x0000, 0x001f, m6803_internal_registers_r },
   { 0x0080, 0x00ff, MRA_RAM },	/*Internal RAM*/
-  { 0xb000, 0xdfff, MRA_ROM },
-  { 0xe000, 0xffff, MRA_ROM },
+  { 0x8000, 0xffff, MRA_ROM },
 MEMORY_END
 static MEMORY_WRITE_START(cs_writemem)
   { 0x0000, 0x001f, m6803_internal_registers_w },
   { 0x0080, 0x00ff, MWA_RAM },	/*Internal RAM*/
-  { 0xb000, 0xdfff, MWA_ROM },
-  { 0xe000, 0xffff, MWA_ROM },
+  { 0x8000, 0xffff, MWA_NOP },
 MEMORY_END
 static PORT_READ_START(cs_readport)
-{ M6803_PORT2, M6803_PORT2, cs_port1_r },
-  //{ M6803_PORT1, M6803_PORT1, cs_port1_r },
-  //{ M6803_PORT2, M6803_PORT2, cs_port2_r },
+  { M6803_PORT2, M6803_PORT2, cs_port2_r },
 PORT_END
 static PORT_WRITE_START(cs_writeport)
   { M6803_PORT1, M6803_PORT1, DAC_0_data_w },
@@ -608,7 +709,7 @@ static PORT_WRITE_START(cs_writeport)
 PORT_END
 
 MACHINE_DRIVER_START(by45)
-  MDRV_CPU_ADD(M6803, 3579545/4)
+  MDRV_CPU_ADD(M6803, 3579545./4.)
   MDRV_CPU_FLAGS(CPU_AUDIO_CPU)
   MDRV_CPU_MEMORY(cs_readmem, cs_writemem)
   MDRV_CPU_PORTS(cs_readport, cs_writeport)
@@ -618,7 +719,7 @@ MACHINE_DRIVER_END
 
 static struct {
   struct sndbrdData brdData;
-  int cmd, ctrl;
+  int cmd, ctrl, p21;
 } cslocals;
 
 static void cs_init(struct sndbrdData *brdData) {
@@ -635,43 +736,27 @@ static WRITE_HANDLER(cs_ctrl_w) {
   cpu_set_irq_line(cslocals.brdData.cpuNo, M6803_TIN_LINE, (data & 1) ? ASSERT_LINE : CLEAR_LINE);
 }
 
-static int p21 = 0;
-
-void by45snd_reset(void)
-{
-	p21 = 1;
-}
-
 void by45_p21_w(int data)
 {
-	p21 = 0;
+	cslocals.p21 = data ? 1 : 0;
 }
 
-static READ_HANDLER(cs_port1_r) {
-	static int last = 0xff;
-	int data = cslocals.ctrl | (cslocals.cmd << 1);
-	if(p21) data |= 0x02;
-#if 0
-	if(last !=data)
-		printf("cs_port1_r = %x\n",data);
-#endif
-	last = data;
-	return data;
-}
-
-static int port2 = 0;
-
-#ifndef PINMAME_NO_UNUSED	// currently unused function (GCC 3.4)
 static READ_HANDLER(cs_port2_r) {
-	int data = port2;
-	printf("reading cs_port2_r data = %x\n",data);
+	//static int last = 0xff;
+	int data = cslocals.ctrl | (cslocals.cmd << 1);
+	if (cslocals.p21) data |= 0x02;
+#if 0
+	if(last != data)
+		printf("cs_port2_r = %x\n",data);
+	last = data;
+#endif
 	return data;
 }
-#endif
+
 static WRITE_HANDLER(cs_port2_w) {
-	port2 = data;
 	//printf("MPU: port write = %x\n",data);
-	sndbrd_ctrl_cb(sntlocals.brdData.boardNo,data & 0x01); } // diag led
+	sndbrd_ctrl_cb(cslocals.brdData.boardNo,data & 0x01);
+} // diag led
 
 /*----------------------------------------
 /    Turbo Cheap Squeak

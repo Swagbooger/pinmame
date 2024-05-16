@@ -68,6 +68,7 @@ static DWORD profiler_thread_id;
 static volatile UINT8 profiler_thread_exit;
 #endif
 
+#ifndef WINUI
 #ifndef MESS
 #ifdef PINMAME
 static const char helpfile[] = "pinmame.txt";
@@ -77,7 +78,7 @@ static const char helpfile[] = "docs\\windows.txt";
 #else
 static const char helpfile[] = "mess.chm";
 #endif
-
+#endif
 
 
 //============================================================
@@ -104,6 +105,9 @@ static void stop_profiler(void);
 
 #ifdef WINUI
 #define main main_
+extern char g_szGameName[256];
+#else
+char g_szGameName[256] = "";		// String containing requested game name (may be different from ROM if aliased)
 #endif
 
 int main(int argc, char **argv)
@@ -122,19 +126,19 @@ int main(int argc, char **argv)
 		startup_info.dwFlags &&
 		!(startup_info.dwFlags & STARTF_USESTDHANDLES))
 	{
-		char message_text[1024] = "";
+		char message_text[1024];
 		int button;
 		FILE* fp;
 
 #ifndef MESS
 #ifdef PINMAME
-        sprintf(message_text, APPLONGNAME " is a console application, you should launch it from a command prompt.\n"
-                              "\n"
-                              "Please consult the documentation for more information.\n"
-                              "\n"
-                              "Would you like to open the documentation now?");
+		snprintf(message_text, sizeof(message_text), APPLONGNAME " is a console application, you should launch it from a command prompt.\n"
+							  "\n"
+							  "Please consult the documentation for more information.\n"
+							  "\n"
+							  "Would you like to open the documentation now?");
 #else /* PINMAME */
-		sprintf(message_text, APPLONGNAME " v%s - Multiple Arcade Machine Emulator\n"
+		snprintf(message_text, sizeof(message_text), APPLONGNAME " v%s - Multiple Arcade Machine Emulator\n"
 							  "Copyright (C) 1997-2003 by Nicola Salmoria and the MAME Team\n"
 							  "\n"
 							  APPLONGNAME " is a console application, you should launch it from a command prompt.\n"
@@ -153,7 +157,7 @@ int main(int argc, char **argv)
 							  , build_version);
 #endif /* PINMAME */
 #else /* MESS */
-		sprintf(message_text, APPLONGNAME " is a console application, you should launch it from a command prompt.\n"
+		snprintf(message_text, sizeof(message_text), APPLONGNAME " is a console application, you should launch it from a command prompt.\n"
 							  "\n"
 							  "Please consult the documentation for more information.\n"
 							  "\n"
@@ -205,15 +209,15 @@ int main(int argc, char **argv)
 	// have we decided on a game?
 	if (game_index != -1)
 	{
-		TIMECAPS caps;
-		MMRESULT result;
+		extern void set_lowest_possible_win_timer_resolution();
+		extern void restore_win_timer_resolution();
 
-		// crank up the multimedia timer resolution to its max
-		// this gives the system much finer timeslices
-		result = timeGetDevCaps(&caps, sizeof(caps));
-		if (result == TIMERR_NOERROR)
-			timeBeginPeriod(caps.wPeriodMin);
-
+		set_lowest_possible_win_timer_resolution();
+#ifdef __GNUC__
+		strcpy(g_szGameName, drivers[game_index]->name);
+#else
+		strcpy_s(g_szGameName, sizeof(g_szGameName), drivers[game_index]->name);
+#endif
 #if ENABLE_PROFILER
 		start_profiler();
 #endif
@@ -225,9 +229,7 @@ int main(int argc, char **argv)
 		stop_profiler();
 #endif
 
-		// restore the timer resolution
-		if (result == TIMERR_NOERROR)
-			timeEndPeriod(caps.wPeriodMin);
+		restore_win_timer_resolution();
 	}
 
 	// restore the original LED state and close keyboard handle
@@ -337,6 +339,7 @@ static LONG CALLBACK exception_filter(struct _EXCEPTION_POINTERS *info)
 				info->ExceptionRecord->ExceptionInformation[0] ? "write" : "read",
 				(UINT32)info->ExceptionRecord->ExceptionInformation[1]);
 
+#ifndef __LP64__
 	// print the state of the CPU
 	fprintf(stderr, "-----------------------------------------------------\n");
 	fprintf(stderr, "EAX=%08X EBX=%08X ECX=%08X EDX=%08X\n",
@@ -349,16 +352,44 @@ static LONG CALLBACK exception_filter(struct _EXCEPTION_POINTERS *info)
 			(UINT32)info->ContextRecord->Edi,
 			(UINT32)info->ContextRecord->Ebp,
 			(UINT32)info->ContextRecord->Esp);
+#else
+#if defined(_M_ARM64)
+#pragma message ( "Warning: No CPU state debug output implemented yet" )
+#else
+	// print the state of the CPU
+	fprintf(stderr, "-----------------------------------------------------\n");
+	fprintf(stderr, "RAX=%16X RBX=%16X RCX=%16X RDX=%16X\n",
+			(UINT64)info->ContextRecord->Rax,
+			(UINT64)info->ContextRecord->Rbx,
+			(UINT64)info->ContextRecord->Rcx,
+			(UINT64)info->ContextRecord->Rdx);
+	fprintf(stderr, "RSI=%16X RDI=%16X RBP=%16X RSP=%16X\n",
+			(UINT64)info->ContextRecord->Rsi,
+			(UINT64)info->ContextRecord->Rdi,
+			(UINT64)info->ContextRecord->Rbp,
+			(UINT64)info->ContextRecord->Rsp);
+#endif
+#endif
 
 	// crawl the stack for a while
 	if (get_code_base_size(&code_start, &code_size))
 	{
 		char prev_symbol[1024], curr_symbol[1024];
 		UINT32 last_call = (UINT32)info->ExceptionRecord->ExceptionAddress;
+#ifdef __LP64__
+#if defined(_M_ARM64)
+#pragma message ( "Warning: No CPU state debug output implemented yet" )
+		UINT64 esp_start = 0;
+#else
+		UINT64 esp_start = info->ContextRecord->Rsp;
+#endif
+		UINT64 esp_end = (esp_start | 0xffff) + 1;
+		UINT64 esp;
+#else
 		UINT32 esp_start = info->ContextRecord->Esp;
 		UINT32 esp_end = (esp_start | 0xffff) + 1;
 		UINT32 esp;
-
+#endif
 		// reprint the actual exception address
 		fprintf(stderr, "-----------------------------------------------------\n");
 		fprintf(stderr, "Stack crawl:\n");
@@ -444,10 +475,11 @@ static const char *lookup_symbol(UINT32 address)
 					strcpy(best_symbol, symbol);
 				}
 
+	fclose(map);
 	// create the final result
 	if (address - best_addr > 0x10000)
 		return "";
-	sprintf(buffer, " (%s+0x%04x)", best_symbol, address - best_addr);
+	snprintf(buffer, sizeof(buffer), " (%s+0x%04x)", best_symbol, address - best_addr);
 	return buffer;
 }
 
@@ -470,8 +502,12 @@ static int get_code_base_size(UINT32 *base, UINT32 *size)
 	while (fgets(line, sizeof(line) - 1, map))
 		if (!strncmp(line, ".text           0x", 18))
 			if (sscanf(line, ".text           0x%08x 0x%x", base, size) == 2)
+			{
+				fclose(map);
 				return 1;
+			}
 
+	fclose(map);
 	return 0;
 }
 

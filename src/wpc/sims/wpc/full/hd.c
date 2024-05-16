@@ -1,5 +1,7 @@
+// license:BSD-3-Clause
+
 /*******************************************************************************
- Harley Davidson (Bally, 1991) Pinball Simulator
+ Harley-Davidson (Bally, 1991) Pinball Simulator
 
  by Marton Larrosa (marton@mail.com)
  Jan. 5, 2001
@@ -17,7 +19,7 @@
  ******************************************************************************/
 
 /*------------------------------------------------------------------------------
-  Keys for the Harley Davidson Simulator:
+  Keys for the Harley-Davidson Simulator:
   ---------------------------------------
       +L  L/R Loop
       +O  L/R Outlane
@@ -92,70 +94,70 @@ WPC_INPUT_PORTS_END
 /*-------------------
 / Switch definitions
 /--------------------*/
-#define swStart      	13
-#define swTilt       	14
-#define	swOutHole	15
-#define	swRTrough	16
-#define	swCTrough	17
-#define	swLTrough	18
-#define swSlamTilt	21
-#define swCoinDoor	22
-#define swTicket     	23
-#define swLeftJet	25
-#define swRightJet	26
-#define swBottomJet	27
-#define swLREject	28
-#define swBike		31
-#define swbIke		32
-#define swbiKe		33
-#define swbikE		34
-#define swTREject	35
-#define swTLEject	36
-#define swLeftSling	37
-#define swRightSling	38
-#define swUsa		41
-#define swuSa		42
-#define swusA		43
-#define swHarley	51
-#define swhArley	52
-#define swhaRley	53
-#define swharLey	54
-#define swharlEy	55
-#define swharleY	56
-#define swDavidson	57
-#define swdAvidson	58
-#define swdaVidson	61
-#define swdavIdson	62
-#define swdaviDson	63
-#define swdavidSon	64
-#define swdavidsOn	65
-#define swdavidsoN	66
-#define swRSpinner	67
-#define swLSpinner	68
-#define swLLoop		71
-#define swRLoop		72
-#define swLeftOutlane	73
-#define swRightOutlane	74
-#define swShooter	75
+#define swStart     13
+#define swTilt      14
+#define	swOutHole   15
+#define	swRTrough   16
+#define	swCTrough   17
+#define	swLTrough   18
+#define swSlamTilt  21
+#define swCoinDoor  22
+#define swTicket    23
+#define swLeftJet   25
+#define swRightJet  26
+#define swBottomJet 27
+#define swLREject   28
+#define swBike      31
+#define swbIke      32
+#define swbiKe      33
+#define swbikE      34
+#define swTREject   35
+#define swTLEject   36
+#define swLeftSling 37
+#define swRightSling 38
+#define swUsa       41
+#define swuSa       42
+#define swusA       43
+#define swHarley    51
+#define swhArley    52
+#define swhaRley    53
+#define swharLey    54
+#define swharlEy    55
+#define swharleY    56
+#define swDavidson  57
+#define swdAvidson  58
+#define swdaVidson  61
+#define swdavIdson  62
+#define swdaviDson  63
+#define swdavidSon  64
+#define swdavidsOn  65
+#define swdavidsoN  66
+#define swRSpinner  67
+#define swLSpinner  68
+#define swLLoop     71
+#define swRLoop     72
+#define swLeftOutlane 73
+#define swRightOutlane 74
+#define swShooter   75
 
 /*---------------------
 / Solenoid definitions
 /----------------------*/
-#define sOutHole	1
-#define sTrough		2
-#define sLDrop		3
-#define sCDrop		4
-#define sLeftJet	5
-#define sRightJet	6
-#define sKnocker	7
-#define sBottomJet	8
-#define sLREject	9
-#define sTREject	10
-#define sTLEject	11
-#define sRGate		12
-#define sLGate		13
-#define sLeftSling	15
-#define sRightSling	16
+#define sOutHole    1
+#define sTrough     2
+#define sLDrop      3
+#define sCDrop      4
+#define sLeftJet    5
+#define sRightJet   6
+#define sKnocker    7
+#define sBottomJet  8
+#define sLREject    9
+#define sTREject    10
+#define sTLEject    11
+#define sRGate      12
+#define sLGate      13
+#define sLeftSling  15
+#define sRightSling 16
 
 /*---------------------
 /  Ball state handling
@@ -327,6 +329,7 @@ static sim_tInportData hd_inportData[] = {
   }
 
 /* Solenoid-to-sample handling */
+#ifdef ENABLE_MECHANICAL_SAMPLES
 static wpc_tSamSolMap hd_samsolmap[] = {
  /*Channel #0*/
  {sKnocker,0,SAM_KNOCKER}, {sTrough,0,SAM_BALLREL},
@@ -347,28 +350,44 @@ static wpc_tSamSolMap hd_samsolmap[] = {
  {sTLEject,3,SAM_POPPER}, {sTREject,3,SAM_POPPER},
  {sLREject,3,SAM_POPPER},{-1}
 };
+#endif
 
 /*-----------------
 /  ROM definitions
 /------------------*/
 WPC_ROMSTART(hd,l3,"harly_l3.rom",0x020000,CRC(65f2e0b4) SHA1(a44216c13b9f9adf4161ff6f9eeceba28ef37963))
 WPCS_SOUNDROM22x("hd_u18.rom",CRC(810d98c0) SHA1(8080cbbe0f346020b2b2b8e97015dbb615dbadb3),
-		 "hd_u15.rom",CRC(e7870938) SHA1(b4f28146a5e7baa8522db65b41311afaf49604c6))
+                 "hd_u15.rom",CRC(e7870938) SHA1(b4f28146a5e7baa8522db65b41311afaf49604c6))
 WPC_ROMEND
 
 WPC_ROMSTART(hd,d3,"harly_d3.rom",0x020000,CRC(ecf9da82) SHA1(f86214cd4a2823085445bcbd3fcd37761bc111ab))
 WPCS_SOUNDROM22x("hd_u18.rom",CRC(810d98c0) SHA1(8080cbbe0f346020b2b2b8e97015dbb615dbadb3),
-		 "hd_u15.rom",CRC(e7870938) SHA1(b4f28146a5e7baa8522db65b41311afaf49604c6))
+                 "hd_u15.rom",CRC(e7870938) SHA1(b4f28146a5e7baa8522db65b41311afaf49604c6))
+WPC_ROMEND
+
+WPC_ROMSTART(hd,l2,"harly_l2.rom",0x020000,CRC(8b8b19ac) SHA1(5edba59e3260e33dc2ce65274a1ed8d7413e472a))
+WPCS_SOUNDROM22x("hd_u18.rom",CRC(810d98c0) SHA1(8080cbbe0f346020b2b2b8e97015dbb615dbadb3),
+                 "hd_u15.rom",CRC(e7870938) SHA1(b4f28146a5e7baa8522db65b41311afaf49604c6))
+WPC_ROMEND
+
+WPC_ROMSTART(hd,d2,"harly_d2.rom",0x020000,CRC(e67b0908) SHA1(2047098eed096a10c3e37e17be9216783120b7f7))
+WPCS_SOUNDROM22x("hd_u18.rom",CRC(810d98c0) SHA1(8080cbbe0f346020b2b2b8e97015dbb615dbadb3),
+                 "hd_u15.rom",CRC(e7870938) SHA1(b4f28146a5e7baa8522db65b41311afaf49604c6))
 WPC_ROMEND
 
 WPC_ROMSTART(hd,l1,"u6-l1.rom",0x020000,CRC(a0bdcfbf) SHA1(f906ffa2d4d04e87225bf711a07dd3bee1655a40))
 WPCS_SOUNDROM22x("u18-sp1.rom",CRC(708aa419) SHA1(cfc2692fb3bcbacceb85021e282bfbc8dcdf8fcc),
-		 "hd_u15.rom",CRC(e7870938) SHA1(b4f28146a5e7baa8522db65b41311afaf49604c6))
+                 "hd_u15.rom",CRC(e7870938) SHA1(b4f28146a5e7baa8522db65b41311afaf49604c6))
 WPC_ROMEND
 
 WPC_ROMSTART(hd,d1,"u6-d1.rom",0x020000,CRC(b4f6169e) SHA1(750fe0a5ab7cc6ee9f07aae2301140a1c8c38a64))
 WPCS_SOUNDROM22x("u18-sp1.rom",CRC(708aa419) SHA1(cfc2692fb3bcbacceb85021e282bfbc8dcdf8fcc),
-		 "hd_u15.rom",CRC(e7870938) SHA1(b4f28146a5e7baa8522db65b41311afaf49604c6))
+                 "hd_u15.rom",CRC(e7870938) SHA1(b4f28146a5e7baa8522db65b41311afaf49604c6))
+WPC_ROMEND
+
+WPC_ROMSTARTNV(che_cho,"che_cho.rom",0x020000,CRC(08aff6e4) SHA1(4d2e8957983ec64e43649396ee13b20ad23fb2af))
+WPCS_SOUNDROM22x("hd_u18.rom",CRC(810d98c0) SHA1(8080cbbe0f346020b2b2b8e97015dbb615dbadb3),
+                 "hd_u15.rom",CRC(e7870938) SHA1(b4f28146a5e7baa8522db65b41311afaf49604c6))
 WPC_ROMEND
 
 /*--------------
@@ -380,22 +399,28 @@ static MACHINE_DRIVER_START(hd)
   MDRV_VISIBLE_AREA(0, 639, 0, 399)
 MACHINE_DRIVER_END
 
-CORE_GAMEDEF(hd,l3,"Harley Davidson (L-3)",1991,"Bally", hd, 0)
-CORE_CLONEDEF(hd,d3,l3,"Harley Davidson (D-3) LED Ghost Fix",1991,"Bally", hd, 0)
-CORE_CLONEDEF(hd,l1,l3,"Harley Davidson (L-1)",1991,"Bally", hd, 0)
-CORE_CLONEDEF(hd,d1,l3,"Harley Davidson (D-1) LED Ghost Fix",1991,"Bally", hd, 0)
+CORE_GAMEDEF(hd,l3,"Harley-Davidson (L-3)",1991,"Bally", hd, 0)
+CORE_CLONEDEF(hd,d3,l3,"Harley-Davidson (D-3 LED Ghost Fix)",1991,"Bally", hd, 0)
+CORE_CLONEDEF(hd,l2,l3,"Harley-Davidson (L-2)",1991,"Bally", hd, 0)
+CORE_CLONEDEF(hd,d2,l3,"Harley-Davidson (D-2 LED Ghost Fix)",1991,"Bally", hd, 0)
+CORE_CLONEDEF(hd,l1,l3,"Harley-Davidson (L-1)",1991,"Bally", hd, 0)
+CORE_CLONEDEF(hd,d1,l3,"Harley-Davidson (D-1 LED Ghost Fix)",1991,"Bally", hd, 0)
+
+#define init_che_cho init_hd
+#define input_ports_che_cho input_ports_hd
+CORE_GAMEDEFNV(che_cho,"Cheech & Chong: Road-Trip'pin (Harley-Davidson unofficial MOD)",2021,"Bally/watacaractr", hd, 0)
 
 /*-----------------------
 / Simulation Definitions
 /-----------------------*/
 static sim_tSimData hdSimData = {
-  2,    				/* 2 game specific input ports */
-  hd_stateDef,				/* Definition of all states */
-  hd_inportData,			/* Keyboard Entries */
+  2,					/* 2 game specific input ports */
+  hd_stateDef,			/* Definition of all states */
+  hd_inportData,		/* Keyboard Entries */
   { stRTrough, stCTrough, stLTrough, stDrain, stDrain, stDrain, stDrain },	/*Position where balls start.. Max 7 Balls Allowed*/
   NULL, 				/* no init */
-  hd_handleBallState,			/*Function to handle ball state changes*/
-  hd_drawStatic,			/*Function to handle mechanical state changes*/
+  hd_handleBallState,	/*Function to handle ball state changes*/
+  hd_drawStatic,		/*Function to handle mechanical state changes*/
   TRUE, 				/* Simulate manual shooter? */
   NULL  				/* Custom key conditions? */
 };
@@ -413,7 +438,10 @@ static core_tGameData hdGameData = {
     FLIP_SWNO(12,11),
     0,0,0,0,0,0,0,
     NULL, hd_handleMech, NULL, NULL,
-    NULL, hd_samsolmap
+    NULL
+#ifdef ENABLE_MECHANICAL_SAMPLES
+    , hd_samsolmap
+#endif
   },
   &hdSimData,
   {
@@ -444,6 +472,4 @@ static void hd_handleMech(int mech) {
      ---------------------------------------- */
   if ((mech & 0x02) && core_getSol(sCDrop))
     { core_setSw(swharLey,0) ; core_setSw(swharlEy,0) ; core_setSw(swharleY,0); }
-
 }
-

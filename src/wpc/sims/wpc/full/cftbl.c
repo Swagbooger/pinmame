@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+
 /*******************************************************************************
  Creature From The Black Lagoon (Bally, 1992) Pinball Simulator
 
@@ -62,28 +64,28 @@ WPC_INPUT_PORTS_START(cftbl,3)
   PORT_START /* 0 */
     COREPORT_BIT(0x0001,"Left Qualifier",	KEYCODE_LCONTROL)
     COREPORT_BIT(0x0002,"Right Qualifier",	KEYCODE_RCONTROL)
-    COREPORT_BIT(0x0004,"L/R Ramp",	        KEYCODE_R)
+    COREPORT_BIT(0x0004,"L/R Ramp",			KEYCODE_R)
     COREPORT_BIT(0x0008,"L/R Outlane",		KEYCODE_O)
-    COREPORT_BIT(0x0010,"L/R Slingshot",		KEYCODE_MINUS)
+    COREPORT_BIT(0x0010,"L/R Slingshot",	KEYCODE_MINUS)
     COREPORT_BIT(0x0020,"L/R Inlane",		KEYCODE_I)
-    COREPORT_BIT(0x0040,"Paid - P",		KEYCODE_W)
-    COREPORT_BIT(0x0100,"Paid - A",		KEYCODE_E)
-    COREPORT_BIT(0x0200,"Paid - I",		KEYCODE_R)
-    COREPORT_BIT(0x0400,"Paid - D",		KEYCODE_T)
+    COREPORT_BIT(0x0040,"Paid - P",			KEYCODE_W)
+    COREPORT_BIT(0x0100,"Paid - A",			KEYCODE_E)
+    COREPORT_BIT(0x0200,"Paid - I",			KEYCODE_R)
+    COREPORT_BIT(0x0400,"Paid - D",			KEYCODE_T)
     COREPORT_BIT(0x0800,"Snackbar - Cola",	KEYCODE_Y)
-    COREPORT_BIT(0x1000,"Snackbar - HotDog",	KEYCODE_U)
-    COREPORT_BIT(0x2000,"Snackbar - PopCorn",	KEYCODE_I)
-    COREPORT_BIT(0x4000,"Snackbar - IceCream",	KEYCODE_O)
-    COREPORT_BIT(0x8000,"Snackbar Hole",		KEYCODE_H)
+    COREPORT_BIT(0x1000,"Snackbar - HotDog",KEYCODE_U)
+    COREPORT_BIT(0x2000,"Snackbar - PopCorn",KEYCODE_I)
+    COREPORT_BIT(0x4000,"Snackbar - IceCream",KEYCODE_O)
+    COREPORT_BIT(0x8000,"Snackbar Hole",	KEYCODE_H)
 
   PORT_START /* 1 */
     COREPORT_BIT(0x0001,"Left Jet Bumper",	KEYCODE_A)
     COREPORT_BIT(0x0002,"Right Jet Bumper",	KEYCODE_S)
-    COREPORT_BIT(0x0004,"Bottom Jet Bumper",	KEYCODE_D)
+    COREPORT_BIT(0x0004,"Bottom Jet Bumper",KEYCODE_D)
     COREPORT_BIT(0x0008,"Left Subway",		KEYCODE_L)
     COREPORT_BIT(0x0010,"Right Subway",		KEYCODE_Z)
-    COREPORT_BIT(0x0020,"Creature Bowl",		KEYCODE_C)
-    COREPORT_BIT(0x0040,"Move Your Car Lane",	KEYCODE_M)
+    COREPORT_BIT(0x0020,"Creature Bowl",	KEYCODE_C)
+    COREPORT_BIT(0x0040,"Move Your Car Lane",KEYCODE_M)
     COREPORT_BIT(0x0100,"Drain",			KEYCODE_Q)
 
 WPC_INPUT_PORTS_END
@@ -91,72 +93,72 @@ WPC_INPUT_PORTS_END
 /*-------------------
 / Switch definitions
 /--------------------*/
-#define swStart      	13
-#define swTilt       	14
-#define swTopLeftRO	15
+#define swStart			13
+#define swTilt			14
+#define swTopLeftRO		15
 #define swLeftSubway	16
 #define swCenterSubway	17
 #define swCenterShotRU	18
 
-#define swSlamTilt	21
-#define swCoinDoor	22
-#define swTicket     	23
-#define swPaid		25
-#define swpAid		26
-#define swpaId		27
-#define swpaiD		28
+#define swSlamTilt		21
+#define swCoinDoor		22
+#define swTicket		23
+#define swPaid			25
+#define swpAid			26
+#define swpaId			27
+#define swpaiD			28
 
-#define swBottomJet	33
+#define swBottomJet		33
 #define swRightPopper	34
 #define swEnterRRamp	35
 #define swEnterLRamp	36
 #define swLowRPopper	37
 #define swRampUpDown	38
 
-#define swCola		41
-#define swHotDog	42
-#define swPopCorn	43
-#define swIceCream     	44
-#define swLeftJet    	45
-#define swRightJet	46
-#define swLeftSling	47
+#define swCola			41
+#define swHotDog		42
+#define swPopCorn		43
+#define swIceCream		44
+#define swLeftJet		45
+#define swRightJet		46
+#define swLeftSling		47
 #define swRightSling	48
 
 #define swLeftOutlane	51
 #define swLeftInlane	52
 #define swRightInlane	53
 #define swRightOutlane	54
-#define	swOutHole	55
-#define	swRTrough	56
-#define	swCTrough	57
-#define	swLTrough	58
+#define	swOutHole		55
+#define	swRTrough		56
+#define	swCTrough		57
+#define	swLTrough		58
 
-#define	swRRampExit	61
+#define	swRRampExit		61
 #define	swLowLRampExit	62
-#define	swCLaneExit	63
-#define	swURampExit	64
-#define	swBowl		65
-#define	swShooter	66
+#define	swCLaneExit		63
+#define	swURampExit		64
+#define	swBowl			65
+#define	swShooter		66
 
 /*---------------------
 / Solenoid definitions
 /----------------------*/
 
 #define sRightPopper	1
-#define sLowRPopper	3
-#define sTrough		4
-#define sRightSling    	5
-#define sLeftSling    	6
-#define sKnocker       	7
-#define sOutHole       	12
-#define sLeftJet	13
-#define sRightJet	14
-#define sBottomJet	15
+#define sLowRPopper		3
+#define sTrough			4
+#define sRightSling		5
+#define sLeftSling		6
+#define sKnocker		7
+#define sOutHole		12
+#define sLeftJet		13
+#define sRightJet		14
+#define sBottomJet		15
 #define sCurlyRampGI1	20
 #define sHologramPush	21
-#define sRampUp		23
+#define sRampUp			23
 #define sCurlyRampGI2	24
-#define sRampDown	26
+#define sRampDown		26
 #define sMirrorMotor	27
 #define sHologramLamp	28
 
@@ -353,6 +355,7 @@ static sim_tInportData cftbl_inportData[] = {
   }
 
 /* Solenoid-to-sample handling */
+#ifdef ENABLE_MECHANICAL_SAMPLES
 static wpc_tSamSolMap cftbl_samsolmap[] = {
  /*Channel #0*/
  {sKnocker,0,SAM_KNOCKER}, {sTrough,0,SAM_BALLREL},
@@ -370,12 +373,21 @@ static wpc_tSamSolMap cftbl_samsolmap[] = {
  {sLowRPopper,3,SAM_POPPER}, {sRightPopper,2,SAM_POPPER},
  {-1}
 };
+#endif
 
 /*-----------------
 /  ROM definitions
 /------------------*/
 WPC_ROMSTART(cftbl,l4,"creat_l4.rom",0x80000,CRC(b8778cb6) SHA1(a5dcc1ebedbd62d81e2e56fb8aebdc33fa6ba70c))
 WPCS_SOUNDROM288("bl_u18.l1",CRC(87267bcc) SHA1(3e733437bce3491c216a8627810897f6123f0679),
+                 "bl_u15.l1",CRC(15477d6f) SHA1(3ed7942828630bc9111d2e602fee931ef67db2ce),
+                 "bl_u14.l1",CRC(6b02bee4) SHA1(4f852b897dbf0ec2d5b17eed2ff70d9360b12213))
+WPC_ROMEND
+
+//WPC_ROMSTART(cftbl,l5c,"creat_l5c.rom",0x80000,CRC(9cb6f4b3) SHA1(310b125935694d9c5ef040340e1608006e27a214)) //old patch
+//WPC_ROMSTART(cftbl,l4c,"Creature From The Black Lagoon U6 game ROM rev L-4 patch 8c6a.rom",0x80000,CRC(20fc538f) SHA1(688f6663c985b02550df0c06ccd4b6f1ec32a38a)) //patch 8c6a
+WPC_ROMSTART(cftbl,l4c,"Creature From The Black Lagoon U6 game ROM rev L-4 patch eccc.rom",0x80000,CRC(14a1d90a) SHA1(864acf529fbf953c47feecd9a98810fa04a0223c)) //patch eccc
+WPCS_SOUNDROM288("bl_u18.l1", CRC(87267bcc) SHA1(3e733437bce3491c216a8627810897f6123f0679),
                  "bl_u15.l1",CRC(15477d6f) SHA1(3ed7942828630bc9111d2e602fee931ef67db2ce),
                  "bl_u14.l1",CRC(6b02bee4) SHA1(4f852b897dbf0ec2d5b17eed2ff70d9360b12213))
 WPC_ROMEND
@@ -387,13 +399,25 @@ WPCS_SOUNDROM288("bl_u18.l1",CRC(87267bcc) SHA1(3e733437bce3491c216a8627810897f6
 WPC_ROMEND
 
 WPC_ROMSTART(cftbl,l3,"cftbl_l3.u6",0x80000,CRC(11280230) SHA1(98ce0777cd7dc91d1d2b7016b2e44bdf60ec2c08))
-WPCS_SOUNDROM288("u18-sp1.rom",CRC(07198d93) SHA1(d91eb7ae7bd11340b0daf4edd2cd2e87acadeda4),
+WPCS_SOUNDROM288("bl_u18.l1",CRC(87267bcc) SHA1(3e733437bce3491c216a8627810897f6123f0679),
                  "bl_u15.l1",CRC(15477d6f) SHA1(3ed7942828630bc9111d2e602fee931ef67db2ce),
                  "bl_u14.l1",CRC(6b02bee4) SHA1(4f852b897dbf0ec2d5b17eed2ff70d9360b12213))
 WPC_ROMEND
 
 WPC_ROMSTART(cftbl,d3,"cftbl_d3.u6",0x80000,CRC(acbe8c59) SHA1(157c8f59bce9c77f1478c97329deb77cdc61c976))
-WPCS_SOUNDROM288("u18-sp1.rom",CRC(07198d93) SHA1(d91eb7ae7bd11340b0daf4edd2cd2e87acadeda4),
+WPCS_SOUNDROM288("bl_u18.l1",CRC(87267bcc) SHA1(3e733437bce3491c216a8627810897f6123f0679),
+                 "bl_u15.l1",CRC(15477d6f) SHA1(3ed7942828630bc9111d2e602fee931ef67db2ce),
+                 "bl_u14.l1",CRC(6b02bee4) SHA1(4f852b897dbf0ec2d5b17eed2ff70d9360b12213))
+WPC_ROMEND
+
+WPC_ROMSTART(cftbl,l2,"cftbl_l2.u6",0x80000,CRC(f3097f42) SHA1(f15cda9c74b806f13b81aa1e99588ba9139b2969))
+WPCS_SOUNDROM288("bl_u18.l1",CRC(87267bcc) SHA1(3e733437bce3491c216a8627810897f6123f0679),
+                 "bl_u15.l1",CRC(15477d6f) SHA1(3ed7942828630bc9111d2e602fee931ef67db2ce),
+                 "bl_u14.l1",CRC(6b02bee4) SHA1(4f852b897dbf0ec2d5b17eed2ff70d9360b12213))
+WPC_ROMEND
+
+WPC_ROMSTART(cftbl,d2,"cftbl_d2.u6",0x80000,CRC(dee87805) SHA1(79003bffb0932351f440c2ea5825654d30d97978))
+WPCS_SOUNDROM288("bl_u18.l1",CRC(87267bcc) SHA1(3e733437bce3491c216a8627810897f6123f0679),
                  "bl_u15.l1",CRC(15477d6f) SHA1(3ed7942828630bc9111d2e602fee931ef67db2ce),
                  "bl_u14.l1",CRC(6b02bee4) SHA1(4f852b897dbf0ec2d5b17eed2ff70d9360b12213))
 WPC_ROMEND
@@ -408,22 +432,28 @@ WPC_ROMEND
 /  Game drivers
 /---------------*/
 CORE_GAMEDEF (cftbl,l4,"Creature from the Black Lagoon (L-4)",1993,"Bally",wpc_mFliptronS,0)
-CORE_CLONEDEF (cftbl,d4,l4,"Creature from the Black Lagoon (D-4) LED Ghost Fix",1993,"Bally",wpc_mFliptronS,0)
-CORE_CLONEDEF (cftbl,l3,l4,"Creature from the Black Lagoon (L-3,SP-1)",1993,"Bally",wpc_mFliptronS,0)
-CORE_CLONEDEF (cftbl,d3,l4,"Creature from the Black Lagoon (D-3,SP-1) LED Ghost Fix",1993,"Bally",wpc_mFliptronS,0)
-CORE_CLONEDEF (cftbl,p3,l4,"Creature from the Black Lagoon (P-3)",1993,"Bally",wpc_mFliptronS,0)
+//CORE_CLONEDEF (cftbl,l5c,l4,"Creature from the Black Lagoon (L-5C Competition MOD)",2016,"Bally",wpc_mFliptronS,0) //outdated
+CORE_CLONEDEF (cftbl,l4c,l4,"Creature from the Black Lagoon (L-4C Competition + LED Ghost MOD)",2020,"Bally",wpc_mFliptronS,0)
+CORE_CLONEDEF (cftbl,d4,l4,"Creature from the Black Lagoon (D-4 LED Ghost Fix)",1993,"Bally",wpc_mFliptronS,0)
+CORE_CLONEDEF (cftbl,l3,l4,"Creature from the Black Lagoon (L-3)",1993,"Bally",wpc_mFliptronS,0)
+CORE_CLONEDEF (cftbl,d3,l4,"Creature from the Black Lagoon (D-3 LED Ghost Fix)",1993,"Bally",wpc_mFliptronS,0)
+CORE_CLONEDEF (cftbl,l2,l4,"Creature from the Black Lagoon (L-2)",1993,"Bally",wpc_mFliptronS,0)
+CORE_CLONEDEF (cftbl,d2,l4,"Creature from the Black Lagoon (D-2 LED Ghost Fix)",1993,"Bally",wpc_mFliptronS,0)
+CORE_CLONEDEF (cftbl,p3,l4,"Creature from the Black Lagoon (P-3 Prototype, SP-1)",1992,"Bally",wpc_mFliptronS,0)
+
+// Zen Pinball Emu: They were able to clear all licensing with MB, but Creature has some subtle and not so subtle differences. The first is that 4 of the 5 license holders for the songs within the game were not able to be reached but not for lack of trying. That means rather than the song changing with each ball, you get the same tune over and over.
 
 /*-----------------------
 / Simulation Definitions
 /-----------------------*/
 static sim_tSimData cftblSimData = {
-  2,    				/* 2 game specific input ports */
-  cftbl_stateDef,			/* Definition of all states */
-  cftbl_inportData,			/* Keyboard Entries */
+  2,					/* 2 game specific input ports */
+  cftbl_stateDef,		/* Definition of all states */
+  cftbl_inportData,		/* Keyboard Entries */
   { stRTrough, stCTrough, stLTrough, stDrain, stDrain, stDrain, stDrain },	/*Position where balls start.. Max 7 Balls Allowed*/
   NULL, 				/* no init */
-  cftbl_handleBallState,		/*Function to handle ball state changes*/
-  cftbl_drawStatic,			/*Function to handle mechanical state changes*/
+  cftbl_handleBallState,/*Function to handle ball state changes*/
+  cftbl_drawStatic,		/*Function to handle mechanical state changes*/
   TRUE, 				/* Simulate manual shooter? */
   NULL  				/* Custom key conditions? */
 };
@@ -435,9 +465,12 @@ static core_tGameData cftblGameData = {
   GEN_WPCFLIPTRON, wpc_dispDMD,
   {
     FLIP_SW(FLIP_L | FLIP_U) | FLIP_SOL(FLIP_L),
-    0,1,0,0,0,0,0, // 8 (or 12?) ramp lights; the pattern repeats every 4 lamps, so 1 extra column is enough
+    0,1,0,0,0,0,WPC_CFTBL, // 8 ramp lights 'Chase Light' wired between GI outputs 1/4 and 2 bit decoder wired on solenoid outputs 20/24 => directly handled in main WPC driver
     NULL, cftbl_handleMech, NULL, cftbl_drawMech,
-    NULL, cftbl_samsolmap
+    NULL
+#ifdef ENABLE_MECHANICAL_SAMPLES
+    , cftbl_samsolmap
+#endif
   },
   &cftblSimData,
   {
@@ -449,21 +482,12 @@ static core_tGameData cftblGameData = {
   }
 };
 
-static WRITE_HANDLER(cftbl_wpc_w) {
-  UINT8 state;
-  wpc_w(offset, data);
-  if (offset == WPC_SOLENOID3) {
-    state = 1 << ((GET_BIT7 << 1) | GET_BIT3);
-    coreGlobals.lampMatrix[8] = coreGlobals.tmpLampMatrix[8] = (state << 4) | state;
-  }
-}
-
 /*---------------
 /  Game handling
 /----------------*/
 static void init_cftbl(void) {
   core_gameData = &cftblGameData;
-  install_mem_write_handler(0, 0x3fb0, 0x3fff, cftbl_wpc_w);
+  hc55516_set_sample_clock(0, 22372);
 }
 
 static void cftbl_handleMech(int mech) {
@@ -472,7 +496,7 @@ static void cftbl_handleMech(int mech) {
      --	Get Up and Down the Creature Ramp  --
      ---------------------------------------- */
   if (mech & 0x01) {
-    /*-- if Ramp is Up and the RampDown Solenoid is firing, Lower it --*/
+    /*-- if Ramp is Up and the RampDown Solenoid is firing, lower it --*/
     if (core_getSol(sRampDown))
       locals.creaturerampPos = 1 ;
     /*-- if Ramp is Down and the RampUp Solenoid is firing, raise it --*/

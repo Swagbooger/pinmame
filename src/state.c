@@ -5,7 +5,7 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include "driver.h"
-#include "zlib.h"
+#include <zlib.h>
 
 /* Save state file format:
  *
@@ -48,7 +48,7 @@ enum {
 #ifdef VERBOSE
 static const char *ss_type[] =	{ "i8", "u8", "i16", "u16", "i32", "u32", "int", "dbl", "flt" };
 #endif
-static int		   ss_size[] =	{	 1,    1,	  2,	 2, 	4,	   4,	  4,	 8,     4 };
+static const int ss_size[] =	{	 1,    1,	  2,	 2, 	4,	   4,	  4,	 8,     4 };
 
 static void ss_c2(unsigned char *, unsigned);
 static void ss_c4(unsigned char *, unsigned);
@@ -89,13 +89,13 @@ static int ss_current_tag;
 
 static unsigned char *ss_dump_array;
 static mame_file *ss_dump_file;
-static unsigned int ss_dump_size;
+static size_t ss_dump_size;
 
 
 static UINT32 ss_get_signature(void)
 {
 	ss_module *m;
-	unsigned int size = 0, pos = 0;
+	size_t size = 0, pos = 0;
 	char *info;
 	UINT32 signature;
 
@@ -213,7 +213,7 @@ static ss_entry *ss_register_entry(const char *module, int instance, const char 
 {
 	ss_module *m = ss_get_module(module);
 	ss_entry **ep = &(m->instances[instance]);
-	ss_entry *e = *ep;
+	ss_entry *e;
 	while((e = *ep) != 0) {
 		int pos = strcmp(e->name, name);
 		if(!pos) {
@@ -301,7 +301,7 @@ static void ss_register_func(ss_func **root, void (*func)(void))
 	{
 		if (next->func == func && next->tag == ss_current_tag)
 		{
-			logerror("Duplicate save state function (%d, 0x%x)\n", ss_current_tag, (int)func);
+			logerror("Duplicate save state function (%d, 0x%x)\n", ss_current_tag, (size_t)func);
 			exit(1);
 		}
 		next = next->next;
@@ -454,7 +454,7 @@ void state_save_save_finish(void)
 	TRACE(logerror("Finishing save\n"));
 
 	signature = ss_get_signature();
-	if(!Machine->sample_rate)
+	if(Machine->sample_rate == 0.)
 		flags |= SS_NO_SOUND;
 
 #ifndef LSB_FIRST
@@ -482,7 +482,7 @@ void state_save_save_finish(void)
 int state_save_load_begin(mame_file *file)
 {
 	ss_module *m;
-	unsigned int offset = 0;
+	unsigned int offset;
 	UINT32 signature, file_sig;
 
 	TRACE(logerror("Beginning load\n"));
@@ -518,12 +518,12 @@ int state_save_load_begin(mame_file *file)
 
 	if(ss_dump_array[9] & SS_NO_SOUND)
 	{
-		if(Machine->sample_rate)
+		if(Machine->sample_rate != 0.)
 			usrintf_showmessage("Warning: Game was saved with sound off, but sound is on.  Result may be interesting.");
 	}
 	else
 	{
-		if(!Machine->sample_rate)
+		if(Machine->sample_rate == 0.)
 			usrintf_showmessage("Warning: Game was saved with sound on, but sound is off.  Result may be interesting.");
 	}
 
